@@ -4,6 +4,10 @@ This script allows you to play a sound with automatic volume control and restora
 
 ## Installation
 
+1. Click on the following link to open the blueprint import dialog in your Home Assistant instance:
+[Import Play Sound Blueprint](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fplay_sound_with_volume_control.yaml)
+
+Alternatively, you can manually import the blueprint:
 1. Go to your Home Assistant instance
 2. Click on "Blueprints" in the sidebar
 3. Click on the "+" button in the bottom right corner
