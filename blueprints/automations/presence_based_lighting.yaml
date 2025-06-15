@@ -1,5 +1,5 @@
 blueprint:
-  name: "Presence Based Lighting"
+  name: "[CDA] 💡 Presence Based Lighting"
   description: "Automatically control lights based on presence detection"
   domain: automation
   input:

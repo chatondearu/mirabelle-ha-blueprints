@@ -1,4 +1,4 @@
-# Play Sound with Volume Control
+# [CDA] 🔊 Play Sound with Volume Control
 
 This script allows you to play a sound with automatic volume control and restoration.
 

@@ -1,4 +1,4 @@
-# Create Schedule
+# [CDA] 📅 Create Schedule
 
 This script helps you create a schedule for your automations by managing input_datetime entities.
 

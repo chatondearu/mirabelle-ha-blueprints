@@ -1,5 +1,5 @@
 blueprint:
-  name: "Scheduled Bell Sound"
+  name: "[CDA] 🔔 Scheduled Bell Sound"
   description: "Play a bell sound at specific times with volume control"
   domain: automation
   input:

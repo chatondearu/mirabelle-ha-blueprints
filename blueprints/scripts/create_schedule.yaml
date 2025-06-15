@@ -1,5 +1,5 @@
 blueprint:
-  name: "Create Schedule"
+  name: "[CDA] 📅 Create Schedule"
   description: "Create a schedule for playing sounds"
   domain: script
   input:

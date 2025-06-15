@@ -1,4 +1,4 @@
-# Scheduled Bell Sound
+# [CDA] 🔔 Scheduled Bell Sound
 
 This blueprint allows you to play a bell sound at specific times and during solar events.
 

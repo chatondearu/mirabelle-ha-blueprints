@@ -1,5 +1,5 @@
 blueprint:
-  name: "Play Sound with Volume Control"
+  name: "[CDA] 🔊 Play Sound with Volume Control"
   description: "Play a sound with volume control and restoration"
   domain: script
   input:

@@ -13,11 +13,11 @@ A collection of custom blueprints for Home Assistant.
 5. Click on one of the following links to import a blueprint:
 
 #### Automations
-- [Scheduled Bell Sound](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fscheduled_bell_sound.yaml)
+- [[CDA] 🔔 Scheduled Bell Sound](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fscheduled_bell_sound.yaml)
 
 #### Scripts
-- [Play Sound with Volume Control](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fplay_sound_with_volume_control.yaml)
-- [Create Schedule](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fcreate_schedule.yaml)
+- [[CDA] 🔊 Play Sound with Volume Control](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fplay_sound_with_volume_control.yaml)
+- [[CDA] 📅 Create Schedule](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fcreate_schedule.yaml)
 
 ### Manual Installation
 
@@ -43,16 +43,19 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scri
 ## Available Blueprints
 
 ### Scheduled Bell Sound
+[CDA] 🔔 Scheduled Bell Sound
 Play a bell sound at specific times with volume control. Supports time-based triggers, sun events, and custom triggers.
 
 [View Documentation](docs/scheduled_bell_sound.md)
 
 ### Play Sound with Volume Control
+[CDA] 🔊 Play Sound with Volume Control
 A script to play sounds with automatic volume control and restoration.
 
 [View Documentation](docs/play_sound_with_volume_control.md)
 
 ### Create Schedule
+[CDA] 📅 Create Schedule
 A helper script to easily create schedules for your automations.
 
 [View Documentation](docs/create_schedule.md)
