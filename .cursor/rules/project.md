@@ -1,4 +1,4 @@
-# Cursor Rules for Mirabelle HA Blueprints
+# Project Rules
 
 ## Project Structure
 - Keep blueprints organized in appropriate subdirectories (automations, scripts, scenes, dashboards)
