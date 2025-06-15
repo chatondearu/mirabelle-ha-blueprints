@@ -1,0 +1,12 @@
+{
+  "name": "Cover Manager",
+  "render_readme": true,
+  "domains": [
+    "cover"
+  ],
+  "homeassistant": "2025.6.1",
+  "iot_class": "Local Push",
+  "zip_release": true,
+  "filename": "cover_manager.zip",
+  "content_in_root": false
+}

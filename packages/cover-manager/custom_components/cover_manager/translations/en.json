@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Cover Manager Setup",
+        "description": "Configure your cover manager integration",
+        "data": {
+          "name": "Cover Name",
+          "switch_entity": "Switch Entity",
+          "travel_time": "Travel Time (seconds)"
+        }
+      }
+    },
+    "error": {
+      "invalid_switch": "Invalid switch entity",
+      "invalid_travel_time": "Invalid travel time"
+    },
+    "abort": {
+      "already_configured": "This cover is already configured"
+    }
+  }
+}

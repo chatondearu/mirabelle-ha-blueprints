@@ -1,0 +1,23 @@
+name: Validate
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+      - name: Install Home Assistant
+        run: |
+          python -m pip install --upgrade pip
+          pip install homeassistant
+      - name: Validate
+        run: |
+          hass --script check_config 

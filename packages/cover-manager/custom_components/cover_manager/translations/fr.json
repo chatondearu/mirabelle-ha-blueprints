@@ -1,0 +1,22 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Configuration du Gestionnaire de Volet",
+        "description": "Configurez votre intégration de gestionnaire de volet",
+        "data": {
+          "name": "Nom du Volet",
+          "switch_entity": "Entité Switch",
+          "travel_time": "Temps de Trajet (secondes)"
+        }
+      }
+    },
+    "error": {
+      "invalid_switch": "Entité switch invalide",
+      "invalid_travel_time": "Temps de trajet invalide"
+    },
+    "abort": {
+      "already_configured": "Ce volet est déjà configuré"
+    }
+  }
+}

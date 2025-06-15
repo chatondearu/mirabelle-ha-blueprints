@@ -59,9 +59,9 @@ cover:
 
 # Required input_text helpers
 input_text:
-  {{ position_helper.split('.')[1] }}:
+  {{ input_position_helper_name }}:
     name: "{{ name }} Position"
     initial: "0"
-  {{ direction_helper.split('.')[1] }}:
+  {{ input_direction_helper_name }}:
     name: "{{ name }} Direction"
     initial: "stopped" 

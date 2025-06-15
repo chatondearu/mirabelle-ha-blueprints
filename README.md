@@ -160,4 +160,79 @@ Available environment variables:
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+# Cover Manager
+
+Une intégration Home Assistant pour gérer facilement les volets contrôlés par des interrupteurs.
+
+## Fonctionnalités
+
+- Configuration simple via l'interface web
+- Création automatique des helpers nécessaires
+- Support des positions (0-100%)
+- Icônes dynamiques selon l'état
+- Support multilingue (FR/EN)
+
+## Installation
+
+### Via HACS (recommandé)
+
+1. Assurez-vous que [HACS](https://hacs.xyz/) est installé
+2. Ajoutez ce repository dans HACS
+3. Recherchez "Cover Manager"
+4. Cliquez sur "Installer"
+
+### Installation manuelle
+
+1. Téléchargez les fichiers
+2. Copiez le dossier `cover_manager` dans votre dossier `custom_components`
+3. Redémarrez Home Assistant
+
+## Configuration
+
+1. Allez dans Configuration > Intégrations
+2. Cliquez sur "Ajouter une intégration"
+3. Recherchez "Cover Manager"
+4. Suivez les instructions à l'écran
+
+### Paramètres
+
+| Paramètre | Description | Obligatoire |
+|-----------|-------------|-------------|
+| Nom | Nom du volet | Oui |
+| Entité Switch | Switch qui contrôle le volet | Oui |
+| Temps de Trajet | Temps en secondes pour ouvrir/fermer | Oui |
+
+## Utilisation
+
+Une fois configuré, le volet apparaîtra dans votre interface avec :
+- Un slider pour contrôler la position
+- Des boutons pour ouvrir/fermer/arrêter
+- Des icônes dynamiques selon l'état
+
+## Dépannage
+
+1. **Le volet n'apparaît pas**
+   - Vérifiez que l'intégration est bien installée
+   - Redémarrez Home Assistant
+
+2. **Le volet ne répond pas**
+   - Vérifiez que le switch est bien configuré
+   - Vérifiez les helpers dans Configuration > Helpers
+
+3. **Position incorrecte**
+   - Vérifiez le temps de trajet
+   - Réinitialisez les helpers
+
+## Contribution
+
+Les contributions sont les bienvenues ! N'hésitez pas à :
+1. Fork le repository
+2. Créer une branche
+3. Faire vos modifications
+4. Soumettre une pull request
+
+## Licence
+
+Ce projet est sous licence MIT - voir le fichier LICENSE pour plus de détails. 

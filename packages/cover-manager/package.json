@@ -1,0 +1,27 @@
+{
+  "name": "@mirabelle/cover-manager",
+  "version": "1.0.0",
+  "description": "Home Assistant integration for managing covers with switches",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "lint": "eslint .",
+    "validate": "hass --script check_config"
+  },
+  "keywords": [
+    "home-assistant",
+    "hacs",
+    "cover",
+    "blind"
+  ],
+  "author": "Romain",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "eslint": "^8.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0"
+  }
+}

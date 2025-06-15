@@ -1,12 +1,12 @@
-import { readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { parse } from 'yaml'
 
 // Configuration
 const TEMPLATES_DIR = join(process.cwd(), 'templates')
-const CONFIG_DIR = join(process.cwd(), 'configuration')
 const TEMPLATE_FILE = join(TEMPLATES_DIR, 'cover_template.txt')
-const OUTPUT_FILE = join(CONFIG_DIR, 'covers.yaml')
+const DIST_DIR = join(process.cwd(), 'dist')
+const OUTPUT_FILE = join(DIST_DIR, 'covers.yaml')
 
 /**
  * Generate cover configuration from template
@@ -15,6 +15,8 @@ function generateCoverConfig(name: string, switchEntity: string, travelTime: num
   const coverId = name.toLowerCase().replace(/\s+/g, '_')
   const positionHelper = `input_text.${coverId}_position`
   const directionHelper = `input_text.${coverId}_direction`
+  const inputPositionHelperName = `${coverId}_position`
+  const inputDirectionHelperName = `${coverId}_direction`
 
   // Read template
   const template = readFileSync(TEMPLATE_FILE, 'utf8')
@@ -27,6 +29,8 @@ function generateCoverConfig(name: string, switchEntity: string, travelTime: num
     .replace(/{{ travel_time }}/g, travelTime.toString())
     .replace(/{{ position_helper }}/g, positionHelper)
     .replace(/{{ direction_helper }}/g, directionHelper)
+    .replace(/{{ input_position_helper_name }}/g, inputPositionHelperName)
+    .replace(/{{ input_direction_helper_name }}/g, inputDirectionHelperName)
 
   // Validate YAML
   try {
@@ -61,6 +65,11 @@ async function main() {
 
     // Generate configuration
     const coverConfig = generateCoverConfig(name, switchEntity, travelTime)
+
+    // Create dist directory if it doesn't exist
+    if (!existsSync(DIST_DIR)) {
+      mkdirSync(DIST_DIR, { recursive: true })
+    }
 
     // Write to file
     writeFileSync(OUTPUT_FILE, coverConfig)
