@@ -91,6 +91,7 @@
 - Test thoroughly
 - Document changes
 - Keep code clean and maintainable
+- Keep all texts in english (no other language)
 
 ## Commit & Push after modification
 

@@ -128,6 +128,23 @@ The script will:
 
 Note: Only automations with names starting with "[CDA]" will be updated.
 
+### Installing Blueprints
+To install all blueprints in your Home Assistant instance:
+
+1. Make sure you have configured your `.env` file as described above
+
+2. Run the installation script:
+   ```bash
+   npm run install-blueprints
+   ```
+
+The script will:
+- Find all blueprints in the repository
+- Install them in your Home Assistant instance
+- Show the installation status for each blueprint
+
+Note: Only blueprints with names starting with "[CDA]" will be installed.
+
 Available environment variables:
 - `HA_URL`: Home Assistant URL (default: http://supervisor/core)
 - `HA_TOKEN`: Your long-lived access token (required)

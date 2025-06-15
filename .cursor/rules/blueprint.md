@@ -5,6 +5,7 @@
 - Use clear and descriptive filenames
 - Follow the naming convention: `purpose_action.yaml`
 - Include a comprehensive description
+- Each blueprint need a title who start with [CDA] to recognize them
 
 ## Input Parameters
 - Use clear and descriptive names
