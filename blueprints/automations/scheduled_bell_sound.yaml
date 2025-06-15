@@ -71,7 +71,7 @@ blueprint:
       description: "Custom triggers to trigger the sound"
       default: []
       selector:
-        triggers:
+        trigger:
 
 trigger:
   # Time triggers
