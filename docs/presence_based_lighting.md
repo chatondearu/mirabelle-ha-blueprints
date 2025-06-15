@@ -1,35 +1,114 @@
-# Éclairage basé sur la présence
+# Presence-Based Lighting Automation
 
-Ce blueprint permet de contrôler automatiquement l'éclairage en fonction de la détection de présence.
+This blueprint allows you to automatically control lights based on presence detection.
 
-## Prérequis
+## Features
 
-- Un capteur de présence (binary_sensor)
-- Une ou plusieurs lumières à contrôler
+- Automatic light control based on presence
+- Support for multiple presence sensors
+- Configurable light groups
+- Time-based conditions
+- Brightness control
+- Color temperature control
+
+## Prerequisites
+
+- Presence sensors (motion, presence, or zone sensors)
+- Controllable lights
+- Optional: Light groups
 
 ## Configuration
 
-1. Importez le blueprint dans Home Assistant
-2. Créez une nouvelle automatisation en utilisant ce blueprint
-3. Configurez les paramètres suivants :
-   - **Presence Sensor** : Sélectionnez votre capteur de présence
-   - **Light to Control** : Sélectionnez la lumière à contrôler
-   - **Delay Before Turning Off** : Définissez le délai avant l'extinction (en secondes)
+### Required Parameters
 
-## Fonctionnement
+- **Presence Sensors**: Select one or more presence sensors
+- **Lights**: Select the lights to control
+- **Light Groups**: Optional light groups for coordinated control
 
-- La lumière s'allume automatiquement lorsque la présence est détectée
-- La lumière s'éteint automatiquement après le délai configuré lorsque la présence n'est plus détectée
+### Optional Parameters
 
-## Personnalisation
+- **Time Conditions**: Set time windows for automation
+- **Brightness Level**: Set desired brightness (0-255)
+- **Color Temperature**: Set color temperature in Kelvin
+- **Transition Time**: Set light transition duration
 
-Vous pouvez modifier les paramètres suivants :
-- Le délai d'extinction (entre 0 et 3600 secondes)
-- Le type de capteur de présence
-- Les lumières à contrôler
+## Usage Examples
 
-## Exemples d'utilisation
+### Basic Presence Detection
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.living_room_motion
+      to: "on"
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: light.living_room
+      data:
+        brightness: 255
+        kelvin: 2700
+```
 
-1. **Couloir** : Allumage automatique lors du passage, extinction après 5 minutes
-2. **Salle de bain** : Allumage à l'entrée, extinction après 10 minutes
-3. **Bureau** : Allumage à l'entrée, extinction immédiate à la sortie 
+### Multiple Sensors
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: 
+        - binary_sensor.living_room_motion
+        - binary_sensor.kitchen_motion
+      to: "on"
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: 
+          - light.living_room
+          - light.kitchen
+      data:
+        brightness: 200
+        kelvin: 3000
+```
+
+### Time-Based Control
+```yaml
+automation:
+  trigger:
+    - platform: state
+      entity_id: binary_sensor.living_room_motion
+      to: "on"
+  condition:
+    - condition: time
+      after: "17:00:00"
+      before: "23:00:00"
+  action:
+    - service: light.turn_on
+      target:
+        entity_id: light.living_room
+      data:
+        brightness: 150
+        kelvin: 2200
+```
+
+## Customization
+
+1. **Sensors**: Add or remove presence sensors
+2. **Lights**: Configure individual or group control
+3. **Timing**: Set specific time windows
+4. **Light Settings**: Adjust brightness and color temperature
+
+## Troubleshooting
+
+- Check sensor status and battery levels
+- Verify light connectivity
+- Test sensor coverage
+- Check automation triggers
+- Verify time conditions
+
+## Integration with Other Blueprints
+
+This blueprint can be combined with:
+- Time-based automations
+- Scene controllers
+- Energy management
+- Security systems 

@@ -1,0 +1,94 @@
+blueprint:
+  name: "Scheduled Bell Sound"
+  description: "Play a bell sound at specific times with volume control"
+  domain: automation
+  input:
+    media_player:
+      name: "Media Player"
+      description: "The media player to play the sound"
+      selector:
+        entity:
+          domain: media_player
+    sound_file:
+      name: "Sound File"
+      description: "The sound file to play (from media source)"
+      default: "media-source://media_source/local/section9/sounds/japan_school_bell.mp3"
+      selector:
+        text:
+    announce_volume:
+      name: "Announce Volume Level"
+      description: "The volume level to use for the announcement (0-1)"
+      default: 0.5
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.1
+    volume_reduction:
+      name: "Volume Reduction"
+      description: "How much to reduce the volume for the announcement (0-1)"
+      default: 0.2
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.1
+    play_times:
+      name: "Play Times"
+      description: "Times to play the sound (24-hour format)"
+      default:
+        - "11:55:00"
+        - "18:00:00"
+      selector:
+        target:
+          entity:
+            domain: input_datetime
+    use_sun_events:
+      name: "Use Sun Events"
+      description: "Play sound at sunrise and sunset"
+      default: true
+      selector:
+        boolean:
+    sun_offset:
+      name: "Sun Event Offset"
+      description: "Offset for sun events in minutes (negative for before, positive for after)"
+      default: 0
+      selector:
+        number:
+          min: -120
+          max: 120
+          step: 1
+    wait_time:
+      name: "Wait Time"
+      description: "How long to wait after playing before restoring volume (seconds)"
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 300
+          step: 1
+
+trigger:
+  # Time-based triggers
+  - platform: time
+    at: !input play_times
+  # Sun-based triggers (if enabled)
+  - platform: sun
+    event: sunrise
+    offset: !input sun_offset
+    enabled: !input use_sun_events
+  - platform: sun
+    event: sunset
+    offset: !input sun_offset
+    enabled: !input use_sun_events
+
+action:
+  - service: script.play_sound_with_volume_control
+    data:
+      media_player: !input media_player
+      sound_file: !input sound_file
+      announce_volume: !input announce_volume
+      volume_reduction: !input volume_reduction
+      wait_time: !input wait_time
+
+mode: single 

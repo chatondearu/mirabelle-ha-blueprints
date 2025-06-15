@@ -1,0 +1,85 @@
+blueprint:
+  name: "Play Sound with Volume Control"
+  description: "Play a sound with volume control and restoration"
+  domain: script
+  input:
+    media_player:
+      name: "Media Player"
+      description: "The media player to play the sound"
+      selector:
+        entity:
+          domain: media_player
+    sound_file:
+      name: "Sound File"
+      description: "The sound file to play (from media source)"
+      selector:
+        text:
+    announce_volume:
+      name: "Announce Volume Level"
+      description: "The volume level to use for the announcement (0-1)"
+      default: 0.5
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.1
+    volume_reduction:
+      name: "Volume Reduction"
+      description: "How much to reduce the volume for the announcement (0-1)"
+      default: 0.2
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.1
+    wait_time:
+      name: "Wait Time"
+      description: "How long to wait after playing before restoring volume (seconds)"
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 300
+          step: 1
+
+script:
+  sequence:
+    # Turn on the media player
+    - service: media_player.turn_on
+      target:
+        entity_id: !input media_player
+    
+    # Store current volume
+    - variables:
+        volume_level_before: "{{ state_attr('media_player.enceinte_salon', 'volume_level') }}"
+    
+    # Set announcement volume
+    - service: media_player.volume_set
+      target:
+        entity_id: !input media_player
+      data:
+        volume_level: "{{ announce_volume - volume_reduction }}"
+    
+    # Play the sound
+    - service: media_player.play_media
+      target:
+        entity_id: !input media_player
+      data:
+        media_content_id: !input sound_file
+        media_content_type: music
+        announce: true
+    
+    # Wait for playback to complete
+    - wait_for_trigger:
+        - platform: state
+          entity_id: !input media_player
+          from: playing
+      timeout:
+        seconds: !input wait_time
+    
+    # Restore original volume
+    - service: media_player.volume_set
+      target:
+        entity_id: !input media_player
+      data:
+        volume_level: "{{ volume_level_before }}" 

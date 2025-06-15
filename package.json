@@ -1,0 +1,46 @@
+{
+  "name": "mirabelle-ha-blueprints",
+  "version": "1.0.0",
+  "description": "Collection of custom blueprints for Home Assistant",
+  "private": true,
+  "author": {
+    "name": "Romain",
+    "email": "romain@chatondearu.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/chatondearu/mirabelle-ha-blueprints.git"
+  },
+  "keywords": [
+    "home-assistant",
+    "homeassistant",
+    "blueprints",
+    "automation",
+    "domotique",
+    "smart-home"
+  ],
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/chatondearu/mirabelle-ha-blueprints/issues"
+  },
+  "homepage": "https://github.com/chatondearu/mirabelle-ha-blueprints#readme",
+  "scripts": {
+    "version": "git add -A",
+    "postversion": "git push && git push --tags"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^18.6.1",
+    "@commitlint/config-conventional": "^18.6.2",
+    "husky": "^9.0.11"
+  },
+  "husky": {
+    "hooks": {
+      "commit-msg": "commitlint -E HUSKY_GIT_PARAMS"
+    }
+  },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
+  }
+}
