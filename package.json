@@ -27,6 +27,7 @@
   "scripts": {
     "version": "git add -A src",
     "postversion": "git push && git push --tags",
+    "test-connection": "ts-node scripts/test-connection.ts",
     "update-automations": "ts-node scripts/update-automations.ts",
     "install-blueprints": "ts-node scripts/install-blueprints.ts"
   },

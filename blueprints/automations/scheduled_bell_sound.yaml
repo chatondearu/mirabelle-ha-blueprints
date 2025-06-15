@@ -1,6 +1,6 @@
 blueprint:
   name: "[CDA] 🔔 Scheduled Bell Sound"
-  description: "Play a bell sound at specific times with volume control"
+  description: "Play a sound at specific times with volume control"
   domain: automation
   input:
     media_player:
@@ -12,7 +12,6 @@ blueprint:
     sound_file:
       name: "Sound File"
       description: "The sound file to play (from media source)"
-      default: "media-source://media_source/local/section9/sounds/japan_school_bell.mp3"
       selector:
         text:
     announce_volume:
@@ -33,37 +32,6 @@ blueprint:
           min: 0
           max: 1
           step: 0.1
-    use_time_triggers:
-      name: "Use Time Triggers"
-      description: "Enable time-based triggers"
-      default: true
-      selector:
-        boolean:
-    play_times:
-      name: "Play Times"
-      description: "Times to play the sound (24-hour format)"
-      default:
-        - "11:55:00"
-        - "18:00:00"
-      selector:
-        target:
-          entity:
-            domain: input_datetime
-    use_sun_events:
-      name: "Use Sun Events"
-      description: "Play sound at sunrise and sunset"
-      default: false
-      selector:
-        boolean:
-    sun_offset:
-      name: "Sun Event Offset"
-      description: "Offset for sun events in minutes (negative for before, positive for after)"
-      default: 0
-      selector:
-        number:
-          min: -120
-          max: 120
-          step: 1
     wait_time:
       name: "Wait Time"
       description: "How long to wait after playing before restoring volume (seconds)"
@@ -78,30 +46,57 @@ blueprint:
       description: "Additional triggers to play the sound"
       default: []
       selector:
-        target:
-          entity:
-            domain: binary_sensor
-            multiple: true
+        object:
+          multiple: true
+          options:
+            platform:
+              name: "Platform"
+              description: "Trigger platform"
+              selector:
+                select:
+                  options:
+                    - time
+                    - sun
+                    - state
+            at:
+              name: "Time"
+              description: "Time to trigger (for time platform)"
+              selector:
+                time:
+            event:
+              name: "Event"
+              description: "Sun event (for sun platform)"
+              selector:
+                select:
+                  options:
+                    - sunrise
+                    - sunset
+            entity_id:
+              name: "Entity"
+              description: "Entity to monitor (for state platform)"
+              selector:
+                entity:
+            from:
+              name: "From State"
+              description: "State to trigger from"
+              selector:
+                text:
+            to:
+              name: "To State"
+              description: "State to trigger to"
+              selector:
+                text:
 
 trigger:
-  # Time-based triggers
   - platform: time
-    at: !input play_times
-    enabled: !input use_time_triggers
-  # Sun-based triggers (if enabled)
+    at: !input at
   - platform: sun
-    event: sunrise
-    offset: !input sun_offset
-    enabled: !input use_sun_events
-  - platform: sun
-    event: sunset
-    offset: !input sun_offset
-    enabled: !input use_sun_events
-  # Custom triggers
+    event: !input event
   - platform: state
-    entity_id: !input custom_triggers
-    to: "on"
-    enabled: !input custom_triggers
+    entity_id: !input entity_id
+    from: !input from
+    to: !input to
+  - !input custom_triggers
 
 action:
   - service: script.play_sound_with_volume_control
