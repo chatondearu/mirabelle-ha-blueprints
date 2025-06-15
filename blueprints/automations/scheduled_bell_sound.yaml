@@ -41,51 +41,35 @@ blueprint:
           min: 1
           max: 300
           step: 1
-    custom_triggers:
-      name: "Custom Triggers"
-      description: "Additional triggers to play the sound"
-      default: []
+    at:
+      name: "Time"
+      description: "Time to trigger (HH:MM)"
       selector:
-        object:
-          multiple: true
+        time:
+    event:
+      name: "Sun Event"
+      description: "Sun event to trigger on"
+      default: sunrise
+      selector:
+        select:
           options:
-            platform:
-              name: "Platform"
-              description: "Trigger platform"
-              selector:
-                select:
-                  options:
-                    - time
-                    - sun
-                    - state
-            at:
-              name: "Time"
-              description: "Time to trigger (for time platform)"
-              selector:
-                time:
-            event:
-              name: "Event"
-              description: "Sun event (for sun platform)"
-              selector:
-                select:
-                  options:
-                    - sunrise
-                    - sunset
-            entity_id:
-              name: "Entity"
-              description: "Entity to monitor (for state platform)"
-              selector:
-                entity:
-            from:
-              name: "From State"
-              description: "State to trigger from"
-              selector:
-                text:
-            to:
-              name: "To State"
-              description: "State to trigger to"
-              selector:
-                text:
+            - sunrise
+            - sunset
+    entity_id:
+      name: "Entity"
+      description: "Entity to monitor"
+      selector:
+        entity:
+    from:
+      name: "From State"
+      description: "State to trigger from"
+      selector:
+        text:
+    to:
+      name: "To State"
+      description: "State to trigger to"
+      selector:
+        text:
 
 trigger:
   - platform: time
@@ -96,7 +80,6 @@ trigger:
     entity_id: !input entity_id
     from: !input from
     to: !input to
-  - !input custom_triggers
 
 action:
   - service: script.play_sound_with_volume_control
