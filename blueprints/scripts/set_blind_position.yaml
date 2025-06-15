@@ -1,0 +1,111 @@
+alias: "Set Blind Position"
+description: "Set blind to a specific position (0%, 25%, 50%, 75%, 100%)"
+fields:
+  blind_switch:
+    name: "Blind Switch"
+    description: "The switch entity that controls the blind"
+    required: true
+    selector:
+      entity:
+        domain: switch
+  last_state:
+    name: "Last State"
+    description: "Input text entity to store the last state of the blind"
+    required: true
+    selector:
+      entity:
+        domain: input_text
+  travel_time:
+    name: "Travel Time"
+    description: "Time in seconds for the blind to travel from fully closed to fully open"
+    required: true
+    selector:
+      number:
+        min: 1
+        max: 300
+        step: 1
+  target_position:
+    name: "Target Position"
+    description: "The position to set the blind to (0%, 25%, 50%, 75%, 100%)"
+    required: true
+    selector:
+      select:
+        options:
+          - "0% (Closed)"
+          - "25%"
+          - "50%"
+          - "75%"
+          - "100% (Open)"
+
+sequence:
+  # Get current state
+  - service: input_text.set_value
+    data:
+      entity_id: !input last_state
+      value: "{{ states('input_text.last_state') }}"
+
+  # Calculate target position percentage
+  - variables:
+      target_percent: >
+        {% set position = target_position %}
+        {% if position == "0% (Closed)" %}
+          0
+        {% elif position == "25%" %}
+          25
+        {% elif position == "50%" %}
+          50
+        {% elif position == "75%" %}
+          75
+        {% else %}
+          100
+        {% endif %}
+
+  # Calculate travel time considering slowdown zones
+  - variables:
+      current_percent: >
+        {% set last_state = states('input_text.last_state') %}
+        {% if last_state == "closed" %}
+          0
+        {% elif last_state == "open" %}
+          100
+        {% else %}
+          {{ last_state | int }}
+        {% endif %}
+      travel_time: >
+        {% set distance = (target_percent - current_percent) | abs %}
+        {% set base_time = travel_time %}
+        {% set slowdown_time = 0 %}
+        
+        {# Calculate slowdown in lower zone (0-20%) #}
+        {% if current_percent < 20 and target_percent < 20 %}
+          {% set slowdown_time = slowdown_time + (current_percent - target_percent) | abs * base_time * 1.5 %}
+        {% endif %}
+        
+        {# Calculate slowdown in upper zone (75-100%) #}
+        {% if current_percent > 75 and target_percent > 75 %}
+          {% set slowdown_time = slowdown_time + (current_percent - target_percent) | abs * base_time * 1.5 %}
+        {% endif %}
+        
+        {{ (distance * base_time) + slowdown_time }}
+
+  # Start movement
+  - service: switch.turn_on
+    data:
+      entity_id: !input blind_switch
+
+  # Wait for calculated time
+  - delay:
+      seconds: !input travel_time
+
+  # Stop movement
+  - service: switch.turn_off
+    data:
+      entity_id: !input blind_switch
+
+  # Update last state
+  - service: input_text.set_value
+    data:
+      entity_id: !input last_state
+      value: "{{ target_percent }}"
+
+mode: single 
