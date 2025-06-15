@@ -2,6 +2,17 @@
 
 This blueprint allows you to play a sound at specific times with volume control and automatic restoration.
 
+## Installation
+
+1. Go to your Home Assistant instance
+2. Click on "Blueprints" in the sidebar
+3. Click on the "+" button in the bottom right corner
+4. Click on "Import Blueprint"
+5. Paste the following URL:
+```
+https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/scheduled_bell_sound.yaml
+```
+
 ## Features
 
 - Play sound at specific times

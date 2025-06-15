@@ -2,6 +2,17 @@
 
 This blueprint allows you to automatically control lights based on presence detection.
 
+## Installation
+
+1. Go to your Home Assistant instance
+2. Click on "Blueprints" in the sidebar
+3. Click on the "+" button in the bottom right corner
+4. Click on "Import Blueprint"
+5. Paste the following URL:
+```
+https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/presence_based_lighting.yaml
+```
+
 ## Features
 
 - Automatic light control based on presence
