@@ -1,0 +1,84 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Blueprint Rules
+
+## Structure
+- Each blueprint should be in its appropriate category directory
+- Use clear and descriptive filenames
+# Blueprint Rules
+
+## Structure
+- Use proper YAML formatting
+- Include all required sections:
+  - name
+  - description
+  - domain
+  - input
+  - trigger
+  - action
+  - mode
+
+## Input Parameters
+- Use descriptive names
+- Provide clear descriptions
+- Set sensible defaults
+- Use proper selectors:
+  - entity
+  - text
+  - number
+  - boolean
+  - select
+  - time
+  - target
+
+## Triggers
+- Support multiple trigger types
+- Make triggers optional when possible
+- Use proper trigger platforms:
+  - time
+  - sun
+  - state
+  - event
+  - mqtt
+  - webhook
+
+## Actions
+- Keep actions simple and focused
+- Use proper service calls
+- Include error handling
+- Add conditions when needed
+- Use proper data templates
+
+## Best Practices
+- Keep blueprints modular
+- Make them reusable
+- Document dependencies
+- Add helpful comments
+- Test edge cases
+- Consider performance
+- Handle errors gracefully
+
+## Examples
+```yaml
+blueprint:
+  name: "[CDA] 🔔 Example Blueprint"
+  description: "Example blueprint with all required sections"
+  domain: automation
+  input:
+    entity:
+      name: "Entity"
+      description: "Entity to monitor"
+      selector:
+        entity:
+  trigger:
+    - platform: state
+      entity_id: !input entity
+  action:
+    - service: notify.mobile_app
+      data:
+        message: "State changed"
+  mode: single
+``` 

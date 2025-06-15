@@ -1,4 +1,73 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
 # Project Rules
+
+## Project Structure
+- Keep blueprints organized in appropriate subdirectories (automations, scripts, scenes, dashboards)
+- Maintain documentation in the `docs` directory
+# Project Rules
+
+## Core Requirements
+- Home Assistant version: 2025.5.3 or later
+- All blueprints must be prefixed with `[CDA]`
+- All documentation must be in English
+- All code must follow Home Assistant best practices
+
+## Directory Structure
+```
+mirabelle-ha-blueprints/
+├── blueprints/
+│   ├── automations/
+│   ├── scripts/
+│   ├── scenes/
+│   └── dashboards/
+├── docs/
+└── scripts/
+```
+
+## Naming Conventions
+- Use kebab-case for filenames
+- Include emojis in blueprint names
+- Use descriptive names
+- Follow pattern: `[CDA] 🔔 name-of-blueprint`
+
+## Documentation
+- Write in English only
+- Include installation instructions
+- Provide clear examples
+- Document all parameters
+- Add troubleshooting section
+
+## Version Control
+- Use semantic versioning (x.y.z)
+- Write clear commit messages
+- Follow conventional commits:
+  - feat: new feature
+  - fix: bug fix
+  - docs: documentation
+  - style: formatting
+  - refactor: code refactoring
+
+## Testing
+- Test in clean HA installation
+- Verify all parameters
+- Check edge cases
+- Test with latest HA version
+
+## Security
+- No sensitive data in blueprints
+- Use proper input validation
+- Follow HA security guidelines
+- Document security considerations
+
+## Maintenance
+- Keep docs up to date
+- Update for HA changes
+- Monitor deprecation warnings
+- Maintain backward compatibility
 
 ## Project Structure
 - Keep blueprints organized in appropriate subdirectories (automations, scripts, scenes, dashboards)
@@ -13,14 +82,6 @@
   ├── docs/
   └── README.md
   ```
-
-## Documentation
-- Write all documentation in English
-- Include installation instructions with direct links
-- Provide clear examples for each blueprint
-- Document all configuration parameters
-- Include troubleshooting sections
-- Add integration examples with other blueprints
 
 ## Blueprint Development
 - Use clear and descriptive names
@@ -38,40 +99,12 @@
 - Follow Home Assistant best practices
 - Keep blueprints modular and reusable
 
-## Version Control
-- Use semantic versioning
-- Write clear commit messages
-- Follow conventional commit format:
-  - feat: new feature
-  - fix: bug fix
-  - docs: documentation
-  - style: formatting
-  - refactor: code refactoring
-
-## Testing
-- Test blueprints before committing
-- Verify all parameters work as expected
-- Check integration with other blueprints
-- Test edge cases and error conditions
-
 ## User Experience
 - Provide clear installation instructions
 - Include usage examples
 - Document prerequisites
 - Add troubleshooting guides
 - Make configuration intuitive
-
-## Security
-- Don't include sensitive information
-- Use proper input validation
-- Follow Home Assistant security guidelines
-- Document any security considerations
-
-## Maintenance
-- Keep documentation up to date
-- Update blueprints for Home Assistant changes
-- Monitor for deprecation warnings
-- Maintain backward compatibility when possible
 
 ## Contribution Guidelines
 - Fork the repository

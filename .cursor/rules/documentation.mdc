@@ -1,0 +1,79 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Documentation Rules
+
+## General
+- Write all documentation in English
+- Use clear and concise language
+# Documentation Rules
+
+## General Rules
+- Write all documentation in English
+- Use clear and concise language
+- Keep documentation up to date
+- Follow Markdown best practices
+
+## File Structure
+- Place all docs in `docs/` directory
+- Use kebab-case for filenames
+- Include README.md in each directory
+- Keep files organized by category
+
+## Content Requirements
+- Include title and description
+- List prerequisites
+- Provide installation steps
+- Document configuration
+- Add usage examples
+- Include troubleshooting
+- Add changelog
+
+## Formatting
+- Use proper Markdown syntax
+- Include code blocks with language
+- Use tables for structured data
+- Add images when helpful
+- Keep line length reasonable
+
+## Examples
+```markdown
+# Blueprint Title
+
+## Description
+Brief description of the blueprint's purpose.
+
+## Prerequisites
+- Home Assistant 2025.5.3 or later
+- Required integrations
+- Required entities
+
+## Installation
+1. Copy the blueprint URL
+2. Go to Blueprints
+3. Click Import Blueprint
+4. Paste the URL
+
+## Configuration
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| entity    | Entity to monitor | - |
+| time      | Time to trigger | - |
+
+## Usage
+Example configuration and usage scenarios.
+
+## Troubleshooting
+Common issues and their solutions.
+```
+
+## Best Practices
+- Keep documentation simple
+- Use consistent formatting
+- Include practical examples
+- Update when code changes
+- Add helpful comments
+- Link related documents
+- Include version info 
