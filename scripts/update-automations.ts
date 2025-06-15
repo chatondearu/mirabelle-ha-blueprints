@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 /**
- * Script to automatically update all automations in Home Assistant.
+ * Script to generate update links for automations.
  * This script will:
- * 1. Get all blueprints from the repository
- * 2. Get all automations from Home Assistant
- * 3. Update automations that match the blueprints
+ * 1. Get all automations from Home Assistant
+ * 2. Generate update links for automations that match our blueprints
  */
 
 import { config } from 'dotenv'
@@ -12,6 +11,7 @@ import { readFileSync, readdirSync } from 'fs'
 import { join } from 'path'
 import { parse } from 'yaml'
 import axios from 'axios'
+import { testConnection } from './test-connection'
 
 // Load environment variables
 config()
@@ -29,7 +29,7 @@ interface Blueprint {
 interface Automation {
   id: string
   name: string
-  input: Record<string, any>
+  source_file: string
 }
 
 // Configuration
@@ -37,7 +37,7 @@ const HA_URL = process.env.HA_URL || 'http://supervisor/core'
 const HA_TOKEN = process.env.HA_TOKEN
 const HA_VERIFY_SSL = process.env.HA_VERIFY_SSL !== 'false'
 const HA_TIMEOUT = parseInt(process.env.HA_TIMEOUT || '30', 10)
-const BLUEPRINTS_DIR = join(process.cwd(), 'blueprints', 'automations')
+const BLUEPRINTS_DIR = join(process.cwd(), 'blueprints')
 
 // Axios instance with default config
 const api = axios.create({
@@ -51,37 +51,29 @@ const api = axios.create({
 })
 
 /**
- * Get headers for Home Assistant API requests
- */
-function getHeaders(): Record<string, string> {
-  if (!HA_TOKEN) {
-    throw new Error('HA_TOKEN environment variable is not set')
-  }
-  return {
-    Authorization: `Bearer ${HA_TOKEN}`,
-    'Content-Type': 'application/json',
-  }
-}
-
-/**
  * Get all blueprints from the repository
  */
 function getBlueprints(): Record<string, Blueprint> {
   const blueprints: Record<string, Blueprint> = {}
-  const files = readdirSync(BLUEPRINTS_DIR)
+  const domainPath = join(BLUEPRINTS_DIR, 'automations')
 
-  for (const file of files) {
-    if (file.endsWith('.yaml')) {
-      try {
-        const content = readFileSync(join(BLUEPRINTS_DIR, file), 'utf8')
-        const blueprint = parse(content) as Blueprint
-        if (blueprint?.blueprint?.name?.startsWith('[CDA]')) {
-          blueprints[blueprint.blueprint.name] = blueprint
+  try {
+    const files = readdirSync(domainPath)
+    for (const file of files) {
+      if (file.endsWith('.yaml')) {
+        try {
+          const content = readFileSync(join(domainPath, file), 'utf8')
+          const blueprint = parse(content) as Blueprint
+          if (blueprint?.blueprint?.name?.startsWith('[CDA]')) {
+            blueprints[file] = blueprint
+          }
+        } catch (error) {
+          console.error(`Error loading blueprint ${file}:`, error)
         }
-      } catch (error) {
-        console.error(`Error loading blueprint ${file}:`, error)
       }
     }
+  } catch (error) {
+    console.error(`Error reading directory automations:`, error)
   }
 
   return blueprints
@@ -95,37 +87,28 @@ async function getAutomations(): Promise<Automation[]> {
     const response = await api.get('/api/services/automation/list')
     return response.data
   } catch (error) {
-    console.error('Error getting automations:', error)
-    throw error
-  }
-}
-
-/**
- * Update an automation with a blueprint
- */
-async function updateAutomation(automationId: string, blueprint: Blueprint): Promise<boolean> {
-  try {
-    // Get current automation
-    const response = await api.get(`/api/services/automation/get/${automationId}`)
-    const currentAutomation = response.data
-
-    // Update automation with blueprint
-    const updateData = {
-      blueprint,
-      automation_id: automationId,
-      input: currentAutomation.input || {},
+    if (axios.isAxiosError(error)) {
+      console.error('Error getting automations:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+      })
+    } else {
+      console.error('Error getting automations:', error)
     }
-
-    await api.post('/api/services/automation/reload', updateData)
-    return true
-  } catch (error) {
-    console.error(`Error updating automation ${automationId}:`, error)
-    return false
+    return []
   }
 }
 
 /**
- * Main function to update all automations
+ * Generate update link for an automation
+ */
+function generateUpdateLink(automation: Automation): string {
+  return `${HA_URL}/config/automation/edit/${automation.id}`
+}
+
+/**
+ * Main function to generate update links
  */
 async function main() {
   if (!HA_TOKEN) {
@@ -133,9 +116,11 @@ async function main() {
     process.exit(1)
   }
 
-  console.log(`Using Home Assistant URL: ${HA_URL}`)
-  console.log(`SSL Verification: ${HA_VERIFY_SSL ? 'Enabled' : 'Disabled'}`)
-  console.log(`Timeout: ${HA_TIMEOUT} seconds`)
+  // Test connection before proceeding
+  if (!await testConnection()) {
+    console.error('Failed to connect to Home Assistant. Aborting.')
+    process.exit(1)
+  }
 
   console.log('\nGetting blueprints...')
   const blueprints = getBlueprints()
@@ -144,29 +129,35 @@ async function main() {
     process.exit(0)
   }
 
-  console.log('Getting automations...')
-  try {
-    const automations = await getAutomations()
-    let updated = 0
-
-    for (const automation of automations) {
-      const name = automation.name || ''
-      if (name.startsWith('[CDA]')) {
-        const blueprintName = name.split(']')[1].trim()
-        if (blueprintName in blueprints) {
-          console.log(`Updating automation: ${name}`)
-          if (await updateAutomation(automation.id, blueprints[blueprintName])) {
-            updated++
-          }
-        }
-      }
-    }
-
-    console.log(`\nUpdated ${updated} automations`)
-  } catch (error) {
-    console.error('Error:', error)
-    process.exit(1)
+  console.log('\nGetting automations from Home Assistant...')
+  const automations = await getAutomations()
+  if (automations.length === 0) {
+    console.log('No automations found')
+    process.exit(0)
   }
+
+  // Filter automations that start with [CDA]
+  const cdaAutomations = automations.filter(automation =>
+    automation.name.startsWith('[CDA]')
+  )
+
+  console.log(`\nFound ${cdaAutomations.length} [CDA] automations`)
+  console.log('\nUpdate Links:')
+  console.log('============')
+
+  for (const automation of cdaAutomations) {
+    console.log(`\n${automation.name}`)
+    console.log(`Source: ${automation.source_file}`)
+    console.log(`Update Link: ${generateUpdateLink(automation)}`)
+    console.log('------------------')
+  }
+
+  console.log('\nInstructions:')
+  console.log('1. Open each update link in your browser')
+  console.log('2. Log in to your Home Assistant instance if prompted')
+  console.log('3. Review the automation details')
+  console.log('4. Click "Save" to update the automation')
+  console.log('\nNote: Make sure you are logged in to Home Assistant before clicking the links')
 }
 
 // Run the script

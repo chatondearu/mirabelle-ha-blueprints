@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
- * Script to install all blueprints in Home Assistant.
+ * Script to generate installation links for all blueprints.
  * This script will:
  * 1. Get all blueprints from the repository
- * 2. Install them in Home Assistant using the API
+ * 2. Generate installation links for each blueprint
  */
 
 import { config } from 'dotenv'
 import { readFileSync, readdirSync } from 'fs'
 import { join } from 'path'
 import { parse } from 'yaml'
-import axios from 'axios'
+import { testConnection } from './test-connection'
 
 // Load environment variables
 config()
@@ -26,22 +26,8 @@ interface Blueprint {
 }
 
 // Configuration
-const HA_URL = process.env.HA_URL || 'http://supervisor/core'
-const HA_TOKEN = process.env.HA_TOKEN
-const HA_VERIFY_SSL = process.env.HA_VERIFY_SSL !== 'false'
-const HA_TIMEOUT = parseInt(process.env.HA_TIMEOUT || '30', 10)
 const BLUEPRINTS_DIR = join(process.cwd(), 'blueprints')
-
-// Axios instance with default config
-const api = axios.create({
-  baseURL: HA_URL,
-  headers: {
-    Authorization: `Bearer ${HA_TOKEN}`,
-    'Content-Type': 'application/json',
-  },
-  timeout: HA_TIMEOUT * 1000,
-  httpsAgent: HA_VERIFY_SSL ? undefined : new (require('https').Agent)({ rejectUnauthorized: false }),
-})
+const HA_URL = process.env.HA_URL || 'http://supervisor/core'
 
 /**
  * Get all blueprints from the repository
@@ -76,33 +62,22 @@ function getBlueprints(): Record<string, Blueprint> {
 }
 
 /**
- * Install a blueprint in Home Assistant
+ * Generate installation link for a blueprint
  */
-async function installBlueprint(path: string, blueprint: Blueprint): Promise<boolean> {
-  try {
-    const domain = path.split('/')[0]
-    const response = await api.post(`/api/services/${domain}/import_blueprint`, {
-      url: `https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/${path}`,
-    })
-    return response.status === 200
-  } catch (error) {
-    console.error(`Error installing blueprint ${path}:`, error)
-    return false
-  }
+function generateInstallLink(path: string): string {
+  const rawUrl = `https://raw.githubusercontent.com/chatondearu/mirabelle-ha-blueprints/main/blueprints/${path}`
+  return `${HA_URL}/blueprint/import?url=${encodeURIComponent(rawUrl)}`
 }
 
 /**
- * Main function to install all blueprints
+ * Main function to generate installation links
  */
 async function main() {
-  if (!HA_TOKEN) {
-    console.error('Please set the HA_TOKEN environment variable in .env file')
+  // Test connection before proceeding
+  if (!await testConnection()) {
+    console.error('Failed to connect to Home Assistant. Aborting.')
     process.exit(1)
   }
-
-  console.log(`Using Home Assistant URL: ${HA_URL}`)
-  console.log(`SSL Verification: ${HA_VERIFY_SSL ? 'Enabled' : 'Disabled'}`)
-  console.log(`Timeout: ${HA_TIMEOUT} seconds`)
 
   console.log('\nGetting blueprints...')
   const blueprints = getBlueprints()
@@ -112,23 +87,27 @@ async function main() {
   }
 
   console.log(`Found ${Object.keys(blueprints).length} blueprints`)
-  let installed = 0
+  console.log('\nInstallation Links:')
+  console.log('==================')
 
   for (const [path, blueprint] of Object.entries(blueprints)) {
-    console.log(`\nInstalling blueprint: ${blueprint.blueprint.name}`)
-    if (await installBlueprint(path, blueprint)) {
-      console.log('✅ Successfully installed')
-      installed++
-    } else {
-      console.log('❌ Failed to install')
-    }
+    console.log(`\n${blueprint.blueprint.name}`)
+    console.log(`Description: ${blueprint.blueprint.description}`)
+    console.log(`Type: ${path.split('/')[0]}`)
+    console.log(`Install Link: ${generateInstallLink(path)}`)
+    console.log('------------------')
   }
 
-  console.log(`\nInstalled ${installed} out of ${Object.keys(blueprints).length} blueprints`)
+  console.log('\nInstructions:')
+  console.log('1. Open each installation link in your browser')
+  console.log('2. Log in to your Home Assistant instance if prompted')
+  console.log('3. Review the blueprint details')
+  console.log('4. Click "Import Blueprint" to install')
+  console.log('\nNote: Make sure you are logged in to Home Assistant before clicking the links')
 }
 
 // Run the script
 main().catch((error) => {
   console.error('Fatal error:', error)
   process.exit(1)
-}) 
+})
