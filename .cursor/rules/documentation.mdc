@@ -1,6 +1,6 @@
 ---
 description: 
-globs: 
+globs: *.md
 alwaysApply: false
 ---
 # Documentation Rules

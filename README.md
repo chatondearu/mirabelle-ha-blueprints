@@ -87,7 +87,7 @@ mirabelle-ha-blueprints/
 1. Clone the repository
 2. Install dependencies:
    ```bash
-   npm install
+   pnpm i
    ```
 
 ### Version Management
@@ -117,7 +117,7 @@ To automatically update all automations in your Home Assistant instance:
 
 3. Run the update script:
    ```bash
-   npm run update-automations
+   pnpm run update-automations
    ```
 
 The script will:
@@ -135,7 +135,7 @@ To install all blueprints in your Home Assistant instance:
 
 2. Run the installation script:
    ```bash
-   npm run install-blueprints
+   pnpm run install-blueprints
    ```
 
 The script will:
