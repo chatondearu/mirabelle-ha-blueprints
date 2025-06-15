@@ -21,12 +21,11 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 
 - Play sound at specific times
 - Support for multiple trigger types:
-  - Time-based triggers
-  - Sun events (sunrise/sunset)
-  - State changes
-  - Custom events
-  - MQTT messages
-  - Webhooks
+  - Time-based triggers (using input_datetime helpers)
+  - Sun events (using input_datetime helpers)
+  - State changes (using input_boolean helpers)
+  - Custom events (using input_boolean helpers)
+  - MQTT messages (using input_text helpers)
 - Automatic volume control
 - Flexible schedule management
 
@@ -35,6 +34,10 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 - A compatible media player (media_player)
 - An audio file in the Home Assistant media_source folder
 - The `play_sound_with_volume_control` script installed
+- Required helpers:
+  - input_datetime (for time and sun triggers)
+  - input_boolean (for state and event triggers)
+  - input_text (for MQTT triggers)
 
 ## Configuration
 
@@ -42,7 +45,7 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 
 - **Media Player**: Select your media player
 - **Sound File**: Path to the audio file
-- **Triggers**: At least one trigger configuration
+- **Triggers**: Configure at least one type of trigger using helpers
 
 ### Optional Parameters
 
@@ -50,57 +53,52 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 - **Volume Reduction**: Volume reduction for the announcement (0-1, default: 0.2)
 - **Wait Time**: Time to wait before restoring volume (1-300 seconds, default: 20)
 
-### Trigger Configuration
+### Setting Up Triggers
 
-The blueprint now supports multiple trigger types that can be combined:
+Before using the blueprint, you need to create the necessary helpers:
 
-#### Time Trigger
-```yaml
-platform: time
-at: "08:00:00"
-```
+1. **Time Triggers**:
+   - Create `input_datetime` helpers for each time you want to trigger the sound
+   - Example: `input_datetime.morning_bell`, `input_datetime.evening_bell`
 
-#### Sun Event Trigger
-```yaml
-platform: sun
-event: sunrise
-offset: "-00:30:00"  # 30 minutes before sunrise
-```
+2. **Sun Triggers**:
+   - Create `input_datetime` helpers for sun events
+   - Example: `input_datetime.sunrise_bell`, `input_datetime.sunset_bell`
 
-#### State Trigger
-```yaml
-platform: state
-entity_id: input_boolean.schedule
-from: "off"
-to: "on"
-```
+3. **State Triggers**:
+   - Create `input_boolean` helpers for state changes
+   - Example: `input_boolean.door_bell`, `input_boolean.motion_bell`
 
-#### Event Trigger
-```yaml
-platform: event
-event_type: custom_event
-```
+4. **Event Triggers**:
+   - Create `input_boolean` helpers for custom events
+   - Example: `input_boolean.custom_event_bell`
 
-#### MQTT Trigger
-```yaml
-platform: mqtt
-topic: "home/bell/trigger"
-payload: "ring"
-```
+5. **MQTT Triggers**:
+   - Create `input_text` helpers for MQTT topics
+   - Example: `input_text.mqtt_bell_topic`
 
 ## Usage Examples
 
-### School Bell with Multiple Triggers
+### School Bell with Time Triggers
 ```yaml
+# First, create the helpers
+input_datetime:
+  morning_bell:
+    name: "Morning Bell"
+    has_date: false
+    has_time: true
+  break_bell:
+    name: "Break Bell"
+    has_date: false
+    has_time: true
+
+# Then use them in the blueprint
 automation:
   trigger:
     - platform: time
-      at: "08:00:00"
+      at: !input time_triggers[0]  # morning_bell
     - platform: time
-      at: "09:45:00"
-    - platform: sun
-      event: sunset
-      offset: "-00:30:00"
+      at: !input time_triggers[1]  # break_bell
   action:
     - service: script.play_sound_with_volume_control
       data:
@@ -113,14 +111,24 @@ automation:
 
 ### Prayer Time with Sun Events
 ```yaml
+# First, create the helpers
+input_datetime:
+  sunrise_prayer:
+    name: "Sunrise Prayer"
+    has_date: false
+    has_time: true
+  sunset_prayer:
+    name: "Sunset Prayer"
+    has_date: false
+    has_time: true
+
+# Then use them in the blueprint
 automation:
   trigger:
     - platform: sun
-      event: sunrise
-      offset: "-00:30:00"
+      event: !input sun_triggers[0]  # sunrise_prayer
     - platform: sun
-      event: sunset
-      offset: "00:30:00"
+      event: !input sun_triggers[1]  # sunset_prayer
   action:
     - service: script.play_sound_with_volume_control
       data:
@@ -133,7 +141,7 @@ automation:
 
 ## Customization
 
-1. **Triggers**: Configure any combination of supported trigger types
+1. **Triggers**: Configure any combination of supported trigger types using helpers
 2. **Volume**: Adjust announcement volume and reduction
 3. **Audio File**: Use any audio file from your library
 4. **Wait Time**: Adjust time before volume restoration
@@ -142,7 +150,7 @@ automation:
 
 - Check if the media player is online
 - Ensure the audio file exists in the specified path
-- Verify trigger configurations
+- Verify that all required helpers are created
 - Check if the `play_sound_with_volume_control` script is installed
 - Adjust wait time if volume doesn't restore properly
 - Check media_source folder permissions
