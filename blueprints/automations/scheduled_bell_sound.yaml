@@ -43,78 +43,45 @@ blueprint:
           step: 1
     time_triggers:
       name: "Time Triggers"
-      description: "Times to trigger the sound"
+      description: "Times to trigger the sound (can select multiple input_datetime entities)"
       default: []
       selector:
         entity:
           multiple: true
-          filter: 
-            - domain: input_datetime
+          filter:
+            domain: input_datetime
     sun_triggers:
       name: "Sun Triggers"
-      description: "Sun events to trigger the sound"
+      description: "Sun events to trigger the sound (sunrise, sunset, dawn, dusk)"
       default: []
       selector:
-        entity:
+        select:
           multiple: true
-          filter: 
-            - domain: input_datetime
-    state_triggers:
-      name: "State Triggers"
-      description: "State changes to trigger the sound"
+          options:
+            - sunrise
+            - sunset
+            - dawn
+            - dusk
+            - noon
+            - midnight
+            - custom
+          mode: dropdown
+    custom_triggers:
+      name: "Custom Triggers"
+      description: "Custom triggers to trigger the sound"
       default: []
       selector:
-        entity:
-          multiple: true
-          filter: 
-            - domain: input_boolean
-    event_triggers:
-      name: "Event Triggers"
-      description: "Events to trigger the sound"
-      default: []
-      selector:
-        entity:
-          multiple: true
-          filter: 
-            - domain: input_boolean
-    mqtt_triggers:
-      name: "MQTT Triggers"
-      description: "MQTT topics to trigger the sound"
-      default: []
-      selector:
-        entity:
-          multiple: true
-          filter: 
-            - domain: input_text
+        triggers:
 
 trigger:
   # Time triggers
   - platform: time
-    at: !input time_triggers[0]
-  - platform: time
-    at: !input time_triggers[1]
-  - platform: time
-    at: !input time_triggers[2]
+    at: !input time_triggers
   # Sun triggers
   - platform: sun
-    event: !input sun_triggers[0]
-  - platform: sun
-    event: !input sun_triggers[1]
-  # State triggers
-  - platform: state
-    entity_id: !input state_triggers[0]
-  - platform: state
-    entity_id: !input state_triggers[1]
-  # Event triggers
-  - platform: event
-    event_type: !input event_triggers[0]
-  - platform: event
-    event_type: !input event_triggers[1]
-  # MQTT triggers
-  - platform: mqtt
-    topic: !input mqtt_triggers[0]
-  - platform: mqtt
-    topic: !input mqtt_triggers[1]
+    event: !input sun_triggers
+  # Custom triggers
+  - triggers: !input custom_triggers
 
 action:
   - service: script.play_sound_with_volume_control
