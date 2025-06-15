@@ -1,0 +1,13 @@
+{
+  "name": "Mirabelle HA Blueprints",
+  "render_readme": true,
+  "domains": [
+    "automation",
+    "script"
+  ],
+  "homeassistant": "2023.1.0",
+  "iot_class": "Local Push",
+  "zip_release": false,
+  "filename": "blueprints.zip",
+  "content_in_root": false
+}
