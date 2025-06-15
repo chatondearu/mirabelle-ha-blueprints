@@ -28,9 +28,10 @@ alwaysApply: false
   - select
   - time
   - target
+  - object (for complex inputs)
 
 ## Triggers
-- Support multiple trigger types
+- Support multiple trigger types using a single input
 - Make triggers optional when possible
 - Use proper trigger platforms:
   - time
@@ -39,6 +40,7 @@ alwaysApply: false
   - event
   - mqtt
   - webhook
+- Allow dynamic configuration of trigger parameters
 
 ## Actions
 - Keep actions simple and focused
@@ -46,6 +48,7 @@ alwaysApply: false
 - Include error handling
 - Add conditions when needed
 - Use proper data templates
+- Leverage existing scripts when possible
 
 ## Best Practices
 - Keep blueprints modular
@@ -55,25 +58,70 @@ alwaysApply: false
 - Test edge cases
 - Consider performance
 - Handle errors gracefully
+- Use consistent naming conventions
+- Follow Home Assistant's blueprint guidelines
 
 ## Examples
 ```yaml
 blueprint:
-  name: "[CDA] 🔔 Example Blueprint"
-  description: "Example blueprint with all required sections"
+  name: "[CDA] 🔔 Scheduled Bell Sound"
+  description: "Play a sound at specific times with volume control"
   domain: automation
   input:
-    entity:
-      name: "Entity"
-      description: "Entity to monitor"
+    media_player:
+      name: "Media Player"
+      description: "The media player to play the sound"
       selector:
         entity:
-  trigger:
-    - platform: state
-      entity_id: !input entity
-  action:
-    - service: notify.mobile_app
-      data:
-        message: "State changed"
-  mode: single
+          domain: media_player
+    sound_file:
+      name: "Sound File"
+      description: "The sound file to play (from media source)"
+      selector:
+        text:
+    announce_volume:
+      name: "Announce Volume Level"
+      description: "The volume level to use for the announcement (0-1)"
+      default: 0.5
+      selector:
+        number:
+          min: 0
+          max: 1
+          step: 0.1
+    triggers:
+      name: "Triggers"
+      description: "Triggers to play the sound"
+      default: []
+      selector:
+        object:
+          multiple: true
+          options:
+            platform:
+              name: "Platform"
+              description: "Trigger platform"
+              selector:
+                select:
+                  options:
+                    - time
+                    - sun
+                    - state
+                    - event
+                    - mqtt
+                    - webhook
+            at:
+              name: "Time"
+              description: "Time to trigger (HH:MM)"
+              selector:
+                time:
+
+trigger: !input triggers
+
+action:
+  - service: script.play_sound_with_volume_control
+    data:
+      media_player: !input media_player
+      sound_file: !input sound_file
+      announce_volume: !input announce_volume
+
+mode: single
 ``` 
