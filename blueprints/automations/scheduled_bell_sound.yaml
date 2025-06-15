@@ -41,6 +41,15 @@ blueprint:
           min: 1
           max: 300
           step: 1
+    trigger_type:
+      name: "Trigger Type"
+      description: "Type of trigger to use"
+      default: time
+      selector:
+        select:
+          options:
+            - time
+            - sun
     at:
       name: "Time"
       description: "Time to trigger (HH:MM)"
@@ -55,31 +64,11 @@ blueprint:
           options:
             - sunrise
             - sunset
-    entity_id:
-      name: "Entity"
-      description: "Entity to monitor"
-      selector:
-        entity:
-    from:
-      name: "From State"
-      description: "State to trigger from"
-      selector:
-        text:
-    to:
-      name: "To State"
-      description: "State to trigger to"
-      selector:
-        text:
 
 trigger:
-  - platform: time
+  - platform: !input trigger_type
     at: !input at
-  - platform: sun
     event: !input event
-  - platform: state
-    entity_id: !input entity_id
-    from: !input from
-    to: !input to
 
 action:
   - service: script.play_sound_with_volume_control
