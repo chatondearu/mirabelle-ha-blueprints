@@ -1,0 +1,29 @@
+blueprint:
+  name: "Create Schedule"
+  description: "Create a schedule for playing sounds"
+  domain: script
+  input:
+    schedule_name:
+      name: "Schedule Name"
+      description: "Name of the schedule"
+      selector:
+        text:
+    times:
+      name: "Times"
+      description: "List of times in 24-hour format (HH:MM:SS)"
+      default:
+        - "08:00:00"
+        - "12:00:00"
+        - "18:00:00"
+      selector:
+        text:
+          multiple: true
+
+script:
+  alias: !input schedule_name
+  sequence:
+    - service: input_datetime.set_datetime
+      data:
+        entity_id: !input schedule_name
+        time: !input times
+  mode: single 

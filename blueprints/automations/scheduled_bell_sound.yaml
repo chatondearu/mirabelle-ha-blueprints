@@ -33,6 +33,12 @@ blueprint:
           min: 0
           max: 1
           step: 0.1
+    use_time_triggers:
+      name: "Use Time Triggers"
+      description: "Enable time-based triggers"
+      default: true
+      selector:
+        boolean:
     play_times:
       name: "Play Times"
       description: "Times to play the sound (24-hour format)"
@@ -46,7 +52,7 @@ blueprint:
     use_sun_events:
       name: "Use Sun Events"
       description: "Play sound at sunrise and sunset"
-      default: true
+      default: false
       selector:
         boolean:
     sun_offset:
@@ -67,11 +73,21 @@ blueprint:
           min: 1
           max: 300
           step: 1
+    custom_triggers:
+      name: "Custom Triggers"
+      description: "Additional triggers to play the sound"
+      default: []
+      selector:
+        target:
+          entity:
+            domain: binary_sensor
+            multiple: true
 
 trigger:
   # Time-based triggers
   - platform: time
     at: !input play_times
+    enabled: !input use_time_triggers
   # Sun-based triggers (if enabled)
   - platform: sun
     event: sunrise
@@ -81,6 +97,11 @@ trigger:
     event: sunset
     offset: !input sun_offset
     enabled: !input use_sun_events
+  # Custom triggers
+  - platform: state
+    entity_id: !input custom_triggers
+    to: "on"
+    enabled: !input custom_triggers
 
 action:
   - service: script.play_sound_with_volume_control
