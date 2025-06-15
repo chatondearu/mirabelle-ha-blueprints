@@ -1,0 +1,51 @@
+blueprint:
+  name: "[CDA] 🪟 Blind State Tracker"
+  description: "Track the state of a blind controlled by a single switch"
+  domain: automation
+  input:
+    cover_name:
+      name: "Cover Name"
+      description: "Name of the cover entity (e.g., Living Room Blind)"
+      selector:
+        text:
+    switch_entity:
+      name: "Switch Entity"
+      description: "The switch entity that controls the blind"
+      selector:
+        entity:
+          domain: switch
+
+variables:
+  cover_id: !input cover_name | lower | replace(' ', '_')
+  position_helper: "input_text.{{ cover_id }}_position"
+  direction_helper: "input_text.{{ cover_id }}_direction"
+
+trigger:
+  - platform: state
+    entity_id: !input switch_entity
+
+action:
+  - choose:
+      - conditions:
+          - condition: state
+            entity_id: !input switch_entity
+            state: "on"
+        sequence:
+          - service: input_text.set_value
+            data:
+              entity_id: !input direction_helper
+              value: >
+                {% if states(position_helper) | int == 0 %}
+                  opening
+                {% elif states(position_helper) | int == 100 %}
+                  closing
+                {% else %}
+                  {{ states(direction_helper) }}
+                {% endif %}
+    default:
+      - service: input_text.set_value
+        data:
+          entity_id: !input direction_helper
+          value: "stopped"
+
+mode: single 

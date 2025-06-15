@@ -1,0 +1,45 @@
+name: "[CDA] 🪟 Cover Control"
+description: "Control a cover using a switch"
+domain: automation
+input:
+  cover_name:
+    name: Cover Name
+    description: "Name of the cover"
+    required: true
+  cover_switch:
+    name: Cover Switch
+    description: "Switch entity that controls the cover"
+    required: true
+    selector:
+      entity:
+        domain: switch
+  travel_time:
+    name: Travel Time
+    description: "Time in seconds to fully open/close the cover"
+    required: true
+    selector:
+      number:
+        min: 1
+        max: 300
+        step: 1
+        unit_of_measurement: s
+  position:
+    name: Position
+    description: "Position to set the cover to (0-100)"
+    required: true
+    selector:
+      number:
+        min: 0
+        max: 100
+        step: 1
+        unit_of_measurement: "%"
+trigger: []
+condition: []
+action:
+  - service: script.set_cover_position
+    data:
+      cover_switch: !input cover_switch
+      position: !input position
+      travel_time: !input travel_time
+      last_state: "input_text.{{ cover_name | lower | replace(' ', '_') }}_position"
+mode: single 

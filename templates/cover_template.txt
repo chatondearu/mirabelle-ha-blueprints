@@ -1,0 +1,67 @@
+# Cover template configuration
+cover:
+  - platform: template
+    covers:
+      {{ cover_id }}:
+        friendly_name: "{{ name }}"
+        unique_id: {{ cover_id }}_template
+        value_template: "{{ states(position_helper) | int }}"
+        open_cover:
+          service: script.set_cover_position
+          data:
+            cover_switch: {{ switch_entity }}
+            last_state: {{ position_helper }}
+            travel_time: {{ travel_time }}
+            target_position: "100% (Open)"
+        close_cover:
+          service: script.set_cover_position
+          data:
+            cover_switch: {{ switch_entity }}
+            last_state: {{ position_helper }}
+            travel_time: {{ travel_time }}
+            target_position: "0% (Closed)"
+        stop_cover:
+          service: switch.turn_off
+          data:
+            entity_id: {{ switch_entity }}
+        set_cover_position:
+          service: script.set_cover_position
+          data:
+            cover_switch: {{ switch_entity }}
+            last_state: {{ position_helper }}
+            travel_time: {{ travel_time }}
+            target_position: >
+              {% if position <= 25 %}
+                "0% (Closed)"
+              {% elif position <= 50 %}
+                "25%"
+              {% elif position <= 75 %}
+                "50%"
+              {% else %}
+                "75%"
+              {% endif %}
+        icon_template: >
+          {% if is_state(switch_entity, 'on') %}
+            {% if states(direction_helper) == 'opening' %}
+              mdi:arrow-up-bold
+            {% else %}
+              mdi:arrow-down-bold
+            {% endif %}
+          {% else %}
+            {% if states(position_helper) | int == 0 %}
+              mdi:window-closed
+            {% elif states(position_helper) | int == 100 %}
+              mdi:window-open
+            {% else %}
+              mdi:window-shutter
+            {% endif %}
+          {% endif %}
+
+# Required input_text helpers
+input_text:
+  {{ position_helper.split('.')[1] }}:
+    name: "{{ name }} Position"
+    initial: "0"
+  {{ direction_helper.split('.')[1] }}:
+    name: "{{ name }} Direction"
+    initial: "stopped" 
