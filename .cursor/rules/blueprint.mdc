@@ -6,11 +6,6 @@ alwaysApply: false
 # Blueprint Rules
 
 ## Structure
-- Each blueprint should be in its appropriate category directory
-- Use clear and descriptive filenames
-# Blueprint Rules
-
-## Structure
 - Use proper YAML formatting
 - Include all required sections:
   - name

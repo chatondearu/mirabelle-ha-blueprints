@@ -8,7 +8,6 @@ alwaysApply: false
 ## Project Structure
 - Keep blueprints organized in appropriate subdirectories (automations, scripts, scenes, dashboards)
 - Maintain documentation in the `docs` directory
-# Project Rules
 
 ## Core Requirements
 - Home Assistant version: 2025.5.3 or later
