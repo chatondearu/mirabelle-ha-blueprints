@@ -1,0 +1,54 @@
+blueprint:
+  name: "Presence Based Lighting"
+  description: "Automatically control lights based on presence detection"
+  domain: automation
+  input:
+    presence_sensor:
+      name: "Presence Sensor"
+      description: "The sensor that detects presence"
+      selector:
+        entity:
+          domain: binary_sensor
+    light_entity:
+      name: "Light to Control"
+      description: "The light that should be controlled"
+      selector:
+        entity:
+          domain: light
+    delay_off:
+      name: "Delay Before Turning Off"
+      description: "How long to wait before turning off the light after no presence is detected"
+      default: 300
+      selector:
+        number:
+          min: 0
+          max: 3600
+          unit_of_measurement: seconds
+
+trigger:
+  - platform: state
+    entity_id: !input presence_sensor
+    to: "on"
+  - platform: state
+    entity_id: !input presence_sensor
+    to: "off"
+    for:
+      seconds: !input delay_off
+
+condition:
+  - condition: template
+    value_template: "{{ trigger.to_state.state == 'on' }}"
+
+action:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ trigger.to_state.state == 'on' }}"
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: !input light_entity
+    default:
+      - service: light.turn_off
+        target:
+          entity_id: !input light_entity 

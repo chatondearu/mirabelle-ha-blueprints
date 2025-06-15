@@ -1,0 +1,43 @@
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": true
+  },
+  "files.associations": {
+    "*.yaml": "home-assistant",
+    "*.yml": "home-assistant"
+  },
+  "yaml.format.enable": true,
+  "yaml.validate": true,
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/home-assistant/home-assistant/dev/homeassistant/components/automation/config.schema.json": "blueprints/automations/*.yaml",
+    "https://raw.githubusercontent.com/home-assistant/home-assistant/dev/homeassistant/components/script/config.schema.json": "blueprints/scripts/*.yaml",
+    "https://raw.githubusercontent.com/home-assistant/home-assistant/dev/homeassistant/components/scene/config.schema.json": "blueprints/scenes/*.yaml"
+  },
+  "markdown.preview.breaks": true,
+  "markdown.extension.preview.autoShowPreviewToSide": true,
+  "markdown.extension.syntax.decorations": true,
+  "markdown.extension.toc.levels": "2..6",
+  "markdown.extension.toc.updateOnSave": true,
+  "markdown.extension.toc.orderedList": true,
+  "markdown.extension.toc.plaintext": false,
+  "markdown.extension.toc.slugifyMode": "github",
+  "markdown.extension.toc.ulistMarker": "-",
+  "files.exclude": {
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/CVS": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    "**/.idea": true,
+    "**/.vscode": false
+  },
+  "search.exclude": {
+    "**/node_modules": true,
+    "**/bower_components": true,
+    "**/*.code-search": true,
+    "**/dist": true
+  }
+}

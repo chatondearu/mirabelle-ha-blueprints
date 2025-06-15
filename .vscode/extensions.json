@@ -1,0 +1,26 @@
+{
+  "recommendations": [
+    "keesschollaart.vscode-home-assistant",
+    "redhat.vscode-yaml",
+    "ms-azuretools.vscode-docker",
+    "eamodio.gitlens",
+    "streetsidesoftware.code-spell-checker",
+    "streetsidesoftware.code-spell-checker-french",
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "mikestead.dotenv",
+    "bierner.markdown-preview-github-styles",
+    "bierner.markdown-mermaid",
+    "bierner.github-markdown-preview",
+    "bierner.emojisense",
+    "bierner.lit-html",
+    "bierner.comment-tagged-templates",
+    "bierner.markdown-checkbox",
+    "bierner.markdown-emoji",
+    "bierner.markdown-footnotes",
+    "bierner.markdown-highlight",
+    "bierner.markdown-image-size",
+    "bierner.markdown-preview-github-styles",
+    "bierner.markdown-yaml-preamble"
+  ]
+}
