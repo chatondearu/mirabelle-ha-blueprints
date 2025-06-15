@@ -46,46 +46,46 @@ blueprint:
       description: "Times to trigger the sound"
       default: []
       selector:
-        target:
-          entity:
-            domain: input_datetime
+        entity:
           multiple: true
+          filter: 
+            - domain: input_datetime
     sun_triggers:
       name: "Sun Triggers"
       description: "Sun events to trigger the sound"
       default: []
       selector:
-        target:
-          entity:
-            domain: input_datetime
+        entity:
           multiple: true
+          filter: 
+            - domain: input_datetime
     state_triggers:
       name: "State Triggers"
       description: "State changes to trigger the sound"
       default: []
       selector:
-        target:
-          entity:
-            domain: input_boolean
+        entity:
           multiple: true
+          filter: 
+            - domain: input_boolean
     event_triggers:
       name: "Event Triggers"
       description: "Events to trigger the sound"
       default: []
       selector:
-        target:
-          entity:
-            domain: input_boolean
+        entity:
           multiple: true
+          filter: 
+            - domain: input_boolean
     mqtt_triggers:
       name: "MQTT Triggers"
       description: "MQTT topics to trigger the sound"
       default: []
       selector:
-        target:
-          entity:
-            domain: input_text
+        entity:
           multiple: true
+          filter: 
+            - domain: input_text
 
 trigger:
   # Time triggers
