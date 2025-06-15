@@ -97,4 +97,4 @@
 After any change to configuration files (e.g. blueprints, scripts, settings, documentation, README, etc.), you must:
 
 1. Commit the changes locally with a clear and explicit message.
-2. Push the changes to the remote repository to ensure project traceability and synchronization. 
+2. Push the changes to the remote repository to ensure project traceability and synchronization.

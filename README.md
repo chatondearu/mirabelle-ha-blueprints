@@ -80,7 +80,7 @@ mirabelle-ha-blueprints/
 ## Development
 
 ### Prerequisites
-- Node.js (for version management)
+- Node.js 18+ (for version management and scripts)
 - Git
 
 ### Setup
@@ -95,6 +95,44 @@ mirabelle-ha-blueprints/
 - Update version in package.json
 - Run `npm version` to create a new version
 - The script will automatically commit and tag the changes
+
+### Updating Automations
+To automatically update all automations in your Home Assistant instance:
+
+1. Get your Home Assistant token:
+   - Go to your Home Assistant profile
+   - Scroll to the bottom
+   - Create a long-lived access token
+
+2. Configure environment variables:
+   - Copy `.env.example` to `.env`:
+     ```bash
+     cp .env.example .env
+     ```
+   - Edit `.env` and set your Home Assistant token:
+     ```env
+     HA_URL=http://your_ha_instance:8123
+     HA_TOKEN=your_long_lived_access_token
+     ```
+
+3. Run the update script:
+   ```bash
+   npm run update-automations
+   ```
+
+The script will:
+- Find all blueprints in the repository
+- Get all automations from your Home Assistant instance
+- Update automations that match the blueprints
+- Preserve your automation configurations
+
+Note: Only automations with names starting with "[CDA]" will be updated.
+
+Available environment variables:
+- `HA_URL`: Home Assistant URL (default: http://supervisor/core)
+- `HA_TOKEN`: Your long-lived access token (required)
+- `HA_VERIFY_SSL`: Enable/disable SSL verification (default: true)
+- `HA_TIMEOUT`: Request timeout in seconds (default: 30)
 
 ## Contributing
 
