@@ -43,7 +43,7 @@ blueprint:
           step: 1
     time_triggers:
       name: "Time Triggers"
-      description: "Times to trigger the sound (can select multiple input_datetime entities)"
+      description: "Times to trigger the sound (can select multiple input_datetime entities). You can create these helpers using the [Schedule Creator Blueprint](https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/schedule_creator.yaml)"
       default: []
       selector:
         entity:
