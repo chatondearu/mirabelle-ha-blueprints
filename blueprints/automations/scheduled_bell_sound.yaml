@@ -1,95 +1,184 @@
 blueprint:
-  name: "[CDA] 🔔 Scheduled Bell Sound"
-  description: "Play a sound at specific times with volume control"
+  homeassistant:
+    min_version: 2024.6.0
+  name: '[CDA] 🔔 Scheduled Bell Sound'
+  description: 'Play a sound at specific times with volume control'
   domain: automation
   input:
-    media_player:
-      name: "Media Player"
-      description: "The media player to play the sound"
+    player_input:
+      name: 'Player'
+      description: 'The player where to play the sound'
+      default: all
       selector:
         entity:
-          domain: media_player
-    sound_file:
-      name: "Sound File"
-      description: "The sound file to play (from media source)"
+          filter:
+            domain: media_player
+    sound_file_input:
+      name: 'Sound File'
+      description: 'The sound file to play (from media source)'
+      default: 'media-source://media_source/local/section9/sounds/japan_school_bell.mp3'
       selector:
-        text:
-    announce_volume:
-      name: "Announce Volume Level"
-      description: "The volume level to use for the announcement (0-1)"
-      default: 0.5
-      selector:
-        number:
-          min: 0
-          max: 1
-          step: 0.1
-    volume_reduction:
-      name: "Volume Reduction"
-      description: "How much to reduce the volume for the announcement (0-1)"
-      default: 0.2
-      selector:
-        number:
-          min: 0
-          max: 1
-          step: 0.1
-    wait_time:
-      name: "Wait Time"
-      description: "How long to wait after playing before restoring volume (seconds)"
+        text: {}
+    wait_time_input:
+      name: 'Wait Time'
+      description: 'How long to wait after playing before restoring volume (seconds)'
       default: 20
       selector:
         number:
-          min: 1
-          max: 300
-          step: 1
-    time_triggers:
-      name: "Time Triggers"
-      description: "Times to trigger the sound (can select multiple input_datetime entities). You can create these helpers using the [Schedule Creator Blueprint](https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/schedule_creator.yaml)"
-      default: []
-      selector:
-        entity:
-          multiple: true
-          filter:
-            domain: input_datetime
-    sun_triggers:
-      name: "Sun Triggers"
-      description: "Sun events to trigger the sound (sunrise, sunset, dawn, dusk)"
-      default: []
-      selector:
-        select:
-          multiple: true
-          options:
-            - sunrise
-            - sunset
-            - dawn
-            - dusk
-            - noon
-            - midnight
-            - custom
-          mode: dropdown
-    custom_triggers:
-      name: "Custom Triggers"
-      description: "Custom triggers to trigger the sound"
-      default: []
-      selector:
-        trigger:
+          min: 1.0
+          max: 300.0
+          step: 1.0
+          mode: slider
 
-trigger:
-  # Time triggers
-  - platform: time
-    at: !input time_triggers
-  # Sun triggers
-  - platform: sun
-    event: !input sun_triggers
+    volume_section:
+      name: 'Volume settings'
+      icon: 'mdi:cog'
+      description: 'set the correct volume according to the sound volume and the device volume'
+      input:
+        volume_announce_input:
+          name: 'Device Volume Level'
+          description: 'The volume level to use for the announcement (0-1)'
+          default: 0.5
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.1
+              mode: slider
+        volume_reduction_input:
+          name: 'Sound Reduction'
+          description: 'How much to reduce the volume for the announcement (0-1)'
+          default: 0.2
+          selector:
+            number:
+              min: 0.0
+              max: 1.0
+              step: 0.1
+              mode: slider
+
+    trigger_section:
+      name: 'Trigger settings'
+      icon: 'mdi:cog'
+      description: 'set triggers to play the sound'
+      input:
+        time_triggers:
+          name: 'Time Triggers'
+          description: 'Times to trigger the sound (can select multiple input_datetime entities). You can create these helpers using the [Schedule Creator Blueprint](https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/schedule_creator.yaml)'
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                domain: input_datetime
+        sun_triggers:
+          name: 'Sun Triggers'
+          description: 'Sun events to trigger the sound based on sun elevation angles'
+          default: []
+          selector:
+            select:
+              multiple: true
+              options:
+                - sunrise
+                - sunset
+                - dawn
+                - dusk
+                - noon
+                - midnight
+              mode: dropdown
+        custom_triggers:
+          name: 'Custom Triggers'
+          description: 'Custom triggers to trigger the sound'
+          default: []
+          selector:
+            trigger:
+
+variables:
+  custom_triggers_var: !input custom_triggers
+  time_triggers_var: !input time_triggers
+  sun_triggers_var: !input sun_triggers
+
+triggers:
+  # Time triggers from input_datetime entities
+  - trigger: state
+    entity_id: !input time_triggers
+    to: "{{ now().strftime('%H:%M') }}"
+    id: time_triggers
+
+  # Sun triggers - based on sun elevation angles
+  - trigger: numeric_state
+    entity_id: sun.sun
+    attribute: elevation
+    above: -0.8
+    below: 0.0
+    id: sun_sunrise
+  - trigger: numeric_state
+    entity_id: sun.sun
+    attribute: elevation
+    above: 0.0
+    below: 0.8
+    id: sun_sunset
+  - trigger: numeric_state
+    entity_id: sun.sun
+    attribute: elevation
+    above: -6.0
+    below: -0.8
+    id: sun_dawn
+  - trigger: numeric_state
+    entity_id: sun.sun
+    attribute: elevation
+    above: 0.8
+    below: 6.0
+    id: sun_dusk
+  - trigger: numeric_state
+    entity_id: sun.sun
+    attribute: elevation
+    above: 45.0
+    below: 90.0
+    id: sun_noon
+  - trigger: numeric_state
+    entity_id: sun.sun
+    attribute: elevation
+    above: -90.0
+    below: -45.0
+    id: sun_midnight
+
   # Custom triggers
   - triggers: !input custom_triggers
 
-action:
-  - service: script.play_sound_with_volume_control
-    data:
-      media_player: !input media_player
-      sound_file: !input sound_file
-      announce_volume: !input announce_volume
-      volume_reduction: !input volume_reduction
-      wait_time: !input wait_time
+conditions:
+  - condition: template
+    value_template: >
+      {% if trigger.id == 'time_triggers' %}
+        {{ time_triggers_var | length > 0 }}
+      {% elif trigger.platform == 'numeric_state' and trigger.entity_id == 'sun.sun' %}
+        {% if trigger.id == 'sun_sunrise' and 'sunrise' in sun_triggers_var %}
+          true
+        {% elif trigger.id == 'sun_sunset' and 'sunset' in sun_triggers_var %}
+          true
+        {% elif trigger.id == 'sun_dawn' and 'dawn' in sun_triggers_var %}
+          true
+        {% elif trigger.id == 'sun_dusk' and 'dusk' in sun_triggers_var %}
+          true
+        {% elif trigger.id == 'sun_noon' and 'noon' in sun_triggers_var %}
+          true
+        {% elif trigger.id == 'sun_midnight' and 'midnight' in sun_triggers_var %}
+          true
+        {% else %}
+          false
+        {% endif %}
+      {% elif custom_triggers_var | length > 0 %}
+        true
+      {% else %}
+        false
+      {% endif %}
 
-mode: single 
+actions:
+  - action: script.cda_play_sound_with_volume_control
+    data:
+      media_player: !input player_input
+      sound_file: !input sound_file_input
+      announce_volume: !input volume_announce_input
+      volume_reduction: !input volume_reduction_input
+      wait_time: !input wait_time_input
+
+mode: single

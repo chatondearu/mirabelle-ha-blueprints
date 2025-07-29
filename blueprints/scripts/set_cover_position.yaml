@@ -39,15 +39,15 @@ fields:
 sequence:
   - service: input_text.set_value
     data:
-      entity_id: !input last_state
-      value: !input position
+      entity_id: "{{ last_state }}"
+      value: "{{ position }}"
   - service: switch.turn_on
     target:
-      entity_id: !input cover_switch
+      entity_id: "{{ cover_switch }}"
   - delay:
-      seconds: !input travel_time
+      seconds: "{{ travel_time }}"
   - service: switch.turn_off
     target:
-      entity_id: !input cover_switch
+      entity_id: "{{ cover_switch }}"
 
 mode: single 

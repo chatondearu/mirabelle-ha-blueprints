@@ -1,85 +1,126 @@
 blueprint:
   name: "[CDA] 🔊 Play Sound with Volume Control"
-  description: "Play a sound with volume control and restoration"
+  description: Play a sound with volume control and restoration
   domain: script
   input:
-    media_player:
-      name: "Media Player"
-      description: "The media player to play the sound"
+    player_input:
+      name: Media Player
+      description: The media player to play the sound
+      default: all
       selector:
         entity:
-          domain: media_player
-    sound_file:
-      name: "Sound File"
-      description: "The sound file to play (from media source)"
+          filter:
+            domain: media_player
+    sound_file_input:
+      name: Sound File
+      description: The sound file to play (from media source)
+      default: media-source://media_source/local/section9/sounds/japan_school_bell.mp3
       selector:
-        text:
-    announce_volume:
-      name: "Announce Volume Level"
-      description: "The volume level to use for the announcement (0-1)"
+        text: {}
+    volume_announce_input:
+      name: Announce Volume Level
+      description: The volume level to use for the announcement (0-1)
       default: 0.5
       selector:
         number:
-          min: 0
-          max: 1
+          min: 0.0
+          max: 1.0
           step: 0.1
-    volume_reduction:
-      name: "Volume Reduction"
-      description: "How much to reduce the volume for the announcement (0-1)"
+          mode: slider
+    volume_reduction_input:
+      name: Volume Reduction
+      description: How much to reduce the volume for the announcement (0-1)
       default: 0.2
       selector:
         number:
-          min: 0
-          max: 1
+          min: 0.0
+          max: 1.0
           step: 0.1
-    wait_time:
-      name: "Wait Time"
-      description: "How long to wait after playing before restoring volume (seconds)"
+          mode: slider
+    wait_time_input:
+      name: Wait Time
+      description: How long to wait after playing before restoring volume (seconds)
       default: 20
       selector:
         number:
-          min: 1
-          max: 300
-          step: 1
+          min: 1.0
+          max: 300.0
+          step: 1.0
+          mode: slider
 
-script:
-  sequence:
-    # Turn on the media player
-    - service: media_player.turn_on
-      target:
-        entity_id: !input media_player
-    
-    # Store current volume
-    - variables:
-        volume_level_before: "{{ state_attr('media_player.enceinte_salon', 'volume_level') }}"
-    
-    # Set announcement volume
-    - service: media_player.volume_set
-      target:
-        entity_id: !input media_player
-      data:
-        volume_level: "{{ announce_volume - volume_reduction }}"
-    
-    # Play the sound
-    - service: media_player.play_media
-      target:
-        entity_id: !input media_player
-      data:
-        media_content_id: !input sound_file
-        media_content_type: music
-        announce: true
-    
-    # Wait for playback to complete
-    - wait_for_trigger:
-        - platform: state
-          entity_id: !input media_player
-          from: playing
-      timeout:
-        seconds: !input wait_time
-    
-    # Restore original volume
-    - service: media_player.volume_set
-      target:
-        entity_id: !input media_player
-      data:
-        volume_level: "{{ volume_level_before }}" 
+fields:
+  player_field:
+    name: Media Player (override)
+    description: Override the default media player
+    required: false
+    selector:
+      entity:
+        filter:
+          domain: media_player
+  sound_file_field:
+    name: Sound File (override)
+    description: Override the default sound file
+    required: false
+    selector:
+      text: {}
+
+# Determine which values to use (fields take priority over inputs)
+variables:
+  player_input: !input player_input
+  final_player: >
+    {% if player_field and player_field != '' %}
+      {{ player_field }}
+    {% else %}
+      {{ player_input }}
+    {% endif %}
+  sound_file_input: !input sound_file_input
+  final_sound: >
+    {% if sound_file_field and player_field != '' %}
+      {{ sound_file_field }}
+    {% else %}
+      {{ sound_file_input }}
+    {% endif %}
+  volume_announce: !input volume_announce_input
+  volume_reduction: !input volume_reduction_input
+  wait_time: !input wait_time_input
+
+sequence:
+  # Turn on the media player
+  - service: media_player.turn_on
+    target:
+      entity_id: "{{ final_player }}"
+  
+  # Store current volume and set new volume
+  - variables:
+      volume_level_before: "{{ state_attr(final_player, 'volume_level') | float }}"
+      adjusted_volume: "{{ [volume_announce - volume_reduction, 0] | max }}"
+  
+  - service: media_player.volume_set
+    target:
+      entity_id: "{{ final_player }}"
+    data:
+      volume_level: "{{ adjusted_volume }}"
+  
+  # Play the media
+  - service: media_player.play_media
+    target:
+      entity_id: "{{ final_player }}"
+    data:
+      media_content_id: "{{ final_sound }}"
+      media_content_type: music
+      announce: true
+  
+  # Wait for playback to finish
+  - wait_template: "{{ states(final_player) != 'playing' }}"
+    timeout:
+      seconds: "{{ wait_time }}"
+  
+  # Restore original volume
+  - service: media_player.volume_set
+    target:
+      entity_id: "{{ final_player }}"
+    data:
+      volume_level: "{{ volume_level_before }}"
+
+mode: queued
+icon: mdi:speaker-wireless
