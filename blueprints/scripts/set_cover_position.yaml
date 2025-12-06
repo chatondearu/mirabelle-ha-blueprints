@@ -1,53 +1,71 @@
-name: "[CDA] 🪟 Set Cover Position"
-description: "Set a cover to a specific position using a switch"
-fields:
-  cover_switch:
-    name: Cover Switch
-    description: "Switch entity that controls the cover"
-    required: true
-    selector:
-      entity:
-        domain: switch
-  position:
-    name: Position
-    description: "Position to set the cover to (0-100)"
-    required: true
-    selector:
-      number:
-        min: 0
-        max: 100
-        step: 1
-        unit_of_measurement: "%"
-  travel_time:
-    name: Travel Time
-    description: "Time in seconds to fully open/close the cover"
-    required: true
-    selector:
-      number:
-        min: 1
-        max: 300
-        step: 1
-        unit_of_measurement: s
-  last_state:
-    name: Last State
-    description: "Input text entity to store the last state of the cover"
-    required: true
-    selector:
-      entity:
-        domain: input_text
+blueprint:
+  homeassistant:
+    min_version: 2025.5.3
+  name: "[CDA] 🪟 Set Cover Position"
+  description: "Set a cover to a specific position using a switch"
+  domain: script
+  input:
+    cover_switch:
+      name: Cover Switch
+      description: "Switch entity that controls the cover"
+      selector:
+        entity:
+          domain: switch
+    position:
+      name: Position
+      description: "Position to set the cover to (0-100)"
+      default: 50
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+    travel_time:
+      name: Travel Time
+      description: "Time in seconds to fully open/close the cover"
+      default: 30
+      selector:
+        number:
+          min: 1
+          max: 300
+          step: 1
+          unit_of_measurement: s
+    last_state:
+      name: Last State
+      description: "Input text entity to store the last state of the cover"
+      selector:
+        entity:
+          domain: input_text
+  source_url: https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/set_cover_position.yaml
+
+variables:
+  cover_switch: !input cover_switch
+  position: !input position
+  travel_time: !input travel_time
+  last_state: !input last_state
 
 sequence:
+  # Update position helper
   - service: input_text.set_value
-    data:
+    target:
       entity_id: "{{ last_state }}"
+    data:
       value: "{{ position }}"
+
+  # Start movement
   - service: switch.turn_on
     target:
       entity_id: "{{ cover_switch }}"
+
+  # Wait for calculated time
   - delay:
       seconds: "{{ travel_time }}"
+
+  # Stop movement
   - service: switch.turn_off
     target:
       entity_id: "{{ cover_switch }}"
 
-mode: single 
+mode: queued
+icon: mdi:window-shutter 

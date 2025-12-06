@@ -14,10 +14,15 @@ A collection of custom blueprints for Home Assistant.
 
 #### Automations
 - [[CDA] 🔔 Scheduled Bell Sound](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fscheduled_bell_sound.yaml)
+- [[CDA] 💡 Presence Based Lighting](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fpresence_based_lighting.yaml)
+- [[CDA] 🪟 Cover Control](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_control.yaml)
+- [[CDA] 🪟 Blind Cover Template](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_cover.yaml)
+- [[CDA] 🪟 Blind State Tracker](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_state_tracker.yaml)
 
 #### Scripts
 - [[CDA] 🔊 Play Sound with Volume Control](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fplay_sound_with_volume_control.yaml)
 - [[CDA] 📅 Create Schedule](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fcreate_schedule.yaml)
+- [[CDA] 🪟 Set Cover Position](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fset_cover_position.yaml)
 
 ### Manual Installation
 
@@ -32,12 +37,17 @@ If the quick links don't work, you can manually import the blueprints:
 #### Automations
 ```
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/scheduled_bell_sound.yaml
+https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/presence_based_lighting.yaml
+https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_control.yaml
+https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_cover.yaml
+https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_state_tracker.yaml
 ```
 
 #### Scripts
 ```
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/play_sound_with_volume_control.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/create_schedule.yaml
+https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/set_cover_position.yaml
 ```
 
 ## Available Blueprints
@@ -60,20 +70,51 @@ A helper script to easily create schedules for your automations.
 
 [View Documentation](docs/create_schedule.md)
 
+### Presence Based Lighting
+[CDA] 💡 Presence Based Lighting
+Automatically control lights based on presence detection with configurable delay.
+
+[View Documentation](docs/presence_based_lighting.md)
+
+### Cover Control
+[CDA] 🪟 Cover Control
+Control a cover using a switch with position support (0-100%).
+
+### Blind Cover Template
+[CDA] 🪟 Blind Cover Template
+Helper automation to track the state of a blind controlled by a single switch.
+
+### Blind State Tracker
+[CDA] 🪟 Blind State Tracker
+Track the state of a blind controlled by a single switch.
+
+[View Documentation](docs/blind_states.md)
+
+### Set Cover Position
+[CDA] 🪟 Set Cover Position
+Set a cover to a specific position using a switch with travel time calculation.
+
 ## Repository Structure
 
 ```
 mirabelle-ha-blueprints/
 ├── blueprints/
 │   ├── automations/
-│   │   └── scheduled_bell_sound.yaml
+│   │   ├── scheduled_bell_sound.yaml
+│   │   ├── presence_based_lighting.yaml
+│   │   ├── cover_control.yaml
+│   │   ├── cover_cover.yaml
+│   │   └── cover_state_tracker.yaml
 │   └── scripts/
 │       ├── play_sound_with_volume_control.yaml
-│       └── create_schedule.yaml
+│       ├── create_schedule.yaml
+│       └── set_cover_position.yaml
 ├── docs/
 │   ├── scheduled_bell_sound.md
 │   ├── play_sound_with_volume_control.md
-│   └── create_schedule.md
+│   ├── create_schedule.md
+│   ├── presence_based_lighting.md
+│   └── blind_states.md
 └── README.md
 ```
 
@@ -164,75 +205,75 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 # Cover Manager
 
-Une intégration Home Assistant pour gérer facilement les volets contrôlés par des interrupteurs.
+A Home Assistant integration to easily manage covers controlled by switches.
 
-## Fonctionnalités
+## Features
 
-- Configuration simple via l'interface web
-- Création automatique des helpers nécessaires
-- Support des positions (0-100%)
-- Icônes dynamiques selon l'état
-- Support multilingue (FR/EN)
+- Simple configuration via web interface
+- Automatic creation of required helpers
+- Position support (0-100%)
+- Dynamic icons based on state
+- Multilingual support (EN/FR)
 
 ## Installation
 
-### Via HACS (recommandé)
+### Via HACS (recommended)
 
-1. Assurez-vous que [HACS](https://hacs.xyz/) est installé
-2. Ajoutez ce repository dans HACS
-3. Recherchez "Cover Manager"
-4. Cliquez sur "Installer"
+1. Make sure [HACS](https://hacs.xyz/) is installed
+2. Add this repository to HACS
+3. Search for "Cover Manager"
+4. Click "Install"
 
-### Installation manuelle
+### Manual Installation
 
-1. Téléchargez les fichiers
-2. Copiez le dossier `cover_manager` dans votre dossier `custom_components`
-3. Redémarrez Home Assistant
+1. Download the files
+2. Copy the `cover_manager` folder to your `custom_components` directory
+3. Restart Home Assistant
 
 ## Configuration
 
-1. Allez dans Configuration > Intégrations
-2. Cliquez sur "Ajouter une intégration"
-3. Recherchez "Cover Manager"
-4. Suivez les instructions à l'écran
+1. Go to Configuration > Integrations
+2. Click "Add Integration"
+3. Search for "Cover Manager"
+4. Follow the on-screen instructions
 
-### Paramètres
+### Parameters
 
-| Paramètre | Description | Obligatoire |
-|-----------|-------------|-------------|
-| Nom | Nom du volet | Oui |
-| Entité Switch | Switch qui contrôle le volet | Oui |
-| Temps de Trajet | Temps en secondes pour ouvrir/fermer | Oui |
+| Parameter | Description | Required |
+|-----------|-------------|----------|
+| Name | Name of the cover | Yes |
+| Switch Entity | Switch that controls the cover | Yes |
+| Travel Time | Time in seconds to open/close | Yes |
 
-## Utilisation
+## Usage
 
-Une fois configuré, le volet apparaîtra dans votre interface avec :
-- Un slider pour contrôler la position
-- Des boutons pour ouvrir/fermer/arrêter
-- Des icônes dynamiques selon l'état
+Once configured, the cover will appear in your interface with:
+- A slider to control the position
+- Buttons to open/close/stop
+- Dynamic icons based on state
 
-## Dépannage
+## Troubleshooting
 
-1. **Le volet n'apparaît pas**
-   - Vérifiez que l'intégration est bien installée
-   - Redémarrez Home Assistant
+1. **Cover doesn't appear**
+   - Verify that the integration is installed
+   - Restart Home Assistant
 
-2. **Le volet ne répond pas**
-   - Vérifiez que le switch est bien configuré
-   - Vérifiez les helpers dans Configuration > Helpers
+2. **Cover doesn't respond**
+   - Verify that the switch is configured correctly
+   - Check helpers in Configuration > Helpers
 
-3. **Position incorrecte**
-   - Vérifiez le temps de trajet
-   - Réinitialisez les helpers
+3. **Incorrect position**
+   - Verify the travel time
+   - Reset the helpers
 
-## Contribution
+## Contributing
 
-Les contributions sont les bienvenues ! N'hésitez pas à :
-1. Fork le repository
-2. Créer une branche
-3. Faire vos modifications
-4. Soumettre une pull request
+Contributions are welcome! Feel free to:
+1. Fork the repository
+2. Create a branch
+3. Make your changes
+4. Submit a pull request
 
-## Licence
+## License
 
-Ce projet est sous licence MIT - voir le fichier LICENSE pour plus de détails. 
+This project is licensed under the MIT License - see the LICENSE file for details. 

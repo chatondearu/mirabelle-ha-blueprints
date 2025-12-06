@@ -1,7 +1,10 @@
 blueprint:
+  homeassistant:
+    min_version: 2025.5.3
   name: "[CDA] 🪟 Blind State Tracker"
   description: "Track the state of a blind controlled by a single switch"
   domain: automation
+  source_url: https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_state_tracker.yaml
   input:
     cover_name:
       name: "Cover Name"
