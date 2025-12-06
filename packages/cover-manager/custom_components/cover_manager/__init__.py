@@ -51,7 +51,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 _LOGGER.warning("Error reading existing helpers config: %s", e)
         
         # Merge with existing helpers
-        if "input_text" not in existing_helpers:
+        if not existing_helpers:
             existing_helpers = helpers_config["input_text"]
         else:
             existing_helpers.update(helpers_config["input_text"])

@@ -32,6 +32,8 @@ blueprint:
 
 variables:
   cover_id: !input cover_name | lower | replace(' ', '_')
+  position_helper: !input position_helper
+  direction_helper: !input direction_helper
 
 trigger:
   - platform: state
