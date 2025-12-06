@@ -1,45 +1,55 @@
-name: "[CDA] 🪟 Cover Control"
-description: "Control a cover using a switch"
-domain: automation
-input:
-  cover_name:
-    name: Cover Name
-    description: "Name of the cover"
-    required: true
-  cover_switch:
-    name: Cover Switch
-    description: "Switch entity that controls the cover"
-    required: true
-    selector:
-      entity:
-        domain: switch
-  travel_time:
-    name: Travel Time
-    description: "Time in seconds to fully open/close the cover"
-    required: true
-    selector:
-      number:
-        min: 1
-        max: 300
-        step: 1
-        unit_of_measurement: s
-  position:
-    name: Position
-    description: "Position to set the cover to (0-100)"
-    required: true
-    selector:
-      number:
-        min: 0
-        max: 100
-        step: 1
-        unit_of_measurement: "%"
+blueprint:
+  homeassistant:
+    min_version: 2025.5.3
+  name: "[CDA] 🪟 Cover Control"
+  description: "Control a cover using a switch"
+  domain: automation
+  input:
+    cover_name:
+      name: Cover Name
+      description: "Name of the cover"
+      selector:
+        text: {}
+    cover_switch:
+      name: Cover Switch
+      description: "Switch entity that controls the cover"
+      selector:
+        entity:
+          domain: switch
+    travel_time:
+      name: Travel Time
+      description: "Time in seconds to fully open/close the cover"
+      default: 30
+      selector:
+        number:
+          min: 1
+          max: 300
+          step: 1
+          unit_of_measurement: s
+    position:
+      name: Position
+      description: "Position to set the cover to (0-100)"
+      default: 50
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+  source_url: https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_control.yaml
+
+variables:
+  cover_id: !input cover_name | lower | replace(' ', '_')
+  position_helper: "input_text.{{ cover_id }}_position"
+
 trigger: []
-condition: []
+
 action:
   - service: script.set_cover_position
     data:
       cover_switch: !input cover_switch
       position: !input position
       travel_time: !input travel_time
-      last_state: "input_text.{{ cover_name | lower | replace(' ', '_') }}_position"
+      last_state: "{{ position_helper }}"
+
 mode: single 
