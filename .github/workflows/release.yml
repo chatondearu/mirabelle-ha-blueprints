@@ -36,10 +36,16 @@ jobs:
           cd packages/cover-manager
           zip -r cover_manager.zip custom_components/cover_manager
       
-      - name: Create GitHub Release
+      - name: Create GitHub Release (Cover Manager)
+        if: startsWith(github.ref, 'refs/tags/cover-manager-')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            packages/cover-manager/cover_manager.zip
+          files: packages/cover-manager/cover_manager.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Create GitHub Release (General)
+        if: startsWith(github.ref, 'refs/tags/v') && !startsWith(github.ref, 'refs/tags/cover-manager-')
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 

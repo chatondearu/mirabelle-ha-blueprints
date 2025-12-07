@@ -89,8 +89,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         covers_path.parent.mkdir(parents=True, exist_ok=True)
         write_cover_template(config, str(covers_path))
         
-        # Reload cover platform to load the new cover
-        await hass.services.async_call("cover", "reload")
+        # Reload YAML configuration to load the new cover template
+        # Note: This requires the covers.yaml to be included in configuration.yaml
+        try:
+            await hass.services.async_call("homeassistant", "reload_config_entry", {"entry_id": entry.entry_id})
+        except Exception as reload_error:
+            _LOGGER.warning("Could not reload config entry, trying full config reload: %s", reload_error)
+            # Fallback: reload the entire configuration
+            # This will reload all YAML configurations including covers.yaml
+            await hass.services.async_call("homeassistant", "reload_config")
         
         _LOGGER.info("Cover Manager setup completed for %s", entry.data['name'])
         return True

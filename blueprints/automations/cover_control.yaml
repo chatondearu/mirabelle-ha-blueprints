@@ -40,7 +40,6 @@ blueprint:
 
 variables:
   cover_id: !input cover_name | lower | replace(' ', '_')
-  position_helper: "input_text.{{ cover_id }}_position"
 
 trigger: []
 
@@ -50,6 +49,6 @@ action:
       cover_switch: !input cover_switch
       position: !input position
       travel_time: !input travel_time
-      last_state: "{{ position_helper }}"
+      last_state: "input_text.{{ cover_id }}_position"
 
 mode: single 
