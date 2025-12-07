@@ -50,6 +50,18 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scri
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/set_cover_position.yaml
 ```
 
+## Custom Components
+
+### Cover Manager
+[Cover Manager](packages/cover-manager/README.md) - A Home Assistant custom integration to easily manage covers controlled by switches.
+
+**Installation via HACS:**
+1. Add this repository as a custom repository in HACS (Category: Integration)
+2. Search for "Cover Manager" and install
+3. Restart Home Assistant and configure via Settings > Devices & Services
+
+See [Cover Manager Installation Guide](packages/cover-manager/INSTALLATION.md) for detailed instructions.
+
 ## Available Blueprints
 
 ### Scheduled Bell Sound
@@ -202,78 +214,3 @@ Available environment variables:
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-# Cover Manager
-
-A Home Assistant integration to easily manage covers controlled by switches.
-
-## Features
-
-- Simple configuration via web interface
-- Automatic creation of required helpers
-- Position support (0-100%)
-- Dynamic icons based on state
-- Multilingual support (EN/FR)
-
-## Installation
-
-### Via HACS (recommended)
-
-1. Make sure [HACS](https://hacs.xyz/) is installed
-2. Add this repository to HACS
-3. Search for "Cover Manager"
-4. Click "Install"
-
-### Manual Installation
-
-1. Download the files
-2. Copy the `cover_manager` folder to your `custom_components` directory
-3. Restart Home Assistant
-
-## Configuration
-
-1. Go to Configuration > Integrations
-2. Click "Add Integration"
-3. Search for "Cover Manager"
-4. Follow the on-screen instructions
-
-### Parameters
-
-| Parameter | Description | Required |
-|-----------|-------------|----------|
-| Name | Name of the cover | Yes |
-| Switch Entity | Switch that controls the cover | Yes |
-| Travel Time | Time in seconds to open/close | Yes |
-
-## Usage
-
-Once configured, the cover will appear in your interface with:
-- A slider to control the position
-- Buttons to open/close/stop
-- Dynamic icons based on state
-
-## Troubleshooting
-
-1. **Cover doesn't appear**
-   - Verify that the integration is installed
-   - Restart Home Assistant
-
-2. **Cover doesn't respond**
-   - Verify that the switch is configured correctly
-   - Check helpers in Configuration > Helpers
-
-3. **Incorrect position**
-   - Verify the travel time
-   - Reset the helpers
-
-## Contributing
-
-Contributions are welcome! Feel free to:
-1. Fork the repository
-2. Create a branch
-3. Make your changes
-4. Submit a pull request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details. 

@@ -51,6 +51,42 @@ packages/cover-manager/
 └── README.md
 ```
 
+## Configuration
+
+1. Go to Configuration > Integrations
+2. Click "Add Integration"
+3. Search for "Cover Manager"
+4. Follow the on-screen instructions
+
+### Parameters
+
+| Parameter | Description | Required |
+|-----------|-------------|----------|
+| Name | Name of the cover | Yes |
+| Switch Entity | Switch that controls the cover | Yes |
+| Travel Time | Time in seconds to open/close | Yes |
+
+## Usage
+
+Once configured, the cover will appear in your interface with:
+- A slider to control the position
+- Buttons to open/close/stop
+- Dynamic icons based on state
+
+## Troubleshooting
+
+1. **Cover doesn't appear**
+   - Verify that the integration is installed
+   - Restart Home Assistant
+
+2. **Cover doesn't respond**
+   - Verify that the switch is configured correctly
+   - Check helpers in Configuration > Helpers
+
+3. **Incorrect position**
+   - Verify the travel time
+   - Reset the helpers
+
 ## Development
 
 This component is part of the `mirabelle-ha-blueprints` monorepo. The GitHub release workflow automatically creates a zip file with the correct structure for HACS.
@@ -58,3 +94,12 @@ This component is part of the `mirabelle-ha-blueprints` monorepo. The GitHub rel
 ## License
 
 MIT License - see the main repository LICENSE file for details.
+
+
+## Other
+
+Similar projects to see:
+- https://github.com/duhow/hass-cover-time-based/tree/main
+- https://github.com/jo-ket/compact-cover-control-card
+
+another one with great card: https://github.com/marcelhoogantink/enhanced-shutter-card
