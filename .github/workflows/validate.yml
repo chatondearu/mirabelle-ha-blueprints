@@ -2,9 +2,9 @@ name: Validate
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   validate:
@@ -12,47 +12,63 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      
+          python-version: "3.12"
+
       - name: Install Home Assistant
         run: |
           python -m pip install --upgrade pip
           pip install homeassistant
-      
+
       - name: Validate YAML syntax
         run: |
           python -m pip install yamllint
           yamllint blueprints/**/*.yaml || true
-      
+
       - name: Validate Home Assistant config
         run: |
           hass --script check_config || true
-      
+
       - name: Validate blueprints structure
         run: |
           python -c "
           import yaml
           import sys
+          import re
           from pathlib import Path
-          
+
           errors = []
           for blueprint_file in Path('blueprints').rglob('*.yaml'):
               try:
                   with open(blueprint_file, 'r') as f:
-                      data = yaml.safe_load(f)
+                      content = f.read()
+                      
+                      # Replace Home Assistant custom tags with placeholders before parsing
+                      # This allows YAML parsing while preserving structure validation
+                      content = re.sub(r'!input\s+([^\n]+)', r'\"__INPUT_PLACEHOLDER__\"', content)
+                      content = re.sub(r'!include[^\n]*', r'\"__INCLUDE_PLACEHOLDER__\"', content)
+                      content = re.sub(r'!secret\s+([^\n]+)', r'\"__SECRET_PLACEHOLDER__\"', content)
+                      
+                      data = yaml.safe_load(content)
+                      
+                      if data is None:
+                          errors.append(f'{blueprint_file}: Empty or invalid YAML')
+                          continue
+                      
                       if 'blueprint' not in data:
                           errors.append(f'{blueprint_file}: Missing blueprint section')
                       elif 'name' not in data.get('blueprint', {}):
                           errors.append(f'{blueprint_file}: Missing blueprint name')
                       elif 'domain' not in data.get('blueprint', {}):
                           errors.append(f'{blueprint_file}: Missing blueprint domain')
+              except yaml.YAMLError as e:
+                  errors.append(f'{blueprint_file}: YAML syntax error - {str(e)}')
               except Exception as e:
                   errors.append(f'{blueprint_file}: {str(e)}')
-          
+
           if errors:
               print('Blueprint validation errors:')
               for error in errors:
@@ -60,4 +76,4 @@ jobs:
               sys.exit(1)
           else:
               print('All blueprints are valid!')
-          " 
+          "
