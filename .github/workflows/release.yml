@@ -33,14 +33,18 @@ jobs:
       - name: Create Cover Manager release
         if: startsWith(github.ref, 'refs/tags/cover-manager-')
         run: |
+          # Create zip with correct structure for HACS
+          # HACS expects custom_components/cover_manager/ at the root of the zip
+          # The zip structure should be: custom_components/cover_manager/...
           cd packages/cover-manager
-          zip -r cover_manager.zip custom_components/cover_manager
+          zip -r ../../cover_manager.zip custom_components/cover_manager
+          cd ../..
       
       - name: Create GitHub Release (Cover Manager)
         if: startsWith(github.ref, 'refs/tags/cover-manager-')
         uses: softprops/action-gh-release@v2
         with:
-          files: packages/cover-manager/cover_manager.zip
+          files: cover_manager.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       

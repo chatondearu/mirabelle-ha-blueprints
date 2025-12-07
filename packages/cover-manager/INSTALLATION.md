@@ -10,6 +10,8 @@
 
 ### Method 1: Via HACS (Recommended)
 
+**Important**: Cover Manager uses GitHub releases for HACS installation. Make sure a release with tag `cover-manager-v*` exists.
+
 1. **Add Custom Repository to HACS**
    - Open Home Assistant
    - Go to **HACS** > **Integrations**
@@ -24,7 +26,13 @@
    - In HACS, search for "Cover Manager"
    - Click on **Cover Manager**
    - Click **Download**
+   - HACS will download the `cover_manager.zip` from the latest GitHub release
    - Restart Home Assistant
+
+**Note**: If Cover Manager doesn't appear in HACS, ensure:
+- A GitHub release with tag `cover-manager-v*` exists (e.g., `cover-manager-v1.0.0`)
+- The release contains `cover_manager.zip` file
+- Your Home Assistant version is 2025.5.3 or later
 
 3. **Configure the Integration**
    - Go to **Settings** > **Devices & Services**
