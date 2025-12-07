@@ -4,9 +4,12 @@
   "domains": [
     "cover"
   ],
-  "homeassistant": "2025.6.1",
+  "homeassistant": "2025.5.3",
   "iot_class": "Local Push",
   "zip_release": true,
   "filename": "cover_manager.zip",
-  "content_in_root": false
+  "content_in_root": false,
+  "authors": [
+    "chatondearu"
+  ]
 }

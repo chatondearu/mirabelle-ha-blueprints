@@ -37,8 +37,10 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         self._attr_unique_id = config_entry.entry_id
         self._switch_entity = config_entry.data["switch_entity"]
         self._travel_time = config_entry.data["travel_time"]
-        self._position_helper = f"input_text.{self._attr_name.lower().replace(' ', '_')}_position"
-        self._direction_helper = f"input_text.{self._attr_name.lower().replace(' ', '_')}_direction"
+        # Use same format as in __init__.py for consistency
+        cover_id = config_entry.data["name"].lower().replace(" ", "_")
+        self._position_helper = f"input_text.{cover_id}_position"
+        self._direction_helper = f"input_text.{cover_id}_direction"
         self._attr_supported_features = (
             CoverEntityFeature.OPEN
             | CoverEntityFeature.CLOSE
