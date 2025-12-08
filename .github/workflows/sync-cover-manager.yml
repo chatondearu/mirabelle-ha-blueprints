@@ -61,14 +61,10 @@ jobs:
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
 
-      - name: Checkout sub-repository
+      - name: Clone sub-repository (handles empty repo)
         if: steps.check_repo.outputs.exists == 'true'
-        uses: actions/checkout@v4
-        with:
-          repository: chatondearu/myrabelle-hacs-cover-manager
-          token: ${{ secrets.RELEASE_TOKEN }}
-          path: sub-repo
-          fetch-depth: 0
+        run: |
+          git clone https://${{ secrets.RELEASE_TOKEN }}@github.com/chatondearu/myrabelle-hacs-cover-manager.git sub-repo || true
 
       - name: Initialize sub-repository
         if: steps.check_repo.outputs.exists == 'false'
@@ -77,7 +73,7 @@ jobs:
           cd sub-repo
           git init
           git remote add origin https://${{ secrets.RELEASE_TOKEN }}@github.com/chatondearu/myrabelle-hacs-cover-manager.git
-          git checkout -b main
+          git checkout -b main || git checkout main
 
       - name: Sync files to sub-repository
         run: |
@@ -98,7 +94,7 @@ jobs:
           cd sub-repo
 
           # Ensure we're on main branch
-          git checkout -b main 2>/dev/null || git checkout main
+          git checkout main 2>/dev/null || git checkout -b main
 
           # Check if there are changes
           if [ -n "$(git status --porcelain)" ]; then
