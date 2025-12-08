@@ -3,7 +3,6 @@ name: Release
 on:
   push:
     tags:
-      - "cover-manager-v*"
       - "v*"
 
 permissions:
@@ -15,47 +14,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 10.24.0
-          # Version matches package.json packageManager field
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Build
-        run: pnpm build
-
-      - name: Create Cover Manager release
-        if: startsWith(github.ref, 'refs/tags/cover-manager-')
-        run: |
-          cd packages/cover-manager
-          # Create zip with custom_components folder
-          zip -r ../../cover_manager.zip custom_components/cover_manager
-          # Add hacs.json and README.md to the root of the zip
-          zip ../../cover_manager.zip hacs.json README.md
-          cd ../..
-
-      - name: Create GitHub Release (Cover Manager)
-        if: startsWith(github.ref, 'refs/tags/cover-manager-')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: cover_manager.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create GitHub Release (General)
-        if: startsWith(github.ref, 'refs/tags/v') && !startsWith(github.ref, 'refs/tags/cover-manager-')
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

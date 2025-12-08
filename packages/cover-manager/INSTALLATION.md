@@ -10,7 +10,7 @@
 
 ### Method 1: Via HACS (Recommended)
 
-**Important**: Cover Manager uses GitHub releases for HACS installation. Make sure a release with tag `cover-manager-v*` exists.
+**Important**: Cover Manager is automatically synced from the monorepo to a dedicated sub-repository for HACS installation.
 
 1. **Add Custom Repository to HACS**
    - Open Home Assistant
@@ -18,7 +18,7 @@
    - Click the three dots (⋮) in the top right corner
    - Select **Custom repositories**
    - Add the following:
-     - **Repository**: `https://github.com/chatondearu/mirabelle-ha-blueprints`
+     - **Repository**: `https://github.com/chatondearu/myrabelle-hacs-cover-manager`
      - **Category**: Integration
    - Click **Add**
 
@@ -26,13 +26,12 @@
    - In HACS, search for "Cover Manager"
    - Click on **Cover Manager**
    - Click **Download**
-   - HACS will download the `cover_manager.zip` from the latest GitHub release
    - Restart Home Assistant
 
 **Note**: If Cover Manager doesn't appear in HACS, ensure:
-- A GitHub release with tag `cover-manager-v*` exists (e.g., `cover-manager-v1.0.0`)
-- The release contains `cover_manager.zip` file
+- The sub-repository exists and is up to date (synced from monorepo)
 - Your Home Assistant version is 2025.5.3 or later
+- You're using the correct repository URL: `https://github.com/chatondearu/myrabelle-hacs-cover-manager`
 
 3. **Configure the Integration**
    - Go to **Settings** > **Devices & Services**

@@ -56,9 +56,13 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scri
 [Cover Manager](packages/cover-manager/README.md) - A Home Assistant custom integration to easily manage covers controlled by switches.
 
 **Installation via HACS:**
-1. Add this repository as a custom repository in HACS (Category: Integration)
+1. Add the dedicated sub-repository as a custom repository in HACS:
+   - **Repository**: `https://github.com/chatondearu/myrabelle-hacs-cover-manager`
+   - **Category**: Integration
 2. Search for "Cover Manager" and install
 3. Restart Home Assistant and configure via Settings > Devices & Services
+
+**Note**: Cover Manager is automatically synced from this monorepo to the dedicated sub-repository. See [Monorepo Sync Documentation](.github/MONOREPO_SYNC.md) for details.
 
 See [Cover Manager Installation Guide](packages/cover-manager/INSTALLATION.md) for detailed instructions.
 

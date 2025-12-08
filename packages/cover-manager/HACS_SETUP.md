@@ -1,107 +1,130 @@
 # HACS Setup for Cover Manager
 
-## Problem Statement
+## Overview
 
-Cover Manager is located in `packages/cover-manager/custom_components/cover_manager/`, but HACS expects custom components either:
-1. At the repository root: `custom_components/cover_manager/`
-2. In a GitHub release zip file with the correct structure
+Cover Manager is part of a monorepo (`mirabelle-ha-blueprints`) but is automatically synced to a dedicated sub-repository (`myrabelle-hacs-cover-manager`) for HACS installation.
 
-## Solution: Use GitHub Releases
+## Architecture
 
-Since this is a monorepo containing multiple components (blueprints + custom components), we use **GitHub releases with zip files** for HACS installation.
-
-### How It Works
-
-1. **Release Tag**: When a tag like `cover-manager-v1.0.0` is pushed, GitHub Actions creates a release
-2. **Zip Creation**: The workflow creates `cover_manager.zip` containing:
-   ```
-   cover_manager.zip
-   └── custom_components/
-       └── cover_manager/
-           ├── __init__.py
-           ├── manifest.json
-           └── ...
-   ```
-3. **HACS Download**: HACS downloads the zip from the GitHub release
-4. **Installation**: HACS extracts the zip to `<config>/custom_components/cover_manager/`
-
-### Configuration
-
-The `hacs.json` file is configured with:
-- `zip_release: true` - Tells HACS to use zip releases
-- `filename: cover_manager.zip` - Specifies the zip filename
-- `content_in_root: false` - The zip contains `custom_components/` folder
-
-### Creating a Release
-
-To create a new release for Cover Manager:
-
-```bash
-# Create and push a tag
-git tag cover-manager-v1.0.0
-git push origin cover-manager-v1.0.0
+```
+mirabelle-ha-blueprints (monorepo)
+└── packages/cover-manager/
+    └── [source code]
+         │
+         └── Auto-sync via GitHub Actions
+              │
+              └── myrabelle-hacs-cover-manager (sub-repository for HACS)
+                   └── [HACS-ready structure]
 ```
 
-The GitHub Actions workflow will:
-1. Create the zip file with correct structure
-2. Create a GitHub release
-3. Attach the zip file to the release
+## How It Works
 
-### Alternative: Repository Structure
+1. **Development**: All development happens in the monorepo at `packages/cover-manager/`
+2. **Auto-Sync**: When changes are pushed to `main`, a GitHub Actions workflow automatically syncs to `myrabelle-hacs-cover-manager`
+3. **HACS Installation**: Users install from the dedicated sub-repository
 
-If you want HACS to work directly from the repository (without releases), you would need to:
+## For Users
 
-1. **Option A**: Create a separate repository for Cover Manager
-   - Repository: `cover-manager-ha` (or similar)
-   - Structure: `custom_components/cover_manager/` at root
-   - HACS URL: `https://github.com/chatondearu/cover-manager-ha`
+### HACS Installation
 
-2. **Option B**: Move custom component to repository root
-   - Move `packages/cover-manager/custom_components/` to repository root
-   - Update all paths and workflows
-   - **Not recommended** - breaks monorepo structure
+1. Add custom repository in HACS:
+   - **Repository**: `https://github.com/chatondearu/myrabelle-hacs-cover-manager`
+   - **Category**: Integration
 
-## Current Implementation
+2. Search for "Cover Manager" and install
 
-✅ **Using GitHub Releases** (recommended for monorepos)
-- Maintains clean monorepo structure
-- Allows multiple components in one repository
-- HACS downloads from releases automatically
+### Why a Separate Repository?
 
-## Verification
+HACS requires integrations to be in dedicated repositories, not monorepos. The sub-repository is automatically maintained and always in sync with the monorepo.
 
-To verify the release zip structure:
+## For Developers
 
-```bash
-# After creating a release, download and check
-unzip -l cover_manager.zip
+### Monorepo Structure
 
-# Should show:
-# custom_components/cover_manager/__init__.py
-# custom_components/cover_manager/manifest.json
-# etc.
+The monorepo contains:
 ```
+packages/cover-manager/
+├── custom_components/
+│   └── cover_manager/
+├── hacs.json
+├── README.md
+└── ...
+```
+
+### Sub-Repository Structure
+
+The synced sub-repository has:
+```
+myrabelle-hacs-cover-manager/
+├── custom_components/
+│   └── cover_manager/
+├── hacs.json
+└── README.md
+```
+
+### Sync Workflow
+
+The sync workflow (`.github/workflows/sync-cover-manager.yml`) automatically:
+1. Detects changes in `packages/cover-manager/`
+2. Restructures files for HACS (moves `custom_components/` to root)
+3. Pushes to `myrabelle-hacs-cover-manager` repository
+
+### Making Changes
+
+1. **Edit in monorepo**: Make all changes in `packages/cover-manager/`
+2. **Commit and push**: Push to `main` branch
+3. **Auto-sync**: The workflow automatically syncs to sub-repository
+4. **No manual steps**: The sub-repository is read-only from HACS perspective
+
+## Setup (First Time)
+
+If you're setting up the sync for the first time:
+
+1. **Create sub-repository**:
+   - Repository name: `myrabelle-hacs-cover-manager`
+   - Owner: `chatondearu`
+   - Public visibility (required for HACS)
+
+2. **Create PAT** (Personal Access Token):
+   - Fine-grained token with `Contents: Read and write` permission
+   - Access to `myrabelle-hacs-cover-manager` repository
+
+3. **Add secret to monorepo**:
+   - Secret name: `RELEASE_TOKEN`
+   - Value: Your PAT
+
+4. **Test the workflow**:
+   - Make a small change in `packages/cover-manager/`
+   - Push to `main`
+   - Verify sync in GitHub Actions
+
+See [MONOREPO_SYNC.md](../../.github/MONOREPO_SYNC.md) for detailed setup instructions.
+
+## Benefits
+
+✅ **HACS Compatible**: Direct repository support, no zip files  
+✅ **Automatic Sync**: No manual steps required  
+✅ **Single Source of Truth**: All development in monorepo  
+✅ **Clean Separation**: Each integration has its own repository  
+✅ **Scalable**: Easy to add more integrations  
 
 ## Troubleshooting
 
-### HACS can't find Cover Manager
+### Sub-repository not updating
 
-1. **Check Release Exists**: Verify a release with tag `cover-manager-v*` exists
-2. **Check Zip File**: Verify `cover_manager.zip` is attached to the release
-3. **Check Zip Structure**: Unzip and verify `custom_components/cover_manager/` structure
-4. **Check hacs.json**: Verify it's in `packages/cover-manager/hacs.json` (HACS will find it in the zip)
+- Check GitHub Actions workflow status
+- Verify `RELEASE_TOKEN` secret exists and has correct permissions
+- Check workflow logs for errors
 
-### Zip Structure Incorrect
+### HACS can't find integration
 
-If the zip doesn't have the correct structure, check the workflow:
-- The zip should be created from `packages/cover-manager/` directory
-- The command should be: `zip -r cover_manager.zip custom_components/cover_manager`
-- This creates: `custom_components/cover_manager/...` in the zip
+- Verify sub-repository exists: `https://github.com/chatondearu/myrabelle-hacs-cover-manager`
+- Check repository is public
+- Ensure `hacs.json` is at repository root
+- Verify `custom_components/cover_manager/` structure is correct
 
-## Best Practices
+### Sync workflow fails
 
-For monorepos with multiple HACS components:
-- Use separate release tags for each component
-- Use descriptive zip filenames
-- Keep `hacs.json` in each component's directory
-- Document the release process
+- Check PAT permissions (needs `Contents: Read and write`)
+- Verify sub-repository name matches workflow configuration
+- Check if sub-repository exists on GitHub
