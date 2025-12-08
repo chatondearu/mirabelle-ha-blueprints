@@ -6,6 +6,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import selector
 
 from .const import DOMAIN
 
@@ -20,8 +21,16 @@ class CoverManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         if user_input is not None:
             try:
-                # Validate the switch entity exists
-                if not self.hass.states.get(user_input["switch_entity"]):
+                switch_entity = user_input["switch_entity"]
+                
+                # Validate the switch entity exists and is a switch
+                state = self.hass.states.get(switch_entity)
+                if not state:
+                    raise InvalidSwitchEntity
+                
+                # Validate the entity domain is switch
+                entity_domain = switch_entity.split(".")[0] if "." in switch_entity else None
+                if entity_domain != "switch":
                     raise InvalidSwitchEntity
 
                 # Create a unique ID for this cover
@@ -41,7 +50,9 @@ class CoverManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             data_schema=vol.Schema(
                 {
                     vol.Required("name"): str,
-                    vol.Required("switch_entity"): str,
+                    vol.Required("switch_entity"): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="switch")
+                    ),
                     vol.Required("travel_time", default=30): vol.All(
                         vol.Coerce(int), vol.Range(min=1, max=300)
                     ),
