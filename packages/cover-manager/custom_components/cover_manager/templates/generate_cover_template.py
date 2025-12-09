@@ -6,18 +6,22 @@ from typing import Dict, Any
 
 def generate_cover_template(cover_id: str, name: str, switch_entity: str, travel_time: int) -> dict:
     """Generate cover template configuration for a single cover."""
+    # Use full entity IDs for helpers
+    position_helper = f"input_text.{cover_id}_position"
+    direction_helper = f"input_text.{cover_id}_direction"
+    
     return {
         cover_id: {
             "friendly_name": name,
             "unique_id": f"{cover_id}_template",
-            "value_template": "{{ states(position_helper) | int }}",
+            "value_template": f"{{{{ states('{position_helper}') | int }}}}",
             "open_cover": {
                 "service": "script.set_cover_position",
                 "data": {
                     "cover_switch": switch_entity,
                     "position": 100,
                     "travel_time": travel_time,
-                    "last_state": "{{ position_helper }}"
+                    "last_state": position_helper
                 }
             },
             "close_cover": {
@@ -26,7 +30,7 @@ def generate_cover_template(cover_id: str, name: str, switch_entity: str, travel
                     "cover_switch": switch_entity,
                     "position": 0,
                     "travel_time": travel_time,
-                    "last_state": "{{ position_helper }}"
+                    "last_state": position_helper
                 }
             },
             "stop_cover": {
@@ -41,10 +45,10 @@ def generate_cover_template(cover_id: str, name: str, switch_entity: str, travel
                     "cover_switch": switch_entity,
                     "position": "{{ position }}",
                     "travel_time": travel_time,
-                    "last_state": "{{ position_helper }}"
+                    "last_state": position_helper
                 }
             },
-            "icon_template": "{% if is_state(switch_entity, 'on') %}{% if states(direction_helper) == 'opening' %}mdi:arrow-up-bold{% else %}mdi:arrow-down-bold{% endif %}{% else %}{% if states(position_helper) | int == 0 %}mdi:window-closed{% elif states(position_helper) | int == 100 %}mdi:window-open{% else %}mdi:window-shutter{% endif %}{% endif %}"
+            "icon_template": f"{{% if is_state('{switch_entity}', 'on') %}}{{% if states('{direction_helper}') == 'opening' %}}mdi:arrow-up-bold{{% else %}}mdi:arrow-down-bold{{% endif %}}{{% else %}}{{% if states('{position_helper}') | int == 0 %}}mdi:window-closed{{% elif states('{position_helper}') | int == 100 %}}mdi:window-open{{% else %}}mdi:window-shutter{{% endif %}}{{% endif %}}"
         }
     }
 
@@ -84,16 +88,26 @@ def write_cover_template(config: dict, output_path: str) -> None:
 
 
 def write_single_cover_template(config: dict, output_path: str) -> None:
-    """Write a single cover template configuration to its own file."""
+    """Write a single cover template configuration to its own file.
+    
+    This creates a file compatible with !include_dir_merge_list.
+    Each file contains directly a list item (without the 'cover:' key)
+    that will be merged into the 'cover:' list in configuration.yaml.
+    
+    Example structure in the generated file:
+    - platform: template
+      covers:
+        cover_id: {...}
+    """
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    single_config = {
-        "cover": [
-            {
-                "platform": "template",
-                "covers": config,
-            }
-        ]
-    }
+    # Structure for !include_dir_merge_list: each file contains directly a list item
+    # The 'cover:' key is in configuration.yaml, not in individual files
+    single_config = [
+        {
+            "platform": "template",
+            "covers": config,
+        }
+    ]
     with open(output_path, 'w') as f:
         yaml.dump(single_config, f, default_flow_style=False, sort_keys=False)
 

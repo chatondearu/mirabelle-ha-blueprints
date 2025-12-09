@@ -60,26 +60,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         packages_path.mkdir(parents=True, exist_ok=True)
         helpers_path = packages_path / f"{DOMAIN}_{cover_id}_helpers.yaml"
         
-        # Read existing helpers if file exists
-        existing_helpers = {}
-        if helpers_path.exists():
-            try:
-                with open(helpers_path, 'r') as f:
-                    existing_config = yaml.safe_load(f) or {}
-                    existing_helpers = existing_config.get("input_text", {})
-            except Exception as e:
-                _LOGGER.warning("Error reading existing helpers config: %s", e)
+        # Read and merge helpers (offload to executor)
+        def _write_helpers():
+            existing_helpers = {}
+            if helpers_path.exists():
+                try:
+                    with open(helpers_path, 'r') as f:
+                        existing_config = yaml.safe_load(f) or {}
+                        existing_helpers = existing_config.get("input_text", {})
+                except Exception as e:
+                    _LOGGER.warning("Error reading existing helpers config: %s", e)
+            
+            # Merge with existing helpers
+            if not existing_helpers:
+                existing_helpers = helpers_config["input_text"]
+            else:
+                # Only update if helper doesn't exist or is different
+                for key, value in helpers_config["input_text"].items():
+                    if key not in existing_helpers:
+                        existing_helpers[key] = value
+            
+            # Write merged configuration
+            final_config = {"input_text": existing_helpers}
+            with open(helpers_path, 'w') as f:
+                yaml.dump(final_config, f, default_flow_style=False, sort_keys=False)
         
-        # Merge with existing helpers
-        if not existing_helpers:
-            existing_helpers = helpers_config["input_text"]
-        else:
-            existing_helpers.update(helpers_config["input_text"])
-        
-        # Write merged configuration
-        final_config = {"input_text": existing_helpers}
-        with open(helpers_path, 'w') as f:
-            yaml.dump(final_config, f, default_flow_style=False, sort_keys=False)
+        await hass.async_add_executor_job(_write_helpers)
         
         # Reload input_text to load the new helpers
         await hass.services.async_call("input_text", "reload")
@@ -108,25 +114,32 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         covers_base = _safe_path(covers_rel_path, DEFAULT_COVERS_PATH, "covers_path")
         covers_base.mkdir(parents=True, exist_ok=True)
         cover_file = covers_base / f"custom_cover_{cover_id}.yaml"
+        
+        # Check if file already exists to avoid rewriting unnecessarily
+        file_exists = await hass.async_add_executor_job(cover_file.exists)
+        
         # Offload YAML write to executor to avoid blocking event loop
         await hass.async_add_executor_job(
             partial(write_single_cover_template, config, str(cover_file))
         )
         
-        # Reload YAML configuration to load the new cover template
-        # Note: This requires the covers.yaml to be included in configuration.yaml
-        try:
-            await hass.services.async_call("homeassistant", "reload_config_entry", {"entry_id": entry.entry_id})
-        except Exception as reload_error:
-            _LOGGER.warning("Could not reload config entry, trying full YAML reload: %s", reload_error)
-            # Fallback: reload all YAML configurations
-            # This will reload all YAML configurations including covers.yaml
-            # Note: covers.yaml must be included in configuration.yaml for this to work
+        # Only reload YAML if this is a new file or if we need to refresh
+        # Avoid reloading the config entry itself to prevent loops
+        if not file_exists:
+            _LOGGER.info("New cover template created: %s", cover_file)
+            # Reload YAML configurations to load the new cover template
+            # Note: This requires the covers directory to be included in configuration.yaml
             try:
                 await hass.services.async_call("homeassistant", "reload_all")
-            except Exception as reload_all_error:
-                _LOGGER.error("Could not reload YAML configurations: %s", reload_all_error)
-                _LOGGER.warning("Cover template written but not loaded. Please restart Home Assistant or manually reload YAML configurations.")
+                _LOGGER.info("YAML configurations reloaded to load new cover template")
+            except Exception as reload_error:
+                _LOGGER.warning(
+                    "Could not reload YAML configurations: %s. "
+                    "Please restart Home Assistant or manually reload YAML configurations.",
+                    reload_error
+                )
+        else:
+            _LOGGER.debug("Cover template already exists, skipping reload to avoid loops")
         
         _LOGGER.info("Cover Manager setup completed for %s", entry.data['name'])
         return True
