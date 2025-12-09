@@ -36,6 +36,15 @@
      ```
    - Without this include, the covers will not be loaded.
 
+4. **(Optional) Override default paths**
+   - In `configuration.yaml`, you can override where helpers and covers are written:
+     ```yaml
+     cover_manager:
+       helpers_path: config/helpers
+       covers_path: config/covers
+     ```
+   - These values are read from `configuration.yaml` (not from the integration form).
+
 **Note**: If Cover Manager doesn't appear in HACS, ensure:
 - The sub-repository exists and is up to date (synced from monorepo)
 - Your Home Assistant version is 2025.5.3 or later

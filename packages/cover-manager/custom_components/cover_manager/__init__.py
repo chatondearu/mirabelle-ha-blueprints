@@ -10,10 +10,9 @@ from .templates.generate_cover_template import (
     generate_cover_template,
     write_single_cover_template,
 )
+from .const import DEFAULT_HELPERS_PATH, DEFAULT_COVERS_PATH, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
-
-DOMAIN = "cover_manager"
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Cover Manager from a config entry."""
@@ -55,8 +54,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         }
         
         # Write helpers configuration to a package file
-        helpers_base = entry.data.get("helpers_path", "config/helpers")
-        packages_path = _safe_path(helpers_base, "config/helpers", "helpers_path")
+        yaml_overrides = hass.data.get(DOMAIN, {})
+        helpers_base = yaml_overrides.get("helpers_path", DEFAULT_HELPERS_PATH)
+        packages_path = _safe_path(helpers_base, DEFAULT_HELPERS_PATH, "helpers_path")
         packages_path.mkdir(parents=True, exist_ok=True)
         helpers_path = packages_path / f"{DOMAIN}_{cover_id}_helpers.yaml"
         
@@ -104,8 +104,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             travel_time=entry.data['travel_time']
         )
         
-        covers_rel_path = entry.data.get("covers_path", "config/covers")
-        covers_base = _safe_path(covers_rel_path, "config/covers", "covers_path")
+        covers_rel_path = yaml_overrides.get("covers_path", DEFAULT_COVERS_PATH)
+        covers_base = _safe_path(covers_rel_path, DEFAULT_COVERS_PATH, "covers_path")
         covers_base.mkdir(parents=True, exist_ok=True)
         cover_file = covers_base / f"custom_cover_{cover_id}.yaml"
         # Offload YAML write to executor to avoid blocking event loop
@@ -134,6 +134,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     except Exception as e:
         _LOGGER.error("Error setting up Cover Manager: %s", e, exc_info=True)
         return False
+
+
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Set up from configuration.yaml to get default paths."""
+    domain_cfg = config.get(DOMAIN, {}) or {}
+    hass.data.setdefault(DOMAIN, {})
+    if "helpers_path" in domain_cfg:
+        hass.data[DOMAIN]["helpers_path"] = domain_cfg["helpers_path"]
+    if "covers_path" in domain_cfg:
+        hass.data[DOMAIN]["covers_path"] = domain_cfg["covers_path"]
+    return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""

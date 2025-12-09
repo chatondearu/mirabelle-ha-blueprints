@@ -19,9 +19,6 @@ class CoverManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Handle the initial step."""
         errors = {}
 
-        default_helpers_path = "config/helpers"
-        default_covers_path = "config/covers"
-
         if user_input is not None:
             try:
                 switch_entity = user_input["switch_entity"]
@@ -47,8 +44,6 @@ class CoverManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         "name": user_input["name"],
                         "switch_entity": user_input["switch_entity"],
                         "travel_time": user_input["travel_time"],
-                        "helpers_path": user_input.get("helpers_path", default_helpers_path),
-                        "covers_path": user_input.get("covers_path", default_covers_path),
                     },
                 )
             except InvalidSwitchEntity:
@@ -65,8 +60,6 @@ class CoverManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required("travel_time", default=30): vol.All(
                         vol.Coerce(int), vol.Range(min=1, max=300)
                     ),
-                    vol.Optional("helpers_path", default=default_helpers_path): str,
-                    vol.Optional("covers_path", default=default_covers_path): str,
                 }
             ),
             errors=errors,
