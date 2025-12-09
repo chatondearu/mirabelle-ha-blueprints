@@ -47,11 +47,44 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
             | CoverEntityFeature.STOP
             | CoverEntityFeature.SET_POSITION
         )
+        self._helpers_warning_shown = False
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        """Return device info to group entities."""
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.config_entry.entry_id)},
+            name=self._attr_name,
+            manufacturer="Cover Manager",
+            model="Template Cover",
+        )
+
+    def _safe_state(self, entity_id: str, default: Any) -> Any:
+        """Return state string or default if missing."""
+        state_obj = self.hass.states.get(entity_id)
+        return state_obj.state if state_obj else default
+
+    def _ensure_helpers(self) -> bool:
+        """Check helpers exist; log once if missing."""
+        pos_ok = self.hass.states.get(self._position_helper) is not None
+        dir_ok = self.hass.states.get(self._direction_helper) is not None
+        if not (pos_ok and dir_ok) and not self._helpers_warning_shown:
+            _LOGGER.warning(
+                "Helpers missing for %s. Ensure input_text helpers exist for position (%s) and direction (%s).",
+                self._attr_name,
+                self._position_helper,
+                self._direction_helper,
+            )
+            self._helpers_warning_shown = True
+        return pos_ok and dir_ok
 
     @property
     def current_cover_position(self) -> int:
         """Return the current position of the cover."""
-        return int(self.hass.states.get(self._position_helper).state)
+        try:
+            return int(self._safe_state(self._position_helper, 0))
+        except (TypeError, ValueError):
+            return 0
 
     @property
     def is_closed(self) -> bool:
@@ -61,15 +94,17 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
     @property
     def is_opening(self) -> bool:
         """Return if the cover is opening."""
-        return self.hass.states.get(self._direction_helper).state == "opening"
+        return self._safe_state(self._direction_helper, "stopped") == "opening"
 
     @property
     def is_closing(self) -> bool:
         """Return if the cover is closing."""
-        return self.hass.states.get(self._direction_helper).state == "closing"
+        return self._safe_state(self._direction_helper, "stopped") == "closing"
 
     async def async_open_cover(self, **kwargs: Any) -> None:
         """Open the cover."""
+        if not self._ensure_helpers():
+            return
         await self.hass.services.async_call(
             "script",
             "set_cover_position",
@@ -83,6 +118,8 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
 
     async def async_close_cover(self, **kwargs: Any) -> None:
         """Close the cover."""
+        if not self._ensure_helpers():
+            return
         await self.hass.services.async_call(
             "script",
             "set_cover_position",
@@ -96,6 +133,8 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
         """Stop the cover."""
+        if not self._ensure_helpers():
+            return
         await self.hass.services.async_call(
             "switch",
             "turn_off",
@@ -104,6 +143,8 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
 
     async def async_set_cover_position(self, **kwargs: Any) -> None:
         """Set the cover position."""
+        if not self._ensure_helpers():
+            return
         position = kwargs[ATTR_POSITION]
         await self.hass.services.async_call(
             "script",

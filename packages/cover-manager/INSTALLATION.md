@@ -28,6 +28,14 @@
    - Click **Download**
    - Restart Home Assistant
 
+3. **Include the generated covers**
+   - Covers are written by default to individual files under `config/covers/custom_cover_<id>.yaml`.
+   - In `configuration.yaml`, add:
+     ```yaml
+     cover: !include_dir_merge_list config/covers
+     ```
+   - Without this include, the covers will not be loaded.
+
 **Note**: If Cover Manager doesn't appear in HACS, ensure:
 - The sub-repository exists and is up to date (synced from monorepo)
 - Your Home Assistant version is 2025.5.3 or later

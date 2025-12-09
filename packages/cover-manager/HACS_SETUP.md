@@ -33,6 +33,14 @@ mirabelle-ha-blueprints (monorepo)
 
 2. Search for "Cover Manager" and install
 
+3. Include generated covers in Home Assistant
+   - The integration writes per-cover templates in `config/covers/custom_cover_<id>.yaml`
+   - In `configuration.yaml`, add:
+     ```yaml
+     cover: !include_dir_merge_list config/covers
+     ```
+   - Without this include, the covers will not be loaded.
+
 ### Why a Separate Repository?
 
 HACS requires integrations to be in dedicated repositories, not monorepos. The sub-repository is automatically maintained and always in sync with the monorepo.

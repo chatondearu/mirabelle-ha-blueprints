@@ -2,9 +2,14 @@
 import logging
 import yaml
 from pathlib import Path
+from functools import partial
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from .templates.generate_cover_template import generate_cover_template, write_cover_template
+from homeassistant.exceptions import ConfigEntryNotReady
+from .templates.generate_cover_template import (
+    generate_cover_template,
+    write_single_cover_template,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,6 +23,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         direction_helper_id = f"{cover_id}_direction"
         
         # Create input_text helpers configuration
+        def _safe_path(base_path: str, default_path: str, label: str) -> Path:
+            """Ensure path stays inside HA config dir; fallback if not."""
+            config_dir = Path(hass.config.config_dir).resolve()
+            candidate = (config_dir / base_path).resolve()
+            if not str(candidate).startswith(str(config_dir)):
+                _LOGGER.warning(
+                    "Invalid %s path '%s' (outside config dir), falling back to '%s'",
+                    label,
+                    candidate,
+                    default_path,
+                )
+                candidate = (config_dir / default_path).resolve()
+            return candidate
+
         helpers_config = {
             "input_text": {
                 position_helper_id: {
@@ -36,7 +55,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         }
         
         # Write helpers configuration to a package file
-        packages_path = Path(hass.config.config_dir) / "configuration" / "packages"
+        helpers_base = entry.data.get("helpers_path", "config/helpers")
+        packages_path = _safe_path(helpers_base, "config/helpers", "helpers_path")
         packages_path.mkdir(parents=True, exist_ok=True)
         helpers_path = packages_path / f"{DOMAIN}_{cover_id}_helpers.yaml"
         
@@ -70,10 +90,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             script_path.parent.mkdir(parents=True, exist_ok=True)
             script_source = Path(__file__).parent / "scripts" / "set_cover_position.yaml"
             if script_source.exists():
-                with open(script_source, 'r') as f:
-                    script_content = f.read()
-                with open(script_path, 'w') as f:
-                    f.write(script_content)
+                # Offload file IO to executor to avoid blocking event loop
+                script_content = await hass.async_add_executor_job(script_source.read_text)
+                await hass.async_add_executor_job(script_path.write_text, script_content)
                 # Reload scripts
                 await hass.services.async_call("script", "reload")
         
@@ -85,9 +104,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             travel_time=entry.data['travel_time']
         )
         
-        covers_path = Path(hass.config.config_dir) / "configuration" / "covers.yaml"
-        covers_path.parent.mkdir(parents=True, exist_ok=True)
-        write_cover_template(config, str(covers_path))
+        covers_rel_path = entry.data.get("covers_path", "config/covers")
+        covers_base = _safe_path(covers_rel_path, "config/covers", "covers_path")
+        covers_base.mkdir(parents=True, exist_ok=True)
+        cover_file = covers_base / f"custom_cover_{cover_id}.yaml"
+        # Offload YAML write to executor to avoid blocking event loop
+        await hass.async_add_executor_job(
+            partial(write_single_cover_template, config, str(cover_file))
+        )
         
         # Reload YAML configuration to load the new cover template
         # Note: This requires the covers.yaml to be included in configuration.yaml

@@ -21,6 +21,10 @@ See [INSTALLATION.md](./INSTALLATION.md) for detailed installation instructions.
 3. Click **Download**
 4. Restart Home Assistant
 5. Configure via **Settings** > **Devices & Services** > **Add Integration**
+6. Include generated covers in `configuration.yaml`:
+   ```yaml
+   cover: !include_dir_merge_list config/covers
+   ```
 
 ## Features
 
@@ -100,8 +104,7 @@ MIT License - see the main repository LICENSE file for details.
 
 ## Other
 
-Similar projects to see:
+Similar projects:
 - https://github.com/duhow/hass-cover-time-based/tree/main
 - https://github.com/jo-ket/compact-cover-control-card
-
-another one with great card: https://github.com/marcelhoogantink/enhanced-shutter-card
+- https://github.com/marcelhoogantink/enhanced-shutter-card

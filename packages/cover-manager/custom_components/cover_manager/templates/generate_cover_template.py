@@ -82,6 +82,21 @@ def write_cover_template(config: dict, output_path: str) -> None:
     with open(output_path, 'w') as f:
         yaml.dump(existing_config, f, default_flow_style=False, sort_keys=False)
 
+
+def write_single_cover_template(config: dict, output_path: str) -> None:
+    """Write a single cover template configuration to its own file."""
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+    single_config = {
+        "cover": [
+            {
+                "platform": "template",
+                "covers": config,
+            }
+        ]
+    }
+    with open(output_path, 'w') as f:
+        yaml.dump(single_config, f, default_flow_style=False, sort_keys=False)
+
 if __name__ == "__main__":
     # Example usage
     config = generate_cover_template(
