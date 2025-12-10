@@ -25,6 +25,7 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 TICK_SECONDS = 0.3
+PULSE_GAP = 0.8
 
 
 async def async_setup_entry(
@@ -89,6 +90,9 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
             self._position = float(last_state.attributes.get("position", self._initial_position))
             self._direction = last_state.attributes.get("direction", "idle")
             self._last_direction = last_state.attributes.get("last_direction", "closing")
+            # Restore travel time if stored
+            if "travel_time" in last_state.attributes:
+                self._travel_time = max(1, int(last_state.attributes["travel_time"]))
         self._listener_remove = async_track_state_change_event(
             self.hass, [self._switch_entity], self._handle_switch_event
         )
@@ -138,7 +142,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
             await self.hass.services.async_call(
                 "switch", "turn_on", {"entity_id": self._switch_entity}
             )
-            await asyncio.sleep(1)
+            await asyncio.sleep(PULSE_GAP)
         finally:
             self._ignore_next_impulse = False
 
@@ -218,6 +222,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
         self._stop_movement(update_position=True)
+        await self._trigger_pulse()
 
     async def async_set_cover_position(self, **kwargs: Any) -> None:
         target = max(0, min(100, int(kwargs[ATTR_POSITION])))
