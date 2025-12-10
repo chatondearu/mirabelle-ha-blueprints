@@ -168,9 +168,9 @@ The cover is controlled by an **impulse switch** (single button):
 
 ---
 
-### Case 8: Cover reaches 0% naturally (during opening)
+### Case 8: Cover reaches 0% naturally (during closing)
 **Conditions:**
-- `direction` = `opening`
+- `direction` = `closing`
 - `position` reaches 0%
 - Movement loop detects limit
 
@@ -178,15 +178,15 @@ The cover is controlled by an **impulse switch** (single button):
 1. **DO NOT SEND PULSE** (cover is already stopped at limit)
 2. Update `position` = 0%
 3. Update `direction` = `idle`
-4. Update `last_direction` = `opening` (was opening, now idle)
+4. Update `last_direction` = `closing` (was closing, now idle)
 5. Cancel movement loop
 6. Set `_last_limit_stop_time` to ignore subsequent pulses
 
 ---
 
-### Case 9: Cover reaches 100% naturally (during closing)
+### Case 9: Cover reaches 100% naturally (during opening)
 **Conditions:**
-- `direction` = `closing`
+- `direction` = `opening`
 - `position` reaches 100%
 - Movement loop detects limit
 
@@ -194,7 +194,7 @@ The cover is controlled by an **impulse switch** (single button):
 1. **DO NOT SEND PULSE** (cover is already stopped at limit)
 2. Update `position` = 100%
 3. Update `direction` = `idle`
-4. Update `last_direction` = `closing` (was closing, now idle)
+4. Update `last_direction` = `opening` (was opening, now idle)
 5. Cancel movement loop
 6. Set `_last_limit_stop_time` to ignore subsequent pulses
 

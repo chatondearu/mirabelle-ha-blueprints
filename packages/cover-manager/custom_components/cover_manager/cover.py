@@ -111,6 +111,14 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
             return self._clamp_position(start_pos + delta)
         return self._clamp_position(start_pos - delta)
 
+    def _calculate_position_from_progress(
+        self, direction: str, start_pos: float, remaining: float, progress: float
+    ) -> float:
+        """Calculate position based on progress (0.0 to 1.0) for targeted movement."""
+        if direction == DIRECTION_OPENING:
+            return self._clamp_position(start_pos + (remaining * progress))
+        return self._clamp_position(start_pos - (remaining * progress))
+
     def _initialize_movement_state(self) -> None:
         """Initialize movement state variables."""
         self._position = float(self.current_cover_position)
@@ -464,8 +472,8 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
             self._initialize_movement_state()
             self._direction = direction
             self._last_direction = direction
-            await self._start_targeted_movement(direction, target)
             await self._trigger_pulse()
+            await self._start_targeted_movement(direction, target)
         else:
             if self._last_direction == direction:
                 opposite = DIRECTION_CLOSING if direction == DIRECTION_OPENING else DIRECTION_OPENING
@@ -481,8 +489,8 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
                 self._initialize_movement_state()
                 self._direction = direction
                 self._last_direction = direction
-                await self._start_targeted_movement(direction, target)
                 await self._trigger_pulse()
+                await self._start_targeted_movement(direction, target)
         
         self._last_limit_stop_time = None
 
@@ -497,6 +505,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
                 if remaining == 0:
                     self._stop_movement(update_position=False, cancel_task=False)
                     return
+                self._start_position = self._position
                 start_time = time.monotonic()
                 total_duration = self._travel_time * (remaining / 100)
                 while self._direction == direction:
@@ -505,7 +514,15 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
                     self._position = self._calculate_position_from_progress(
                         direction, self._start_position, remaining, progress
                     )
-                    if progress >= 1.0:
+                    
+                    target_reached = False
+                    if direction == DIRECTION_OPENING:
+                        target_reached = self._position >= target
+                    else:
+                        target_reached = self._position <= target
+                    
+                    if progress >= 1.0 or target_reached:
+                        self._position = self._clamp_position(float(target))
                         if self._is_at_limit():
                             self._last_limit_stop_time = time.monotonic()
                             previous_direction = self._direction
@@ -513,16 +530,13 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
                             self._last_direction = previous_direction
                             self._update_and_notify()
                         else:
-                            if self._movement_start_time:
-                                self._position = self._calculate_position_from_elapsed(
-                                    self._direction, self._movement_start_time, self._start_position
-                                )
                             previous_direction = self._direction
                             self._stop_movement(update_position=False, cancel_task=False)
                             self._last_direction = previous_direction
                             await self._trigger_pulse()
                             self._update_and_notify()
                         break
+                    
                     self.async_write_ha_state()
                     await asyncio.sleep(TICK_SECONDS)
             except asyncio.CancelledError:
