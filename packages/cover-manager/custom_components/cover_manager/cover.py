@@ -16,7 +16,7 @@ from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_CLOSED, STATE_OPEN, STATE_OPENING, STATE_CLOSING
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity import DeviceInfo, EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -37,9 +37,10 @@ async def async_setup_entry(
     travel = CoverManagerTravelTime(config_entry, cover)
     position = CoverManagerPosition(config_entry, cover)
     direction = CoverManagerDirection(config_entry, cover)
+    last_direction = CoverManagerLastDirection(config_entry, cover)
     pulse_gap = CoverManagerPulseGap(config_entry, cover)
-    cover.register_sub_entities(travel, position, direction, pulse_gap)
-    async_add_entities([cover, travel, position, direction, pulse_gap])
+    cover.register_sub_entities(travel, position, direction, last_direction, pulse_gap)
+    async_add_entities([cover, travel, position, direction, last_direction, pulse_gap])
 
 
 class CoverManagerCover(CoverEntity, RestoreEntity):
@@ -65,6 +66,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         self._traveltime_entity: Optional["CoverManagerTravelTime"] = None
         self._position_entity: Optional["CoverManagerPosition"] = None
         self._direction_entity: Optional["CoverManagerDirection"] = None
+        self._lastdirection_entity: Optional["CoverManagerLastDirection"] = None
         self._pulsegap_entity: Optional["CoverManagerPulseGap"] = None
         self._attr_supported_features = (
             CoverEntityFeature.OPEN
@@ -188,10 +190,11 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         self.async_write_ha_state()
         self._notify_sub_entities()
 
-    async def _stop_and_pulse(self, update_position: bool = True) -> None:
-        """Stop movement, update position if requested, and send a pulse to stop physically."""
+    async def _stop_and_pulse(self, update_position: bool = True, send_pulse: bool = True) -> None:
+        """Stop movement, update position if requested, and optionally send a pulse to stop physically."""
         self._stop_movement(update_position=update_position, cancel_task=False)
-        await self._trigger_pulse()
+        if send_pulse:
+            await self._trigger_pulse()
 
     async def _movement_loop(self) -> None:
         try:
@@ -205,7 +208,8 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
                     self._position = max(0.0, self._start_position - delta)
 
                 if self._position <= 0.0 or self._position >= 100.0:
-                    await self._stop_and_pulse(update_position=False)
+                    # At natural limit, no pulse needed - cover stops physically by itself
+                    self._stop_movement(update_position=False, cancel_task=False)
                     break
 
                 self.async_write_ha_state()
@@ -282,15 +286,17 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         travel: "CoverManagerTravelTime",
         position: "CoverManagerPosition",
         direction: "CoverManagerDirection",
+        last_direction: "CoverManagerLastDirection",
         pulse_gap: "CoverManagerPulseGap",
     ) -> None:
         self._traveltime_entity = travel
         self._position_entity = position
         self._direction_entity = direction
+        self._lastdirection_entity = last_direction
         self._pulsegap_entity = pulse_gap
 
     def _notify_sub_entities(self) -> None:
-        for ent in (self._traveltime_entity, self._position_entity, self._direction_entity, self._pulsegap_entity):
+        for ent in (self._traveltime_entity, self._position_entity, self._direction_entity, self._lastdirection_entity, self._pulsegap_entity):
             if ent:
                 ent.schedule_update_ha_state()
 
@@ -310,6 +316,14 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         self._direction = new_dir
         if new_dir != "idle":
             self._last_direction = new_dir
+        self.async_write_ha_state()
+        self._notify_sub_entities()
+
+    def update_last_direction(self, new_last_dir: str) -> None:
+        """Update last_direction without affecting current direction."""
+        if new_last_dir not in ("opening", "closing"):
+            return
+        self._last_direction = new_last_dir
         self.async_write_ha_state()
         self._notify_sub_entities()
 
@@ -385,6 +399,7 @@ class CoverManagerTravelTime(NumberEntity):
     _attr_native_unit_of_measurement = "s"
     _attr_mode = NumberMode.BOX
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, entry: ConfigEntry, cover: CoverManagerCover) -> None:
         self._cover = cover
@@ -401,7 +416,7 @@ class CoverManagerTravelTime(NumberEntity):
 
 
 class CoverManagerPosition(NumberEntity):
-    """Number entity to adjust position."""
+    """Number entity to override/reset position value."""
 
     _attr_native_min_value = 0
     _attr_native_max_value = 100
@@ -413,19 +428,28 @@ class CoverManagerPosition(NumberEntity):
     def __init__(self, entry: ConfigEntry, cover: CoverManagerCover) -> None:
         self._cover = cover
         self._attr_unique_id = f"{entry.entry_id}_position_ctl"
-        self._attr_name = "Position"
+        self._attr_name = "Position Override"
         self._attr_device_info = cover.device_info
 
     @property
     def native_value(self) -> float | None:
         return float(self._cover.current_cover_position)
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes."""
+        return {
+            "current_position": round(self._cover._position, 1),  # noqa: SLF001
+            "description": "Override position to reset/correct the cover position",
+        }
+
     async def async_set_native_value(self, value: float) -> None:
-        await self._cover.async_set_cover_position(**{ATTR_POSITION: int(value)})
+        """Override position value - directly sets position without moving."""
+        self._cover.update_position(float(value))
 
 
 class CoverManagerDirection(SelectEntity):
-    """Select entity to adjust direction."""
+    """Select entity to adjust direction and last_direction."""
 
     _attr_options = ["opening", "closing", "idle"]
     _attr_has_entity_name = True
@@ -440,6 +464,15 @@ class CoverManagerDirection(SelectEntity):
     def current_option(self) -> str | None:
         return self._cover._direction  # noqa: SLF001
 
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes including last_direction."""
+        return {
+            "direction": self._cover._direction,  # noqa: SLF001
+            "last_direction": self._cover._last_direction,  # noqa: SLF001
+            "description": "Set direction. Last direction is updated automatically when direction changes.",
+        }
+
     async def async_select_option(self, option: str) -> None:
         if option not in self._attr_options:
             return
@@ -451,6 +484,36 @@ class CoverManagerDirection(SelectEntity):
             await self._cover._go_direction(option)
 
 
+class CoverManagerLastDirection(SelectEntity):
+    """Select entity to adjust/reset last_direction."""
+
+    _attr_options = ["opening", "closing"]
+    _attr_has_entity_name = True
+
+    def __init__(self, entry: ConfigEntry, cover: CoverManagerCover) -> None:
+        self._cover = cover
+        self._attr_unique_id = f"{entry.entry_id}_last_direction_ctl"
+        self._attr_name = "Last Direction"
+        self._attr_device_info = cover.device_info
+
+    @property
+    def current_option(self) -> str | None:
+        return self._cover._last_direction  # noqa: SLF001
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return additional state attributes."""
+        return {
+            "description": "Reset last_direction value. Used to determine next direction when cover is idle.",
+        }
+
+    async def async_select_option(self, option: str) -> None:
+        if option not in self._attr_options:
+            return
+        # Directly update last_direction without affecting current direction
+        self._cover.update_last_direction(option)
+
+
 class CoverManagerPulseGap(NumberEntity):
     """Number entity to adjust pulse gap (switch delay)."""
 
@@ -460,6 +523,7 @@ class CoverManagerPulseGap(NumberEntity):
     _attr_native_unit_of_measurement = "s"
     _attr_mode = NumberMode.BOX
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, entry: ConfigEntry, cover: CoverManagerCover) -> None:
         self._cover = cover
