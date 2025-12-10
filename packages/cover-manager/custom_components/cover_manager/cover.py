@@ -136,6 +136,21 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
             return STATE_CLOSING
         return STATE_OPEN if self.current_cover_position > 0 else STATE_CLOSED
 
+    @property
+    def icon(self) -> str:
+        """Return the icon based on state and position."""
+        if self._direction == "opening":
+            return "mdi:arrow-up-bold"
+        if self._direction == "closing":
+            return "mdi:arrow-down-bold"
+        # Idle state: reflect actual position
+        pos = self.current_cover_position
+        if pos == 0:
+            return "mdi:window-shutter"
+        if pos == 100:
+            return "mdi:window-shutter-open"
+        return "mdi:window-shutter-alert"
+
     async def _trigger_pulse(self) -> None:
         self._ignore_next_impulse = True
         try:
@@ -338,13 +353,14 @@ class CoverManagerTravelTime(NumberEntity):
     _attr_native_min_value = 1
     _attr_native_max_value = 300
     _attr_native_step = 1
+    _attr_native_unit_of_measurement = "s"
     _attr_mode = NumberMode.BOX
     _attr_has_entity_name = True
 
     def __init__(self, entry: ConfigEntry, cover: CoverManagerCover) -> None:
         self._cover = cover
         self._attr_unique_id = f"{entry.entry_id}_travel_time"
-        self._attr_name = f"{entry.data['name']} Travel Time"
+        self._attr_name = "Travel Time"
         self._attr_device_info = cover.device_info
 
     @property
@@ -361,13 +377,14 @@ class CoverManagerPosition(NumberEntity):
     _attr_native_min_value = 0
     _attr_native_max_value = 100
     _attr_native_step = 1
+    _attr_native_unit_of_measurement = "%"
     _attr_mode = NumberMode.BOX
     _attr_has_entity_name = True
 
     def __init__(self, entry: ConfigEntry, cover: CoverManagerCover) -> None:
         self._cover = cover
         self._attr_unique_id = f"{entry.entry_id}_position_ctl"
-        self._attr_name = f"{entry.data['name']} Position"
+        self._attr_name = "Position"
         self._attr_device_info = cover.device_info
 
     @property
@@ -375,7 +392,7 @@ class CoverManagerPosition(NumberEntity):
         return float(self._cover.current_cover_position)
 
     async def async_set_native_value(self, value: float) -> None:
-        await self._cover.async_set_cover_position(position=int(value))
+        await self._cover.async_set_cover_position(**{ATTR_POSITION: int(value)})
 
 
 class CoverManagerDirection(SelectEntity):
@@ -387,7 +404,7 @@ class CoverManagerDirection(SelectEntity):
     def __init__(self, entry: ConfigEntry, cover: CoverManagerCover) -> None:
         self._cover = cover
         self._attr_unique_id = f"{entry.entry_id}_direction_ctl"
-        self._attr_name = f"{entry.data['name']} Direction"
+        self._attr_name = "Direction"
         self._attr_device_info = cover.device_info
 
     @property
@@ -397,4 +414,9 @@ class CoverManagerDirection(SelectEntity):
     async def async_select_option(self, option: str) -> None:
         if option not in self._attr_options:
             return
-        self._cover.update_direction(option)
+        if option == "idle":
+            # Stop the cover if idle is selected
+            await self._cover.async_stop_cover()
+        else:
+            # Start movement in the selected direction
+            await self._cover._go_direction(option)
