@@ -60,7 +60,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         self._movement_start_time: Optional[float] = None
         self._start_position: float = self._position
         self._ignore_next_impulse = False
-        self._last_limit_stop_time: Optional[float] = None
+        self._ignore_until: Optional[float] = None
         self._listener_remove = None
         self._traveltime_entity: Optional["CoverManagerTravelTime"] = None
         self._position_entity: Optional["CoverManagerPosition"] = None
@@ -159,14 +159,17 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         return "mdi:window-shutter-alert"
 
     async def _trigger_pulse(self) -> None:
-        self._ignore_next_impulse = True
+        # Ignore switch events for a bit longer than pulse_gap to account for switch response time
+        ignore_duration = self._pulse_gap + 0.5  # Add 0.5s buffer for switch response
+        self._ignore_until = time.monotonic() + ignore_duration
         try:
             await self.hass.services.async_call(
                 "switch", "turn_on", {"entity_id": self._switch_entity}
             )
             await asyncio.sleep(self._pulse_gap)
         finally:
-            self._ignore_next_impulse = False
+            # Keep ignoring until the timestamp expires (handled in _handle_switch_event)
+            pass
 
     def _stop_movement(self, update_position: bool = True, cancel_task: bool = True) -> None:
         if self._direction in ("opening", "closing") and self._movement_start_time and update_position:
@@ -188,9 +191,6 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
     async def _stop_and_pulse(self, update_position: bool = True) -> None:
         """Stop movement, update position if requested, and send a pulse to stop physically."""
         self._stop_movement(update_position=update_position, cancel_task=False)
-        # Mark that we just stopped at a limit to ignore the pulse event
-        if self._position <= 0.0 or self._position >= 100.0:
-            self._last_limit_stop_time = time.monotonic()
         await self._trigger_pulse()
 
     async def _movement_loop(self) -> None:
@@ -226,29 +226,32 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
 
     @callback
     def _handle_switch_event(self, event) -> None:
+        """Handle physical switch activation - always follow manual actions."""
         new_state = event.data.get("new_state")
         if not new_state or new_state.state != "on":
             return
-        if self._ignore_next_impulse:
-            return
+        
+        # Ignore if this is our own automatic pulse (within ignore window)
+        if self._ignore_until is not None:
+            if time.monotonic() < self._ignore_until:
+                return
+            # Window expired, reset
+            self._ignore_until = None
+        
+        # If cover is moving, stop it (physical switch toggles direction)
         if self._direction in ("opening", "closing"):
             self._stop_movement(update_position=True)
             return
 
-        # Ignore pulse if we just stopped at a limit (within 2 seconds)
-        # This prevents the automatic stop pulse from restarting the cover
-        if self._last_limit_stop_time is not None:
-            time_since_limit_stop = time.monotonic() - self._last_limit_stop_time
-            if time_since_limit_stop < 2.0 and (self._position <= 0.0 or self._position >= 100.0):
-                # Recent limit stop, ignore this pulse to prevent reverse movement
-                self._last_limit_stop_time = None  # Reset after handling
-                return
-
+        # Cover is idle - determine direction based on position and last direction
         if self._position <= 0.0:
+            # At bottom, must go up
             dir_to_start = "opening"
         elif self._position >= 100.0:
+            # At top, must go down
             dir_to_start = "closing"
         else:
+            # In between, toggle direction
             dir_to_start = "opening" if self._last_direction == "closing" else "closing"
 
         self._start_movement(dir_to_start)
