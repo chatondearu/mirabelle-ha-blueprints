@@ -1,0 +1,13 @@
+{
+  "name": "Imeon Energy API",
+  "render_readme": true,
+  "domains": [
+    "sensor"
+  ],
+  "homeassistant": "2025.5.3",
+  "iot_class": "Local Polling",
+  "content_in_root": false,
+  "authors": [
+    "chatondearu"
+  ]
+}

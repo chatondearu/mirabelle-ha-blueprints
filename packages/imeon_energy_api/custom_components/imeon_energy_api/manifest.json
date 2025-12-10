@@ -1,0 +1,15 @@
+{
+  "domain": "imeon_energy_api",
+  "name": "Imeon Energy API",
+  "documentation": "https://github.com/chatondearu/mirabelle-ha-blueprints/packages/imeon_energy_api",
+  "dependencies": [],
+  "codeowners": [
+    "@chatondearu"
+  ],
+  "requirements": [
+    "imeon-inverter-api>=0.4.1"
+  ],
+  "version": "1.0.0",
+  "config_flow": true,
+  "iot_class": "local_polling"
+}

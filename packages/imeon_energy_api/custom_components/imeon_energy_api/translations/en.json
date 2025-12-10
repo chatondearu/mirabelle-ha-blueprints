@@ -1,0 +1,23 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Imeon Energy API Setup",
+        "description": "Configure your Imeon Energy inverter connection",
+        "data": {
+          "host": "Host (IP address)",
+          "username": "Username",
+          "password": "Password",
+          "scan_interval": "Update interval (seconds)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Imeon inverter. Please check your host, username, and password.",
+      "unknown": "Unexpected error occurred"
+    },
+    "abort": {
+      "already_configured": "This Imeon inverter is already configured"
+    }
+  }
+}

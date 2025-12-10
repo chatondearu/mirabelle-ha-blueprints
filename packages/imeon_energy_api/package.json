@@ -1,0 +1,30 @@
+{
+  "name": "@mirabelle/imeon-energy-api",
+  "version": "1.0.0",
+  "description": "Home Assistant integration for Imeon Energy inverters with Energy Dashboard support",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "test": "jest",
+    "lint": "eslint .",
+    "validate": "hass --script check_config"
+  },
+  "keywords": [
+    "home-assistant",
+    "hacs",
+    "imeon",
+    "energy",
+    "solar",
+    "battery",
+    "inverter"
+  ],
+  "author": "Chatondearu",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.19.25",
+    "@typescript-eslint/eslint-plugin": "^8.48.1",
+    "@typescript-eslint/parser": "^8.48.1",
+    "eslint": "^9.39.1",
+    "typescript": "^5.9.3"
+  }
+}
