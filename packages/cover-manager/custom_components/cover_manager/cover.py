@@ -220,6 +220,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         await asyncio.sleep(self._pulse_gap)
 
     def _stop_movement(self, update_position: bool = True, cancel_task: bool = True) -> None:
+        """Stop movement internally (no pulse). For physical stop, use async_stop_cover or _stop_and_pulse."""
         if self._direction in (DIRECTION_OPENING, DIRECTION_CLOSING) and self._movement_start_time and update_position:
             self._position = self._calculate_position_from_elapsed(
                 self._direction, self._movement_start_time, self._start_position
@@ -233,13 +234,20 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         self._update_and_notify()
 
     async def _stop_and_pulse(self, update_position: bool = True, send_pulse: bool = True) -> None:
-        """Stop movement, update position if requested, and optionally send a pulse to stop physically."""
+        """
+        Stop movement and optionally send pulse.
+        According to specification: when reaching target (not at limit), send 1 pulse to stop.
+        When at limit naturally, DO NOT send pulse.
+        """
         at_limit = self._is_at_limit()
+        previous_direction = self._direction
         self._stop_movement(update_position=update_position, cancel_task=False)
-        if send_pulse:
+        self._last_direction = previous_direction
+        if send_pulse and not at_limit:
             await self._trigger_pulse()
-            if at_limit:
-                self._last_limit_stop_time = time.monotonic()
+        if at_limit:
+            self._last_limit_stop_time = time.monotonic()
+        self._update_and_notify()
 
     async def _movement_loop(self) -> None:
         try:
@@ -250,7 +258,10 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
 
                 if self._is_at_limit():
                     self._last_limit_stop_time = time.monotonic()
+                    previous_direction = self._direction
                     self._stop_movement(update_position=False, cancel_task=False)
+                    self._last_direction = previous_direction
+                    self._update_and_notify()
                     break
 
                 self.async_write_ha_state()
@@ -259,7 +270,18 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
             return
 
     def _start_movement(self, direction: str) -> None:
-        self._stop_movement(update_position=True)
+        """Start movement in given direction (internal method, no pulse)."""
+        was_moving = self._direction in (DIRECTION_OPENING, DIRECTION_CLOSING)
+        if was_moving and self._movement_start_time:
+            self._position = self._calculate_position_from_elapsed(
+                self._direction, self._movement_start_time, self._start_position
+            )
+        self._direction = DIRECTION_IDLE
+        self._movement_start_time = None
+        if self._update_task:
+            self._update_task.cancel()
+            self._update_task = None
+        
         self._direction = direction
         self._last_direction = direction
         self._initialize_movement_state()
@@ -285,10 +307,18 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
                 return
         
         if self._direction in (DIRECTION_OPENING, DIRECTION_CLOSING):
-            self._stop_movement(update_position=True)
+            if self._movement_start_time:
+                self._position = self._calculate_position_from_elapsed(
+                    self._direction, self._movement_start_time, self._start_position
+                )
+            previous_direction = self._direction
+            self._stop_movement(update_position=False)
+            self._last_direction = previous_direction
+            self._update_and_notify()
             return
 
         dir_to_start = self._determine_direction_from_position()
+        self._last_direction = dir_to_start
         self._start_movement(dir_to_start)
 
     async def async_open_cover(self, **kwargs: Any) -> None:
@@ -298,44 +328,45 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         await self._go_direction(DIRECTION_CLOSING)
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
+        """Stop cover movement. According to specification: send 1 pulse to stop."""
         if self._direction == DIRECTION_IDLE:
             return
-        await self._stop_and_pulse(update_position=True)
+        if self._movement_start_time:
+            self._position = self._calculate_position_from_elapsed(
+                self._direction, self._movement_start_time, self._start_position
+            )
+        previous_direction = self._direction
+        self._stop_movement(update_position=False)
+        self._last_direction = previous_direction
+        await self._trigger_pulse()
+        self._update_and_notify()
 
     async def async_set_cover_position(self, **kwargs: Any) -> None:
+        """
+        Set cover to target position.
+        According to specification:
+        - If moving in same direction: update target (no pulse)
+        - If moving in opposite direction: stop (1 pulse), then start (1 pulse)
+        - If idle and last_direction = desired: 3 pulses
+        - If idle and last_direction ≠ desired: 1 pulse
+        - Special cases: at 0% last_direction must be closing, at 100% must be opening
+        """
         target = int(self._clamp_position(float(kwargs[ATTR_POSITION])))
         if target == self.current_cover_position:
             return
         
+        if self._direction == DIRECTION_IDLE:
+            if self._position == 0.0:
+                if self._last_direction != DIRECTION_CLOSING:
+                    _LOGGER.warning("Cover at 0% but last_direction is %s, should be closing. Correcting.", self._last_direction)
+                    self._last_direction = DIRECTION_CLOSING
+            elif self._position == 100.0:
+                if self._last_direction != DIRECTION_OPENING:
+                    _LOGGER.warning("Cover at 100% but last_direction is %s, should be opening. Correcting.", self._last_direction)
+                    self._last_direction = DIRECTION_OPENING
+        
         required_direction = DIRECTION_OPENING if target > self.current_cover_position else DIRECTION_CLOSING
-        
-        was_moving = self._direction in (DIRECTION_OPENING, DIRECTION_CLOSING)
-        current_direction = self._direction if was_moving else None
-        previous_direction = self._last_direction if was_moving else None
-        
-        if was_moving and current_direction == required_direction:
-            if self._movement_start_time:
-                self._position = self._calculate_position_from_elapsed(
-                    current_direction, self._movement_start_time, self._start_position
-                )
-            self._start_position = self._position
-            self._movement_start_time = time.monotonic()
-            self._cancel_and_create_task(self._start_targeted_movement(required_direction, target))
-            return
-        
-        self._stop_movement(update_position=True)
-        
-        if was_moving and previous_direction != required_direction:
-            await self._trigger_pulse()
-            await self._go_direction(required_direction, target=target, skip_stop_pulse=True)
-        elif not was_moving and self._last_direction != required_direction:
-            await self._trigger_pulse()
-            self._last_direction = DIRECTION_OPENING if self._last_direction == DIRECTION_CLOSING else DIRECTION_CLOSING
-            await self._trigger_pulse()
-            self._last_direction = required_direction
-            await self._go_direction(required_direction, target=target, skip_stop_pulse=True)
-        else:
-            await self._go_direction(required_direction, target=target)
+        await self._go_direction(required_direction, target=target)
 
     def register_sub_entities(
         self,
@@ -399,23 +430,61 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
             self._pulsegap_entity.schedule_update_ha_state()
 
     async def _go_direction(self, direction: str, target: Optional[int] = None, skip_stop_pulse: bool = False) -> None:
-        """Handle direction change with impulse switch (may require two pulses)."""
+        """
+        Handle direction change with impulse switch.
+        According to specification:
+        - If already moving in same direction: just update target (no pulse)
+        - If moving in opposite direction: stop (1 pulse), then start (1 pulse)
+        - If idle and last_direction = desired: 3 pulses (idle→opposite→idle→desired)
+        - If idle and last_direction ≠ desired: 1 pulse (idle→desired, which is next in cycle)
+        """
         if self._direction == direction:
             if target is not None:
-                self._initialize_movement_state()
+                if self._movement_start_time:
+                    self._position = self._calculate_position_from_elapsed(
+                        direction, self._movement_start_time, self._start_position
+                    )
+                self._start_position = self._position
+                self._movement_start_time = time.monotonic()
                 self._cancel_and_create_task(self._start_targeted_movement(direction, target))
             return
 
-        if self._direction in (DIRECTION_OPENING, DIRECTION_CLOSING) and self._direction != direction and not skip_stop_pulse:
-            self._stop_movement(update_position=True)
+        was_moving = self._direction in (DIRECTION_OPENING, DIRECTION_CLOSING)
+        
+        if was_moving:
+            if not skip_stop_pulse:
+                if self._movement_start_time:
+                    self._position = self._calculate_position_from_elapsed(
+                        self._direction, self._movement_start_time, self._start_position
+                    )
+                previous_direction = self._direction
+                self._stop_movement(update_position=False)
+                self._last_direction = previous_direction
+                await self._trigger_pulse()
+            self._initialize_movement_state()
+            self._direction = direction
+            self._last_direction = direction
+            await self._start_targeted_movement(direction, target)
             await self._trigger_pulse()
-
-        self._initialize_movement_state()
-        self._direction = direction
-        self._last_direction = direction
-
-        await self._start_targeted_movement(direction, target)
-        await self._trigger_pulse()
+        else:
+            if self._last_direction == direction:
+                opposite = DIRECTION_CLOSING if direction == DIRECTION_OPENING else DIRECTION_OPENING
+                await self._trigger_pulse()
+                await self._trigger_pulse()
+                self._last_direction = opposite
+                await self._trigger_pulse()
+                self._last_direction = direction
+                self._initialize_movement_state()
+                self._direction = direction
+                await self._start_targeted_movement(direction, target)
+            else:
+                self._initialize_movement_state()
+                self._direction = direction
+                self._last_direction = direction
+                await self._start_targeted_movement(direction, target)
+                await self._trigger_pulse()
+        
+        self._last_limit_stop_time = None
 
     async def _start_targeted_movement(self, direction: str, target: Optional[int]) -> None:
         """Start movement with optional target position."""
@@ -439,9 +508,20 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
                     if progress >= 1.0:
                         if self._is_at_limit():
                             self._last_limit_stop_time = time.monotonic()
+                            previous_direction = self._direction
                             self._stop_movement(update_position=False, cancel_task=False)
+                            self._last_direction = previous_direction
+                            self._update_and_notify()
                         else:
-                            await self._stop_and_pulse(update_position=False)
+                            if self._movement_start_time:
+                                self._position = self._calculate_position_from_elapsed(
+                                    self._direction, self._movement_start_time, self._start_position
+                                )
+                            previous_direction = self._direction
+                            self._stop_movement(update_position=False, cancel_task=False)
+                            self._last_direction = previous_direction
+                            await self._trigger_pulse()
+                            self._update_and_notify()
                         break
                     self.async_write_ha_state()
                     await asyncio.sleep(TICK_SECONDS)

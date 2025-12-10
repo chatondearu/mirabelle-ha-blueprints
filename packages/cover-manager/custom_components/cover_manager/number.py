@@ -70,6 +70,7 @@ class CoverManagerPosition(NumberEntity):
     _attr_native_unit_of_measurement = "%"
     _attr_mode = NumberMode.BOX
     _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
 
     def __init__(self, entry: ConfigEntry, cover: CoverManagerCover) -> None:
         self._cover = cover
