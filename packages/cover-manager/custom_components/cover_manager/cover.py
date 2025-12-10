@@ -146,7 +146,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         finally:
             self._ignore_next_impulse = False
 
-    def _stop_movement(self, update_position: bool = True) -> None:
+    def _stop_movement(self, update_position: bool = True, cancel_task: bool = True) -> None:
         if self._direction in ("opening", "closing") and self._movement_start_time and update_position:
             elapsed = time.monotonic() - self._movement_start_time
             delta = (elapsed / self._travel_time) * 100
@@ -157,11 +157,16 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         self._direction = "idle"
         self._movement_start_time = None
         self._start_position = self._position
-        if self._update_task:
+        if cancel_task and self._update_task:
             self._update_task.cancel()
             self._update_task = None
         self.async_write_ha_state()
         self._notify_sub_entities()
+
+    async def _stop_and_pulse(self, update_position: bool = True) -> None:
+        """Stop movement, update position if requested, and send a pulse to stop physically."""
+        self._stop_movement(update_position=update_position, cancel_task=False)
+        await self._trigger_pulse()
 
     async def _movement_loop(self) -> None:
         try:
@@ -175,7 +180,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
                     self._position = max(0.0, self._start_position - delta)
 
                 if self._position <= 0.0 or self._position >= 100.0:
-                    self._stop_movement(update_position=False)
+                    await self._stop_and_pulse(update_position=False)
                     break
 
                 self.async_write_ha_state()
@@ -224,8 +229,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         # If already stopped, do nothing
         if self._direction == "idle":
             return
-        self._stop_movement(update_position=True)
-        await self._trigger_pulse()
+        await self._stop_and_pulse(update_position=True)
 
     async def async_set_cover_position(self, **kwargs: Any) -> None:
         target = max(0, min(100, int(kwargs[ATTR_POSITION])))
@@ -296,7 +300,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
                     return
                 remaining = abs(target - self._position)
                 if remaining == 0:
-                    self._stop_movement(update_position=False)
+                    self._stop_movement(update_position=False, cancel_task=False)
                     return
                 start_time = time.monotonic()
                 total_duration = self._travel_time * (remaining / 100)
@@ -308,7 +312,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
                     else:
                         self._position = self._start_position - remaining * progress
                     if progress >= 1.0:
-                        self._stop_movement(update_position=False)
+                        await self._stop_and_pulse(update_position=False)
                         break
                     self.async_write_ha_state()
                     self._notify_sub_entities()
