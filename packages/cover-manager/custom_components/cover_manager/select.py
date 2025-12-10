@@ -18,7 +18,6 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Cover Manager select entities."""
-    # Get cover instance from hass.data
     cover: CoverManagerCover = hass.data[DOMAIN][config_entry.entry_id]
     
     entities = [
@@ -63,10 +62,8 @@ class CoverManagerDirection(SelectEntity):
         if option not in self._attr_options:
             return
         if option == "idle":
-            # Stop the cover if idle is selected
             await self._cover.async_stop_cover()
         else:
-            # Start movement in the selected direction
             await self._cover._go_direction(option)
 
 
@@ -96,5 +93,4 @@ class CoverManagerLastDirection(SelectEntity):
     async def async_select_option(self, option: str) -> None:
         if option not in self._attr_options:
             return
-        # Directly update last_direction without affecting current direction
         self._cover.update_last_direction(option)

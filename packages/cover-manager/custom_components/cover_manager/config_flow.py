@@ -23,17 +23,14 @@ class CoverManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 switch_entity = user_input["switch_entity"]
                 
-                # Validate the switch entity exists and is a switch
                 state = self.hass.states.get(switch_entity)
                 if not state:
                     raise InvalidSwitchEntity
                 
-                # Validate the entity domain is switch
                 entity_domain = switch_entity.split(".")[0] if "." in switch_entity else None
                 if entity_domain != "switch":
                     raise InvalidSwitchEntity
 
-                # Create a unique ID for this cover
                 cover_id = user_input["name"].lower().replace(" ", "_")
                 await self.async_set_unique_id(f"{DOMAIN}_{cover_id}")
                 self._abort_if_unique_id_configured()

@@ -19,7 +19,6 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the Cover Manager number entities."""
-    # Get cover instance from hass.data
     cover: CoverManagerCover = hass.data[DOMAIN][config_entry.entry_id]
     
     entities = [

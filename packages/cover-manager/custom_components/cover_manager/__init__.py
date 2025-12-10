@@ -15,7 +15,6 @@ PLATFORMS = [Platform.COVER, Platform.NUMBER, Platform.SELECT]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Cover Manager from a config entry."""
-    # Initialize domain data structure
     if DOMAIN not in hass.data:
         hass.data[DOMAIN] = {}
     
@@ -26,7 +25,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    # Clean up domain data
     if DOMAIN in hass.data and entry.entry_id in hass.data[DOMAIN]:
         del hass.data[DOMAIN][entry.entry_id]
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
