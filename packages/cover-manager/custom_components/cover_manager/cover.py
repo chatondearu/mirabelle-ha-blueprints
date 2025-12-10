@@ -25,7 +25,6 @@ from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 TICK_SECONDS = 0.3
-PULSE_GAP = 0.8
 
 
 async def async_setup_entry(
@@ -38,8 +37,9 @@ async def async_setup_entry(
     travel = CoverManagerTravelTime(config_entry, cover)
     position = CoverManagerPosition(config_entry, cover)
     direction = CoverManagerDirection(config_entry, cover)
-    cover.register_sub_entities(travel, position, direction)
-    async_add_entities([cover, travel, position, direction])
+    pulse_gap = CoverManagerPulseGap(config_entry, cover)
+    cover.register_sub_entities(travel, position, direction, pulse_gap)
+    async_add_entities([cover, travel, position, direction, pulse_gap])
 
 
 class CoverManagerCover(CoverEntity, RestoreEntity):
@@ -52,6 +52,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         self._switch_entity = config_entry.data["switch_entity"]
         self._travel_time = max(1, int(config_entry.data["travel_time"]))
         self._initial_position = max(0, min(100, int(config_entry.data.get("initial_position", 0))))
+        self._pulse_gap = max(0.1, min(5.0, float(config_entry.data.get("pulse_gap", 0.8))))
         self._position: float = float(self._initial_position)
         self._direction: str = "idle"  # opening / closing / idle
         self._last_direction: str = "closing"
@@ -59,10 +60,12 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         self._movement_start_time: Optional[float] = None
         self._start_position: float = self._position
         self._ignore_next_impulse = False
+        self._last_limit_stop_time: Optional[float] = None
         self._listener_remove = None
         self._traveltime_entity: Optional["CoverManagerTravelTime"] = None
         self._position_entity: Optional["CoverManagerPosition"] = None
         self._direction_entity: Optional["CoverManagerDirection"] = None
+        self._pulsegap_entity: Optional["CoverManagerPulseGap"] = None
         self._attr_supported_features = (
             CoverEntityFeature.OPEN
             | CoverEntityFeature.CLOSE
@@ -93,6 +96,9 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
             # Restore travel time if stored
             if "travel_time" in last_state.attributes:
                 self._travel_time = max(1, int(last_state.attributes["travel_time"]))
+            # Restore pulse gap if stored
+            if "pulse_gap" in last_state.attributes:
+                self._pulse_gap = max(0.1, min(5.0, float(last_state.attributes["pulse_gap"])))
         self._listener_remove = async_track_state_change_event(
             self.hass, [self._switch_entity], self._handle_switch_event
         )
@@ -126,6 +132,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
             "direction": self._direction,
             "last_direction": self._last_direction,
             "travel_time": self._travel_time,
+            "pulse_gap": self._pulse_gap,
         }
 
     @property
@@ -157,7 +164,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
             await self.hass.services.async_call(
                 "switch", "turn_on", {"entity_id": self._switch_entity}
             )
-            await asyncio.sleep(PULSE_GAP)
+            await asyncio.sleep(self._pulse_gap)
         finally:
             self._ignore_next_impulse = False
 
@@ -181,6 +188,9 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
     async def _stop_and_pulse(self, update_position: bool = True) -> None:
         """Stop movement, update position if requested, and send a pulse to stop physically."""
         self._stop_movement(update_position=update_position, cancel_task=False)
+        # Mark that we just stopped at a limit to ignore the pulse event
+        if self._position <= 0.0 or self._position >= 100.0:
+            self._last_limit_stop_time = time.monotonic()
         await self._trigger_pulse()
 
     async def _movement_loop(self) -> None:
@@ -225,6 +235,15 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
             self._stop_movement(update_position=True)
             return
 
+        # Ignore pulse if we just stopped at a limit (within 2 seconds)
+        # This prevents the automatic stop pulse from restarting the cover
+        if self._last_limit_stop_time is not None:
+            time_since_limit_stop = time.monotonic() - self._last_limit_stop_time
+            if time_since_limit_stop < 2.0 and (self._position <= 0.0 or self._position >= 100.0):
+                # Recent limit stop, ignore this pulse to prevent reverse movement
+                self._last_limit_stop_time = None  # Reset after handling
+                return
+
         if self._position <= 0.0:
             dir_to_start = "opening"
         elif self._position >= 100.0:
@@ -260,13 +279,15 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         travel: "CoverManagerTravelTime",
         position: "CoverManagerPosition",
         direction: "CoverManagerDirection",
+        pulse_gap: "CoverManagerPulseGap",
     ) -> None:
         self._traveltime_entity = travel
         self._position_entity = position
         self._direction_entity = direction
+        self._pulsegap_entity = pulse_gap
 
     def _notify_sub_entities(self) -> None:
-        for ent in (self._traveltime_entity, self._position_entity, self._direction_entity):
+        for ent in (self._traveltime_entity, self._position_entity, self._direction_entity, self._pulsegap_entity):
             if ent:
                 ent.schedule_update_ha_state()
 
@@ -286,6 +307,11 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         self._direction = new_dir
         if new_dir != "idle":
             self._last_direction = new_dir
+        self.async_write_ha_state()
+        self._notify_sub_entities()
+
+    def update_pulse_gap(self, new_gap: float) -> None:
+        self._pulse_gap = max(0.1, min(5.0, float(new_gap)))
         self.async_write_ha_state()
         self._notify_sub_entities()
 
@@ -420,3 +446,27 @@ class CoverManagerDirection(SelectEntity):
         else:
             # Start movement in the selected direction
             await self._cover._go_direction(option)
+
+
+class CoverManagerPulseGap(NumberEntity):
+    """Number entity to adjust pulse gap (switch delay)."""
+
+    _attr_native_min_value = 0.1
+    _attr_native_max_value = 5.0
+    _attr_native_step = 0.1
+    _attr_native_unit_of_measurement = "s"
+    _attr_mode = NumberMode.BOX
+    _attr_has_entity_name = True
+
+    def __init__(self, entry: ConfigEntry, cover: CoverManagerCover) -> None:
+        self._cover = cover
+        self._attr_unique_id = f"{entry.entry_id}_pulse_gap"
+        self._attr_name = "Pulse Gap"
+        self._attr_device_info = cover.device_info
+
+    @property
+    def native_value(self) -> float | None:
+        return float(self._cover._pulse_gap)  # noqa: SLF001
+
+    async def async_set_native_value(self, value: float) -> None:
+        self._cover.update_pulse_gap(value)

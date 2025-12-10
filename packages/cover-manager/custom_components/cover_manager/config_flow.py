@@ -45,6 +45,7 @@ class CoverManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         "switch_entity": user_input["switch_entity"],
                         "travel_time": user_input["travel_time"],
                         "initial_position": user_input["initial_position"],
+                        "pulse_gap": user_input.get("pulse_gap", 0.8),
                     },
                 )
             except InvalidSwitchEntity:
@@ -63,6 +64,9 @@ class CoverManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ),
                     vol.Optional("initial_position", default=0): selector.NumberSelector(
                         selector.NumberSelectorConfig(min=0, max=100, step=1, mode="box")
+                    ),
+                    vol.Optional("pulse_gap", default=0.8): selector.NumberSelector(
+                        selector.NumberSelectorConfig(min=0.1, max=5.0, step=0.1, mode="box", unit_of_measurement="s")
                     ),
                 }
             ),
