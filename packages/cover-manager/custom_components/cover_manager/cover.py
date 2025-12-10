@@ -132,10 +132,11 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
             return DIRECTION_CLOSING
         return DIRECTION_OPENING if self._last_direction == DIRECTION_CLOSING else DIRECTION_CLOSING
 
-    def _update_and_notify(self) -> None:
-        """Update HA state and notify sub-entities."""
+    def _update_and_notify(self, notify_sub_entities: bool = True) -> None:
+        """Update HA state and optionally notify dynamic sub-entities."""
         self.async_write_ha_state()
-        self._notify_sub_entities()
+        if notify_sub_entities:
+            self._notify_dynamic_entities()
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
@@ -252,7 +253,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
                     self._stop_movement(update_position=False, cancel_task=False)
                     break
 
-                self._update_and_notify()
+                self.async_write_ha_state()
                 await asyncio.sleep(TICK_SECONDS)
         except asyncio.CancelledError:
             return
@@ -355,14 +356,22 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         if pulse_gap is not None:
             self._pulsegap_entity = pulse_gap
 
-    def _notify_sub_entities(self) -> None:
-        for ent in (self._traveltime_entity, self._position_entity, self._direction_entity, self._lastdirection_entity, self._pulsegap_entity):
+    def _notify_dynamic_entities(self) -> None:
+        """Notify entities that change during cover operation (position, direction, last_direction)."""
+        for ent in (self._position_entity, self._direction_entity, self._lastdirection_entity):
+            if ent:
+                ent.schedule_update_ha_state()
+    
+    def _notify_static_entities(self) -> None:
+        """Notify entities that only change when user modifies them (travel_time, pulse_gap)."""
+        for ent in (self._traveltime_entity, self._pulsegap_entity):
             if ent:
                 ent.schedule_update_ha_state()
 
     def update_travel_time(self, new_time: int) -> None:
         self._travel_time = max(1, int(new_time))
-        self._notify_sub_entities()
+        if self._traveltime_entity:
+            self._traveltime_entity.schedule_update_ha_state()
 
     def update_position(self, new_pos: float) -> None:
         self._position = self._clamp_position(new_pos)
@@ -386,7 +395,8 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
 
     def update_pulse_gap(self, new_gap: float) -> None:
         self._pulse_gap = max(0.1, min(5.0, float(new_gap)))
-        self._update_and_notify()
+        if self._pulsegap_entity:
+            self._pulsegap_entity.schedule_update_ha_state()
 
     async def _go_direction(self, direction: str, target: Optional[int] = None, skip_stop_pulse: bool = False) -> None:
         """Handle direction change with impulse switch (may require two pulses)."""
@@ -433,7 +443,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
                         else:
                             await self._stop_and_pulse(update_position=False)
                         break
-                    self._update_and_notify()
+                    self.async_write_ha_state()
                     await asyncio.sleep(TICK_SECONDS)
             except asyncio.CancelledError:
                 return
