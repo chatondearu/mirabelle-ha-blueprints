@@ -221,6 +221,9 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         await self._go_direction("closing")
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
+        # If already stopped, do nothing
+        if self._direction == "idle":
+            return
         self._stop_movement(update_position=True)
         await self._trigger_pulse()
 
@@ -332,6 +335,7 @@ class CoverManagerTravelTime(NumberEntity):
     _attr_native_max_value = 300
     _attr_native_step = 1
     _attr_mode = NumberMode.BOX
+    _attr_has_entity_name = True
 
     def __init__(self, entry: ConfigEntry, cover: CoverManagerCover) -> None:
         self._cover = cover
@@ -354,6 +358,7 @@ class CoverManagerPosition(NumberEntity):
     _attr_native_max_value = 100
     _attr_native_step = 1
     _attr_mode = NumberMode.BOX
+    _attr_has_entity_name = True
 
     def __init__(self, entry: ConfigEntry, cover: CoverManagerCover) -> None:
         self._cover = cover
@@ -373,6 +378,7 @@ class CoverManagerDirection(SelectEntity):
     """Select entity to adjust direction."""
 
     _attr_options = ["opening", "closing", "idle"]
+    _attr_has_entity_name = True
 
     def __init__(self, entry: ConfigEntry, cover: CoverManagerCover) -> None:
         self._cover = cover
