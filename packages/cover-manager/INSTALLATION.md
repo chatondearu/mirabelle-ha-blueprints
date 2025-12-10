@@ -28,23 +28,10 @@
    - Click **Download**
    - Restart Home Assistant
 
-3. **Include the generated covers**
-   - Covers are written by default to individual files under `config/templates/cover_manager_<id>.yaml`.
-   - In `configuration.yaml`, add:
-     ```yaml
-     template:
-       - !include_dir_merge_list config/templates
-     ```
-   - Without this include, the covers will not be loaded.
-   - **Note**: The integration uses the modern `template:` syntax (replacing deprecated `cover: platform: template`).
-
-4. **Helpers include (recommended)**
-   - Helpers are written to `config/helpers/cover_manager_<id>_helpers.yaml`.
-   - In `configuration.yaml`, include your helpers folder (example):
-     ```yaml
-     input_text: !include_dir_merge_named config/helpers
-     ```
-   - Ensure this include exists so helpers load correctly.
+3. **Configuration**
+   - Choose the existing impulse switch controlling the cover.
+   - Set travel time (seconds) and optional initial position (0-100).
+   - No YAML includes are required. The integration manages state internally; the cover state is estimated in the entity.
 
 **Note**: If Cover Manager doesn't appear in HACS, ensure:
 - The sub-repository exists and is up to date (synced from monorepo)

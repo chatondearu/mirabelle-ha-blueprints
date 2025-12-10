@@ -21,12 +21,7 @@ See [INSTALLATION.md](./INSTALLATION.md) for detailed installation instructions.
 3. Click **Download**
 4. Restart Home Assistant
 5. Configure via **Settings** > **Devices & Services** > **Add Integration**
-6. Include generated covers in `configuration.yaml`:
-   ```yaml
-   template:
-     - !include_dir_merge_list config/templates
-   ```
-   **Note**: Uses modern `template:` syntax (replacing deprecated `cover: platform: template`).
+6. Optional: set initial position and travel time during setup. No YAML includes needed; the integration manages state internally (impulse switch, no templates/helpers).
 
 ## Features
 
