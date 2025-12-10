@@ -3,6 +3,7 @@ import logging
 import yaml
 from pathlib import Path
 from functools import partial
+import re
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
@@ -10,7 +11,7 @@ from .templates.generate_cover_template import (
     generate_cover_template,
     write_single_cover_template,
 )
-from .const import DEFAULT_HELPERS_PATH, DEFAULT_COVERS_PATH, DOMAIN
+from .const import DEFAULT_HELPERS_PATH, DEFAULT_TEMPLATE_COVERS_PATH, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -36,6 +37,65 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 candidate = (config_dir / default_path).resolve()
             return candidate
 
+        async def _extract_include_path(section: str, default_path: str, merge_type: str) -> str:
+            """Best-effort extraction of include dir from configuration.yaml for a section."""
+            config_yaml = Path(hass.config.path("configuration.yaml"))
+            if not config_yaml.exists():
+                return default_path
+            try:
+                content = await hass.async_add_executor_job(config_yaml.read_text)
+            except Exception:
+                return default_path
+            lines = content.splitlines()
+            inside_section = False
+            include_pattern = rf"!include_dir_merge_{merge_type}\\s+([^\\s]+)"
+            section_header = rf"^{section}:\\s*(?:!include_dir_merge_{merge_type}\\s+[^\\s]+)?"
+            for line in lines:
+                stripped = line.strip()
+                if re.match(section_header, stripped):
+                    inside_section = True
+                elif re.match(r"^\\S", stripped) and inside_section:
+                    inside_section = False
+                if inside_section:
+                    match = re.search(include_pattern, stripped)
+                    if match:
+                        return match.group(1)
+            return default_path
+
+        async def _warn_include_config(path_to_check: Path, merge_type: str, section: str) -> None:
+            """Warn user if configuration.yaml does not include the given folder for the section."""
+            config_yaml = Path(hass.config.path("configuration.yaml"))
+            if not config_yaml.exists():
+                _LOGGER.warning(
+                    "configuration.yaml not found; ensure you include your %s folder manually (e.g. %s: !include_dir_merge_%s %s)",
+                    section,
+                    section,
+                    merge_type,
+                    path_to_check.relative_to(Path(hass.config.config_dir)),
+                )
+                return
+            try:
+                content = await hass.async_add_executor_job(config_yaml.read_text)
+            except Exception as err:
+                _LOGGER.warning(
+                    "Could not read configuration.yaml to verify %s include: %s",
+                    section,
+                    err,
+                )
+                return
+            rel = path_to_check.relative_to(Path(hass.config.config_dir))
+            snippet = f"!include_dir_merge_{merge_type} {rel}"
+            if section + ":" not in content or snippet not in content:
+                _LOGGER.warning(
+                    "%s include for %s not detected in configuration.yaml. Add:\n"
+                    "%s:\n  - !include_dir_merge_%s %s",
+                    section.capitalize(),
+                    rel,
+                    section,
+                    merge_type,
+                    rel,
+                )
+
         helpers_config = {
             "input_text": {
                 position_helper_id: {
@@ -53,9 +113,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             }
         }
         
-        # Write helpers configuration to a package file
-        yaml_overrides = hass.data.get(DOMAIN, {})
-        helpers_base = yaml_overrides.get("helpers_path", DEFAULT_HELPERS_PATH)
+        # Try to read includes from configuration.yaml; fallback to defaults
+        helpers_base = await _extract_include_path("input_text", DEFAULT_HELPERS_PATH, "named")
         packages_path = _safe_path(helpers_base, DEFAULT_HELPERS_PATH, "helpers_path")
         packages_path.mkdir(parents=True, exist_ok=True)
         helpers_path = packages_path / f"{DOMAIN}_{cover_id}_helpers.yaml"
@@ -110,10 +169,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             travel_time=entry.data['travel_time']
         )
         
-        covers_rel_path = yaml_overrides.get("covers_path", DEFAULT_COVERS_PATH)
-        covers_base = _safe_path(covers_rel_path, DEFAULT_COVERS_PATH, "covers_path")
+        covers_rel_path = await _extract_include_path("template", DEFAULT_TEMPLATE_COVERS_PATH, "list")
+        covers_base = _safe_path(covers_rel_path, DEFAULT_TEMPLATE_COVERS_PATH, "covers_path")
         covers_base.mkdir(parents=True, exist_ok=True)
-        cover_file = covers_base / f"custom_cover_{cover_id}.yaml"
+        cover_file = covers_base / f"cover_manager_{cover_id}.yaml"
+        await _warn_include_config(covers_base, "list", "template")
         
         # Check if file already exists to avoid rewriting unnecessarily
         file_exists = await hass.async_add_executor_job(cover_file.exists)
@@ -150,13 +210,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
-    """Set up from configuration.yaml to get default paths."""
-    domain_cfg = config.get(DOMAIN, {}) or {}
-    hass.data.setdefault(DOMAIN, {})
-    if "helpers_path" in domain_cfg:
-        hass.data[DOMAIN]["helpers_path"] = domain_cfg["helpers_path"]
-    if "covers_path" in domain_cfg:
-        hass.data[DOMAIN]["covers_path"] = domain_cfg["covers_path"]
+    """Basic setup; paths are fixed and managed via HA includes."""
     return True
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

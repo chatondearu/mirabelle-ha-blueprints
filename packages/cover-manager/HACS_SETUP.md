@@ -34,12 +34,18 @@ mirabelle-ha-blueprints (monorepo)
 2. Search for "Cover Manager" and install
 
 3. Include generated covers in Home Assistant
-   - The integration writes per-cover templates in `config/covers/custom_cover_<id>.yaml`
-   - In `configuration.yaml`, add:
+   - The integration writes per-cover templates in `config/templates/cover_manager_<id>.yaml`
+   - In `configuration.yaml`, add (if not already present):
      ```yaml
-     cover: !include_dir_merge_list config/covers
+     template:
+       - !include_dir_merge_list config/templates
      ```
    - Without this include, the covers will not be loaded.
+   - Helpers are written to `config/helpers/cover_manager_<id>_helpers.yaml`; include them for loading:
+     ```yaml
+     input_text: !include_dir_merge_named config/helpers
+     ```
+   - **Note**: Uses modern `template:` syntax (replacing deprecated `cover: platform: template`).
 
 ### Why a Separate Repository?
 

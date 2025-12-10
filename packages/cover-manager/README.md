@@ -23,8 +23,10 @@ See [INSTALLATION.md](./INSTALLATION.md) for detailed installation instructions.
 5. Configure via **Settings** > **Devices & Services** > **Add Integration**
 6. Include generated covers in `configuration.yaml`:
    ```yaml
-   cover: !include_dir_merge_list config/covers
+   template:
+     - !include_dir_merge_list config/templates
    ```
+   **Note**: Uses modern `template:` syntax (replacing deprecated `cover: platform: template`).
 
 ## Features
 

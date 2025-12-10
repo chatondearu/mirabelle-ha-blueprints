@@ -29,21 +29,22 @@
    - Restart Home Assistant
 
 3. **Include the generated covers**
-   - Covers are written by default to individual files under `config/covers/custom_cover_<id>.yaml`.
+   - Covers are written by default to individual files under `config/templates/cover_manager_<id>.yaml`.
    - In `configuration.yaml`, add:
      ```yaml
-     cover: !include_dir_merge_list config/covers
+     template:
+       - !include_dir_merge_list config/templates
      ```
    - Without this include, the covers will not be loaded.
+   - **Note**: The integration uses the modern `template:` syntax (replacing deprecated `cover: platform: template`).
 
-4. **(Optional) Override default paths**
-   - In `configuration.yaml`, you can override where helpers and covers are written:
+4. **Helpers include (recommended)**
+   - Helpers are written to `config/helpers/cover_manager_<id>_helpers.yaml`.
+   - In `configuration.yaml`, include your helpers folder (example):
      ```yaml
-     cover_manager:
-       helpers_path: config/helpers
-       covers_path: config/covers
+     input_text: !include_dir_merge_named config/helpers
      ```
-   - These values are read from `configuration.yaml` (not from the integration form).
+   - Ensure this include exists so helpers load correctly.
 
 **Note**: If Cover Manager doesn't appear in HACS, ensure:
 - The sub-repository exists and is up to date (synced from monorepo)
