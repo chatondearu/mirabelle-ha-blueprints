@@ -34,17 +34,15 @@ class ImeonHttpClient:
 
     async def login(self, username: str, password: str) -> Dict[str, Any]:
         """Authenticate against /login and keep cookies in shared session."""
-        # The upstream client posts form data; keep same payload style
-        payload = FormData()
-        payload.add_field("do_login", "true")
-        payload.add_field("email", username)
-        payload.add_field("passwd", password)
+        # Use simple form payload (bool flag), explicit content-type
+        payload = {"do_login": True, "email": username, "passwd": password}
         url = self._url("/login")
         headers = {
             "Accept": "application/json",
             "User-Agent": "homeassistant-imeon/1.0",
             "Referer": f"http://{self.host}/",
             "Origin": f"http://{self.host}",
+            "Content-Type": "application/x-www-form-urlencoded",
         }
         async with self._lock:  # avoid concurrent logins
             async with self._session.post(
@@ -75,6 +73,7 @@ class ImeonHttpClient:
             "Accept": "application/json",
             "User-Agent": "homeassistant-imeon/1.0",
             "Referer": f"http://{self.host}/",
+            "Origin": f"http://{self.host}",
         }
         async with self._session.get(url, timeout=self._timeout, headers=headers) as resp:
             if resp.status != 200:
