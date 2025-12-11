@@ -94,9 +94,9 @@ class ImeonEnergyConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         default=DEFAULT_SCAN_INTERVAL,
                     ): selector.NumberSelector(
                         selector.NumberSelectorConfig(
-                            min=10,
+                            min=5,
                             max=300,
-                            step=10,
+                            step=5,
                             mode=selector.NumberSelectorMode.BOX,
                             unit_of_measurement="s",
                         )

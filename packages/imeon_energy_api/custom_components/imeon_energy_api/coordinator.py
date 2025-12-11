@@ -81,83 +81,83 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _transform_data(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         """Transform raw API data to standardized format for sensors."""
-        # The API structure may vary, so we try multiple possible paths
-        # Common field names to try (in order of preference)
+        # Normalize different shapes from the API (/data, /scan, etc.)
+        payload = self._normalize_payload(raw_data)
         
         # Try to extract power values from various possible structures
         grid_power = (
-            self._get_nested_value(raw_data, ["grid", "power"], None) or
-            self._get_nested_value(raw_data, ["gridPower"], None) or
-            self._get_nested_value(raw_data, ["grid_power"], None) or
-            self._get_value_by_key(raw_data, ["grid", "p", "Pgrid", "gridPower", "grid_power"], None) or
+            self._get_nested_value(payload, ["grid", "power"], None) or
+            self._get_nested_value(payload, ["gridPower"], None) or
+            self._get_nested_value(payload, ["grid_power"], None) or
+            self._get_value_by_key(payload, ["grid", "p", "Pgrid", "gridPower", "grid_power"], None) or
             0.0
         )
         
         solar_power = (
-            self._get_nested_value(raw_data, ["solar", "power"], None) or
-            self._get_nested_value(raw_data, ["solarPower"], None) or
-            self._get_nested_value(raw_data, ["solar_power"], None) or
-            self._get_value_by_key(raw_data, ["solar", "p", "Psolar", "solarPower", "solar_power", "pv"], None) or
+            self._get_nested_value(payload, ["solar", "power"], None) or
+            self._get_nested_value(payload, ["solarPower"], None) or
+            self._get_nested_value(payload, ["solar_power"], None) or
+            self._get_value_by_key(payload, ["solar", "p", "Psolar", "solarPower", "solar_power", "pv"], None) or
             0.0
         )
         
         battery_power = (
-            self._get_nested_value(raw_data, ["battery", "power"], None) or
-            self._get_nested_value(raw_data, ["batteryPower"], None) or
-            self._get_nested_value(raw_data, ["battery_power"], None) or
-            self._get_value_by_key(raw_data, ["battery", "p", "Pbattery", "batteryPower", "battery_power", "bat"], None) or
+            self._get_nested_value(payload, ["battery", "power"], None) or
+            self._get_nested_value(payload, ["batteryPower"], None) or
+            self._get_nested_value(payload, ["battery_power"], None) or
+            self._get_value_by_key(payload, ["battery", "p", "Pbattery", "batteryPower", "battery_power", "bat"], None) or
             0.0
         )
         
         home_power = (
-            self._get_nested_value(raw_data, ["home", "power"], None) or
-            self._get_nested_value(raw_data, ["homePower"], None) or
-            self._get_nested_value(raw_data, ["home_power"], None) or
-            self._get_value_by_key(raw_data, ["home", "p", "Phome", "homePower", "home_power", "load"], None) or
+            self._get_nested_value(payload, ["home", "power"], None) or
+            self._get_nested_value(payload, ["homePower"], None) or
+            self._get_nested_value(payload, ["home_power"], None) or
+            self._get_value_by_key(payload, ["home", "p", "Phome", "homePower", "home_power", "load", "load_power"], None) or
             (grid_power + solar_power + battery_power)  # Calculate as sum if not available
         )
         
         battery_soc = (
-            self._get_nested_value(raw_data, ["battery", "soc"], None) or
-            self._get_nested_value(raw_data, ["batterySoc"], None) or
-            self._get_nested_value(raw_data, ["battery_soc"], None) or
-            self._get_value_by_key(raw_data, ["battery", "soc", "batterySoc", "battery_soc", "soc", "charge"], None) or
+            self._get_nested_value(payload, ["battery", "soc"], None) or
+            self._get_nested_value(payload, ["batterySoc"], None) or
+            self._get_nested_value(payload, ["battery_soc"], None) or
+            self._get_value_by_key(payload, ["battery", "soc", "batterySoc", "battery_soc", "soc", "charge"], None) or
             0.0
         )
         
         # Try to get energy values if available
         grid_energy_import = (
-            self._get_nested_value(raw_data, ["grid", "energy_import"], None) or
-            self._get_nested_value(raw_data, ["grid", "energyImport"], None) or
-            self._get_value_by_key(raw_data, ["grid", "energy_import", "energyImport", "Egrid"], None) or
+            self._get_nested_value(payload, ["grid", "energy_import"], None) or
+            self._get_nested_value(payload, ["grid", "energyImport"], None) or
+            self._get_value_by_key(payload, ["grid", "energy_import", "energyImport", "Egrid"], None) or
             0.0
         )
         
         grid_energy_export = (
-            self._get_nested_value(raw_data, ["grid", "energy_export"], None) or
-            self._get_nested_value(raw_data, ["grid", "energyExport"], None) or
-            self._get_value_by_key(raw_data, ["grid", "energy_export", "energyExport"], None) or
+            self._get_nested_value(payload, ["grid", "energy_export"], None) or
+            self._get_nested_value(payload, ["grid", "energyExport"], None) or
+            self._get_value_by_key(payload, ["grid", "energy_export", "energyExport"], None) or
             0.0
         )
         
         solar_energy = (
-            self._get_nested_value(raw_data, ["solar", "energy"], None) or
-            self._get_nested_value(raw_data, ["solarEnergy"], None) or
-            self._get_value_by_key(raw_data, ["solar", "energy", "solarEnergy", "Esolar"], None) or
+            self._get_nested_value(payload, ["solar", "energy"], None) or
+            self._get_nested_value(payload, ["solarEnergy"], None) or
+            self._get_value_by_key(payload, ["solar", "energy", "solarEnergy", "Esolar"], None) or
             0.0
         )
         
         battery_energy_charged = (
-            self._get_nested_value(raw_data, ["battery", "energy_charged"], None) or
-            self._get_nested_value(raw_data, ["battery", "energyCharged"], None) or
-            self._get_value_by_key(raw_data, ["battery", "energy_charged", "energyCharged"], None) or
+            self._get_nested_value(payload, ["battery", "energy_charged"], None) or
+            self._get_nested_value(payload, ["battery", "energyCharged"], None) or
+            self._get_value_by_key(payload, ["battery", "energy_charged", "energyCharged"], None) or
             0.0
         )
         
         battery_energy_discharged = (
-            self._get_nested_value(raw_data, ["battery", "energy_discharged"], None) or
-            self._get_nested_value(raw_data, ["battery", "energyDischarged"], None) or
-            self._get_value_by_key(raw_data, ["battery", "energy_discharged", "energyDischarged"], None) or
+            self._get_nested_value(payload, ["battery", "energy_discharged"], None) or
+            self._get_nested_value(payload, ["battery", "energyDischarged"], None) or
+            self._get_value_by_key(payload, ["battery", "energy_discharged", "energyDischarged"], None) or
             0.0
         )
         
@@ -212,6 +212,35 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._logged_structure = True
 
         return transformed
+
+    def _normalize_payload(self, raw_data: Any) -> dict[str, Any]:
+        """Handle the various response shapes from the inverter."""
+        data = raw_data
+
+        # If response has a "result" key with JSON string, decode it
+        if isinstance(data, dict) and "result" in data and isinstance(data["result"], str):
+            try:
+                import json
+
+                decoded = json.loads(data["result"])
+                if isinstance(decoded, dict):
+                    data = decoded
+                elif isinstance(decoded, list) and decoded:
+                    data = decoded[0]
+            except Exception:
+                pass
+
+        # If top-level is list, take first element
+        if isinstance(data, list) and data:
+            data = data[0]
+
+        # If wrapped in "data" or similar, unwrap
+        for key in ("data", "payload"):
+            if isinstance(data, dict) and key in data and isinstance(data[key], (dict, list)):
+                data = data[key]
+                break
+
+        return data if isinstance(data, dict) else {}
 
     def _get_nested_value(self, data: dict[str, Any], keys: list[str], default: Any = None) -> Any:
         """Get nested value from dictionary using list of keys."""
