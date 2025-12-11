@@ -11,6 +11,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN
+from .client import ImeonHttpClient
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,13 +45,11 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Fetch data from Imeon Energy API."""
         try:
             if self._client is None:
-                from imeon_inverter_api import Client
-
                 # Reuse HA aiohttp session to avoid needless sockets and keep cookies
                 self._session = async_get_clientsession(self.hass)
 
                 # Instantiate client (async API)
-                self._client = Client(self.host, self._session)
+                self._client = ImeonHttpClient(self.host, self._session)
                 await self._client.login(self.username, self.password)
 
             # Fetch data from API (instant snapshot)
@@ -64,10 +63,8 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             _LOGGER.warning("Error fetching Imeon Energy data, retrying login: %s", err)
             try:
                 if self._client is None:
-                    from imeon_inverter_api import Client
-
                     self._session = async_get_clientsession(self.hass)
-                    self._client = Client(self.host, self._session)
+                    self._client = ImeonHttpClient(self.host, self._session)
 
                 await self._client.login(self.username, self.password)
                 data = await self._client.get_data_instant("data")
