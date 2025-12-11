@@ -34,15 +34,17 @@ class ImeonHttpClient:
 
     async def login(self, username: str, password: str) -> Dict[str, Any]:
         """Authenticate against /login and keep cookies in shared session."""
-        # Use simple form payload (bool flag), explicit content-type
-        payload = {"do_login": True, "email": username, "passwd": password}
+        # Use form data with string values (mirrors upstream)
+        payload = FormData()
+        payload.add_field("do_login", "true")
+        payload.add_field("email", username)
+        payload.add_field("passwd", password)
         url = self._url("/login")
         headers = {
             "Accept": "application/json",
             "User-Agent": "homeassistant-imeon/1.0",
             "Referer": f"http://{self.host}/",
             "Origin": f"http://{self.host}",
-            "Content-Type": "application/x-www-form-urlencoded",
         }
         async with self._lock:  # avoid concurrent logins
             async with self._session.post(
@@ -55,6 +57,9 @@ class ImeonHttpClient:
                     text_preview = (await resp.text())[:200]
                     raise ValueError(f"Unexpected login response type {ctype}: {text_preview}")
                 data = await resp.json()
+                # force-update cookies to be sure they're stored
+                self._session.cookie_jar.update_cookies(resp.cookies)
+                _LOGGER.debug("Login set cookies: %s", list(resp.cookies.keys()))
                 # store creds for auto-relogin
                 self._username = username
                 self._password = password
