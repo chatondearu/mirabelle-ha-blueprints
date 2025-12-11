@@ -138,8 +138,11 @@ class ImeonEnergySensor(CoordinatorEntity[ImeonEnergyCoordinator], SensorEntity,
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._sensor_id = sensor_id
-        self._attr_name = f"{coordinator.host} {name}"
-        self._attr_unique_id = f"{coordinator.host}_{sensor_id}"
+        serial = coordinator.meta.get("serial") or coordinator.host
+        model = coordinator.meta.get("model") or "Imeon Inverter"
+        sw = coordinator.meta.get("sw_version")
+        self._attr_name = f"{serial} {name}"
+        self._attr_unique_id = f"{serial}_{sensor_id}"
         self._attr_device_class = device_class
         self._attr_state_class = state_class
         self._attr_native_unit_of_measurement = unit
@@ -149,10 +152,12 @@ class ImeonEnergySensor(CoordinatorEntity[ImeonEnergyCoordinator], SensorEntity,
         self._last_power = 0.0
         self._accumulated_energy = 0.0
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, coordinator.host)},
-            name=DEFAULT_NAME,
-            manufacturer="Imeon Energy",
-            model="Inverter",
+            identifiers={(DOMAIN, serial)},
+            name=f"Imeon Inverter {serial}",
+            manufacturer="Imeon",
+            model=model,
+            sw_version=sw,
+            configuration_url=f"http://{coordinator.host}/",
         )
 
     async def async_added_to_hass(self) -> None:
@@ -234,17 +239,22 @@ class ImeonPowerSensor(CoordinatorEntity[ImeonEnergyCoordinator], SensorEntity):
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._sensor_id = sensor_id
-        self._attr_name = f"{coordinator.host} {name}"
-        self._attr_unique_id = f"{coordinator.host}_{sensor_id}"
+        serial = coordinator.meta.get("serial") or coordinator.host
+        model = coordinator.meta.get("model") or "Imeon Inverter"
+        sw = coordinator.meta.get("sw_version")
+        self._attr_name = f"{serial} {name}"
+        self._attr_unique_id = f"{serial}_{sensor_id}"
         self._attr_device_class = SensorDeviceClass.POWER
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = UnitOfPower.WATT
         self._attr_icon = icon
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, coordinator.host)},
-            name=DEFAULT_NAME,
-            manufacturer="Imeon Energy",
-            model="Inverter",
+            identifiers={(DOMAIN, serial)},
+            name=f"Imeon Inverter {serial}",
+            manufacturer="Imeon",
+            model=model,
+            sw_version=sw,
+            configuration_url=f"http://{coordinator.host}/",
         )
 
     @property
@@ -269,17 +279,22 @@ class ImeonBatterySocSensor(CoordinatorEntity[ImeonEnergyCoordinator], SensorEnt
         """Initialize the sensor."""
         super().__init__(coordinator)
         self._sensor_id = sensor_id
-        self._attr_name = f"{coordinator.host} {name}"
-        self._attr_unique_id = f"{coordinator.host}_{sensor_id}"
+        serial = coordinator.meta.get("serial") or coordinator.host
+        model = coordinator.meta.get("model") or "Imeon Inverter"
+        sw = coordinator.meta.get("sw_version")
+        self._attr_name = f"{serial} {name}"
+        self._attr_unique_id = f"{serial}_{sensor_id}"
         self._attr_device_class = SensorDeviceClass.BATTERY
         self._attr_state_class = SensorStateClass.MEASUREMENT
         self._attr_native_unit_of_measurement = PERCENTAGE
         self._attr_icon = icon
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, coordinator.host)},
-            name=DEFAULT_NAME,
-            manufacturer="Imeon Energy",
-            model="Inverter",
+            identifiers={(DOMAIN, serial)},
+            name=f"Imeon Inverter {serial}",
+            manufacturer="Imeon",
+            model=model,
+            sw_version=sw,
+            configuration_url=f"http://{coordinator.host}/",
         )
 
     @property

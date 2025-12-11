@@ -40,6 +40,7 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.password = password
         self._client: Any | None = None
         self._session: ClientSession | None = None
+        self.meta: dict[str, Any] = {}
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from Imeon Energy API."""
@@ -58,7 +59,15 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 await self._client.login(self.username, self.password)
 
             # Fetch data from API (instant snapshot)
-            data = await self._client.get_data_instant("data")
+            primary = await self._client.get_data_instant("data")
+            # Also fetch scan (often contains live power values)
+            try:
+                scan = await self._client.get_data_instant("scan")
+            except Exception as scan_err:
+                _LOGGER.debug("Scan endpoint failed, continuing with primary only: %s", scan_err)
+                scan = {}
+            data = {"data": primary, "scan": scan}
+            self.meta = self._extract_meta(primary)
 
             # Transform data to a standardized format
             return self._transform_data(data)
@@ -72,7 +81,14 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self._client = ImeonHttpClient(self.host, self._session)
 
                 await self._client.login(self.username, self.password)
-                data = await self._client.get_data_instant("data")
+                primary = await self._client.get_data_instant("data")
+                try:
+                    scan = await self._client.get_data_instant("scan")
+                except Exception as scan_err:
+                    _LOGGER.debug("Scan endpoint failed after retry: %s", scan_err)
+                    scan = {}
+                data = {"data": primary, "scan": scan}
+                self.meta = self._extract_meta(primary)
                 return self._transform_data(data)
             except Exception as err2:
                 _LOGGER.exception("Error fetching Imeon Energy data after retry: %s", err2)
@@ -81,109 +97,34 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
     def _transform_data(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         """Transform raw API data to standardized format for sensors."""
-        # Normalize different shapes from the API (/data, /scan, etc.)
-        payload = self._normalize_payload(raw_data)
-        
-        # Try to extract power values from various possible structures
-        grid_power = (
-            self._get_nested_value(payload, ["grid", "power"], None) or
-            self._get_nested_value(payload, ["gridPower"], None) or
-            self._get_nested_value(payload, ["grid_power"], None) or
-            self._get_value_by_key(payload, ["grid", "p", "Pgrid", "gridPower", "grid_power"], None) or
-            0.0
-        )
-        
-        solar_power = (
-            self._get_nested_value(payload, ["solar", "power"], None) or
-            self._get_nested_value(payload, ["solarPower"], None) or
-            self._get_nested_value(payload, ["solar_power"], None) or
-            self._get_value_by_key(payload, ["solar", "p", "Psolar", "solarPower", "solar_power", "pv"], None) or
-            0.0
-        )
-        
-        battery_power = (
-            self._get_nested_value(payload, ["battery", "power"], None) or
-            self._get_nested_value(payload, ["batteryPower"], None) or
-            self._get_nested_value(payload, ["battery_power"], None) or
-            self._get_value_by_key(payload, ["battery", "p", "Pbattery", "batteryPower", "battery_power", "bat"], None) or
-            0.0
-        )
-        
-        home_power = (
-            self._get_nested_value(payload, ["home", "power"], None) or
-            self._get_nested_value(payload, ["homePower"], None) or
-            self._get_nested_value(payload, ["home_power"], None) or
-            self._get_value_by_key(payload, ["home", "p", "Phome", "homePower", "home_power", "load", "load_power"], None) or
-            (grid_power + solar_power + battery_power)  # Calculate as sum if not available
-        )
-        
-        battery_soc = (
-            self._get_nested_value(payload, ["battery", "soc"], None) or
-            self._get_nested_value(payload, ["batterySoc"], None) or
-            self._get_nested_value(payload, ["battery_soc"], None) or
-            self._get_value_by_key(payload, ["battery", "soc", "batterySoc", "battery_soc", "soc", "charge"], None) or
-            0.0
-        )
-        
-        # Try to get energy values if available
-        grid_energy_import = (
-            self._get_nested_value(payload, ["grid", "energy_import"], None) or
-            self._get_nested_value(payload, ["grid", "energyImport"], None) or
-            self._get_value_by_key(payload, ["grid", "energy_import", "energyImport", "Egrid"], None) or
-            0.0
-        )
-        
-        grid_energy_export = (
-            self._get_nested_value(payload, ["grid", "energy_export"], None) or
-            self._get_nested_value(payload, ["grid", "energyExport"], None) or
-            self._get_value_by_key(payload, ["grid", "energy_export", "energyExport"], None) or
-            0.0
-        )
-        
-        solar_energy = (
-            self._get_nested_value(payload, ["solar", "energy"], None) or
-            self._get_nested_value(payload, ["solarEnergy"], None) or
-            self._get_value_by_key(payload, ["solar", "energy", "solarEnergy", "Esolar"], None) or
-            0.0
-        )
-        
-        battery_energy_charged = (
-            self._get_nested_value(payload, ["battery", "energy_charged"], None) or
-            self._get_nested_value(payload, ["battery", "energyCharged"], None) or
-            self._get_value_by_key(payload, ["battery", "energy_charged", "energyCharged"], None) or
-            0.0
-        )
-        
-        battery_energy_discharged = (
-            self._get_nested_value(payload, ["battery", "energy_discharged"], None) or
-            self._get_nested_value(payload, ["battery", "energyDischarged"], None) or
-            self._get_value_by_key(payload, ["battery", "energy_discharged", "energyDischarged"], None) or
-            0.0
-        )
-        
-        # Ensure all values are floats
-        grid_power = float(grid_power) if grid_power is not None else 0.0
-        solar_power = float(solar_power) if solar_power is not None else 0.0
-        battery_power = float(battery_power) if battery_power is not None else 0.0
-        home_power = float(home_power) if home_power is not None else 0.0
-        battery_soc = float(battery_soc) if battery_soc is not None else 0.0
-        
+        # Prefer scan payload (live power) if available; merge data and scan
+        payload_data = self._normalize_payload(raw_data.get("data", raw_data))
+        payload_scan = self._normalize_payload(raw_data.get("scan", {}))
+        payload = {**payload_data, **payload_scan}
+
+        grid_power = float(payload.get("ac_input_total_active_power") or 0.0)
+        home_power = float(payload.get("ac_output_total_active_power") or payload.get("ac_output_power_r") or 0.0)
+        solar_power = float(self._sum_pv_inputs(payload) or 0.0)
+
+        battery_power_val = payload.get("battery_power")
+        if battery_power_val is None:
+            battery_power_val = self._estimate_battery_power(payload) or 0.0
+        battery_power = float(battery_power_val)
+
+        battery_soc = float(payload.get("battery_soc") or 0.0)
+
         transformed = {
-            # Power values (W)
             "grid_power": grid_power,
             "solar_power": solar_power,
             "battery_power": battery_power,
             "home_power": home_power,
-            
-            # Battery state of charge (%)
             "battery_soc": battery_soc,
-            
-            # Energy values (kWh) - if available from API
-            "grid_energy_import": float(grid_energy_import) if grid_energy_import is not None else 0.0,
-            "grid_energy_export": float(grid_energy_export) if grid_energy_export is not None else 0.0,
-            "solar_energy": float(solar_energy) if solar_energy is not None else 0.0,
-            "battery_energy_charged": float(battery_energy_charged) if battery_energy_charged is not None else 0.0,
-            "battery_energy_discharged": float(battery_energy_discharged) if battery_energy_discharged is not None else 0.0,
+            # Energy placeholders (not provided by scan)
+            "grid_energy_import": 0.0,
+            "grid_energy_export": 0.0,
+            "solar_energy": 0.0,
+            "battery_energy_charged": 0.0,
+            "battery_energy_discharged": 0.0,
         }
 
         # Calculate grid consumption/return from power
@@ -234,13 +175,53 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if isinstance(data, list) and data:
             data = data[0]
 
-        # If wrapped in "data" or similar, unwrap
+        # If wrapped in "val" (scan), unwrap first element
+        if isinstance(data, dict) and "val" in data and isinstance(data["val"], list) and data["val"]:
+            data = data["val"][0]
+
+        # If wrapped in "data"/"payload", unwrap
         for key in ("data", "payload"):
             if isinstance(data, dict) and key in data and isinstance(data[key], (dict, list)):
                 data = data[key]
+                if isinstance(data, list) and data:
+                    data = data[0]
                 break
 
         return data if isinstance(data, dict) else {}
+
+    def _extract_meta(self, raw_data: dict[str, Any]) -> dict[str, Any]:
+        """Extract device metadata (serial, model, software) from /data payload."""
+        payload = self._normalize_payload(raw_data)
+        return {
+            "serial": payload.get("serial"),
+            "model": payload.get("type"),
+            "sw_version": payload.get("software"),
+        }
+
+    def _sum_pv_inputs(self, payload: dict[str, Any]) -> float | None:
+        """Sum PV inputs if present."""
+        total = 0.0
+        found = False
+        for key in ("pv_input_power1", "pv_input_power2", "pv_input_power3", "pv_power", "pv_input_power"):
+            val = payload.get(key)
+            if val is not None:
+                found = True
+                try:
+                    total += float(val)
+                except (ValueError, TypeError):
+                    pass
+        return total if found else None
+
+    def _estimate_battery_power(self, payload: dict[str, Any]) -> float | None:
+        """Estimate battery power from current * voltage if direct power is missing."""
+        current = payload.get("battery_current")
+        voltage = payload.get("p_battery_voltage") or payload.get("battery_voltage")
+        if current is None or voltage is None:
+            return None
+        try:
+            return float(current) * float(voltage)
+        except (ValueError, TypeError):
+            return None
 
     def _get_nested_value(self, data: dict[str, Any], keys: list[str], default: Any = None) -> Any:
         """Get nested value from dictionary using list of keys."""
