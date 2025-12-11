@@ -2,16 +2,24 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 from aiohttp import ClientSession
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .client import ImeonHttpClient
+from .sensor_config import (
+    API_FIELD_GRID_POWER,
+    API_FIELD_BATTERY_SOC,
+    API_FIELD_PV_INPUTS,
+    API_FIELD_BATTERY_CHARGING,
+    API_FIELD_BATTERY_DISCHARGING,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,77 +49,99 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._client: Any | None = None
         self._session: ClientSession | None = None
         self.meta: dict[str, Any] = {}
+        self._scan_history: list[dict[str, Any]] = []
+        self._known_timestamps: set[int] = set()
+        self._last_processed_count: int = 0
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from Imeon Energy API."""
         try:
-            if self._client is None:
-                # Reuse HA aiohttp session to avoid needless sockets and keep cookies
-                self._session = async_get_clientsession(self.hass)
-
-                # Instantiate client (async API)
-                self._client = ImeonHttpClient(
-                    self.host,
-                    self._session,
-                    username=self.username,
-                    password=self.password,
-                )
-                await self._client.login(self.username, self.password)
-
-            # Fetch data from API (instant snapshot)
-            primary = await self._client.get_data_instant("data")
-            # Also fetch scan (often contains live power values)
-            try:
-                scan = await self._client.get_data_instant("scan")
-            except Exception as scan_err:
-                _LOGGER.debug("Scan endpoint failed, continuing with primary only: %s", scan_err)
-                scan = {}
-            data = {"data": primary, "scan": scan}
-            self.meta = self._extract_meta(primary)
-
-            # Transform data to a standardized format
-            return self._transform_data(data)
-
+            await self._ensure_client_connected()
+            return await self._fetch_and_process_data()
         except Exception as err:
-            # If session expired, try to re-login once
             _LOGGER.warning("Error fetching Imeon Energy data, retrying login: %s", err)
             try:
-                if self._client is None:
-                    self._session = async_get_clientsession(self.hass)
-                    self._client = ImeonHttpClient(self.host, self._session)
-
-                await self._client.login(self.username, self.password)
-                primary = await self._client.get_data_instant("data")
-                try:
-                    scan = await self._client.get_data_instant("scan")
-                except Exception as scan_err:
-                    _LOGGER.debug("Scan endpoint failed after retry: %s", scan_err)
-                    scan = {}
-                data = {"data": primary, "scan": scan}
-                self.meta = self._extract_meta(primary)
-                return self._transform_data(data)
+                await self._ensure_client_connected(force_reconnect=True)
+                return await self._fetch_and_process_data()
             except Exception as err2:
                 _LOGGER.exception("Error fetching Imeon Energy data after retry: %s", err2)
                 raise UpdateFailed(f"Error communicating with API: {err2}") from err2
 
+    async def _ensure_client_connected(self, force_reconnect: bool = False) -> None:
+        """Ensure client is initialized and authenticated."""
+        if self._client is None or force_reconnect:
+            self._session = async_get_clientsession(self.hass)
+            self._client = ImeonHttpClient(
+                self.host,
+                self._session,
+                username=self.username,
+                password=self.password,
+            )
+        await self._client.login(self.username, self.password)
+
+    async def _fetch_and_process_data(self) -> dict[str, Any]:
+        """Fetch and process data from API."""
+        primary = await self._client.get_data_instant("data")
+        
+        scan = {}
+        try:
+            scan = await self._client.get_data_instant("scan")
+        except Exception as scan_err:
+            _LOGGER.debug("Scan endpoint failed: %s", scan_err)
+        
+        monitor = {}
+        try:
+            monitor = await self._client.get_monitor("hour")
+        except Exception as monitor_err:
+            _LOGGER.debug("Monitor endpoint failed: %s", monitor_err)
+        
+        self._process_scan_history(scan)
+        self.meta = self._extract_meta(primary)
+        
+        transformed = self._transform_data({"data": primary, "scan": scan, "monitor": monitor})
+        self._record_historical_values(transformed)
+        
+        return transformed
+
 
     def _transform_data(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         """Transform raw API data to standardized format for sensors."""
-        # Prefer scan payload (live power) if available; merge data and scan
-        payload_data = self._normalize_payload(raw_data.get("data", raw_data))
-        payload_scan = self._normalize_payload(raw_data.get("scan", {}))
-        payload = {**payload_data, **payload_scan}
+        # Use scan data with timestamps for more realistic values
+        # Get the most recent scan entry (or average if multiple)
+        scan_entry = self._get_latest_scan_entry()
+        
+        if not scan_entry:
+            # Fallback to normalized payload if no scan history
+            payload_data = self._normalize_payload(raw_data.get("data", raw_data))
+            payload_scan = self._normalize_payload(raw_data.get("scan", {}))
+            payload = {**payload_data, **payload_scan}
+        else:
+            payload = scan_entry
 
-        grid_power = float(payload.get("ac_input_total_active_power") or 0.0)
-        home_power = float(payload.get("ac_output_total_active_power") or payload.get("ac_output_power_r") or 0.0)
+        grid_power = float(payload.get(API_FIELD_GRID_POWER) or 0.0)
         solar_power = float(self._sum_pv_inputs(payload) or 0.0)
+        
+        # Use AC fields for battery power (more accurate)
+        # Fallback to estimation if AC fields are not available
+        if API_FIELD_BATTERY_CHARGING in payload or API_FIELD_BATTERY_DISCHARGING in payload:
+            battery_charging = float(payload.get(API_FIELD_BATTERY_CHARGING) or 0.0)
+            battery_discharging = float(payload.get(API_FIELD_BATTERY_DISCHARGING) or 0.0)
+            # battery_power: positive = discharging, negative = charging
+            battery_power = battery_discharging - battery_charging
+        else:
+            # Fallback: estimate from current * voltage
+            estimated = self._estimate_battery_power(payload)
+            if estimated is not None:
+                battery_power = float(estimated)
+                battery_charging = battery_power if battery_power > 0 else 0.0
+                battery_discharging = abs(battery_power) if battery_power < 0 else 0.0
+            else:
+                battery_power = 0.0
+                battery_charging = 0.0
+                battery_discharging = 0.0
 
-        battery_power_val = payload.get("battery_power")
-        if battery_power_val is None:
-            battery_power_val = self._estimate_battery_power(payload) or 0.0
-        battery_power = float(battery_power_val)
-
-        battery_soc = float(payload.get("battery_soc") or 0.0)
+        battery_soc = float(payload.get(API_FIELD_BATTERY_SOC) or 0.0)
+        home_power = grid_power + solar_power + battery_power
 
         transformed = {
             "grid_power": grid_power,
@@ -119,7 +149,6 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "battery_power": battery_power,
             "home_power": home_power,
             "battery_soc": battery_soc,
-            # Energy placeholders (not provided by scan)
             "grid_energy_import": 0.0,
             "grid_energy_export": 0.0,
             "solar_energy": 0.0,
@@ -129,63 +158,39 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         # Calculate grid consumption/return from power
         if grid_power > 0:
-            # Positive = importing from grid (consumption)
             transformed["grid_consumption_power"] = grid_power
             transformed["grid_return_power"] = 0.0
         else:
-            # Negative = exporting to grid (return)
             transformed["grid_consumption_power"] = 0.0
             transformed["grid_return_power"] = abs(grid_power)
 
-        # Calculate battery charging/discharging from power
-        if battery_power > 0:
-            # Positive = charging
-            transformed["battery_charging_power"] = battery_power
-            transformed["battery_discharging_power"] = 0.0
-        else:
-            # Negative = discharging
-            transformed["battery_charging_power"] = 0.0
-            transformed["battery_discharging_power"] = abs(battery_power)
-
-        # Log raw data structure for debugging (only first time or on error)
-        if not hasattr(self, "_logged_structure"):
-            _LOGGER.debug("Raw API data structure: %s", raw_data)
-            self._logged_structure = True
+        # Use direct AC fields for battery charging/discharging
+        transformed["battery_charging_power"] = battery_charging
+        transformed["battery_discharging_power"] = battery_discharging
 
         return transformed
 
     def _normalize_payload(self, raw_data: Any) -> dict[str, Any]:
-        """Handle the various response shapes from the inverter."""
+        """Normalize API response to a flat dictionary."""
         data = raw_data
 
-        # If response has a "result" key with JSON string, decode it
         if isinstance(data, dict) and "result" in data and isinstance(data["result"], str):
             try:
                 import json
-
                 decoded = json.loads(data["result"])
-                if isinstance(decoded, dict):
-                    data = decoded
-                elif isinstance(decoded, list) and decoded:
-                    data = decoded[0]
+                data = decoded[0] if isinstance(decoded, list) and decoded else decoded
             except Exception:
                 pass
 
-        # If top-level is list, take first element
         if isinstance(data, list) and data:
             data = data[0]
 
-        # If wrapped in "val" (scan), unwrap first element
-        if isinstance(data, dict) and "val" in data and isinstance(data["val"], list) and data["val"]:
-            data = data["val"][0]
-
-        # If wrapped in "data"/"payload", unwrap
-        for key in ("data", "payload"):
-            if isinstance(data, dict) and key in data and isinstance(data[key], (dict, list)):
-                data = data[key]
-                if isinstance(data, list) and data:
-                    data = data[0]
-                break
+        if isinstance(data, dict):
+            for key in ("data", "payload"):
+                if key in data and isinstance(data[key], (dict, list)):
+                    unwrapped = data[key]
+                    data = unwrapped[0] if isinstance(unwrapped, list) and unwrapped else unwrapped
+                    break
 
         return data if isinstance(data, dict) else {}
 
@@ -202,7 +207,7 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Sum PV inputs if present."""
         total = 0.0
         found = False
-        for key in ("pv_input_power1", "pv_input_power2", "pv_input_power3", "pv_power", "pv_input_power"):
+        for key in API_FIELD_PV_INPUTS:
             val = payload.get(key)
             if val is not None:
                 found = True
@@ -223,33 +228,90 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except (ValueError, TypeError):
             return None
 
-    def _get_nested_value(self, data: dict[str, Any], keys: list[str], default: Any = None) -> Any:
-        """Get nested value from dictionary using list of keys."""
-        value = data
-        for key in keys:
-            if isinstance(value, dict):
-                value = value.get(key)
-                if value is None:
-                    return default
-            else:
-                return default
-        return value if value is not None else default
-
-    def _get_value_by_key(self, data: dict[str, Any], possible_keys: list[str], default: Any = None) -> Any:
-        """Try to get a value by trying multiple possible key names."""
-        # First try direct keys
-        for key in possible_keys:
-            if key in data:
-                return data[key]
+    def _process_scan_history(self, scan_data: dict[str, Any]) -> None:
+        """Process scan data with timestamps to build a history, avoiding duplicates."""
+        if not isinstance(scan_data, dict):
+            return
         
-        # Then try nested in common structures
-        for key in possible_keys:
-            for prefix in ["", "data", "values", "status", "state"]:
-                if prefix:
-                    nested = self._get_nested_value(data, [prefix, key], None)
+        scan_entries = scan_data.get("val", [])
+        if not isinstance(scan_entries, list) or not scan_entries:
+            return
+        
+        # Process each entry with its timestamp
+        new_entries = []
+        for entry in scan_entries:
+            if not isinstance(entry, dict):
+                continue
+            
+            timestamp = entry.get("timestamp")
+            timestamp_int = None
+            
+            # Convert timestamp to datetime and get integer representation
+            try:
+                if isinstance(timestamp, (int, float)):
+                    timestamp_int = int(timestamp)
+                    entry["_timestamp"] = datetime.fromtimestamp(timestamp_int)
+                elif isinstance(timestamp, str):
+                    # Try parsing time string if available
+                    time_str = entry.get("time")
+                    if time_str:
+                        try:
+                            entry["_timestamp"] = datetime.strptime(time_str, "%Y/%m/%d %H:%M:%S")
+                            timestamp_int = int(entry["_timestamp"].timestamp())
+                        except ValueError:
+                            entry["_timestamp"] = datetime.now()
+                            timestamp_int = int(entry["_timestamp"].timestamp())
+                    else:
+                        entry["_timestamp"] = datetime.now()
+                        timestamp_int = int(entry["_timestamp"].timestamp())
                 else:
-                    nested = self._get_nested_value(data, [key], None)
-                if nested is not None:
-                    return nested
+                    entry["_timestamp"] = datetime.now()
+                    timestamp_int = int(entry["_timestamp"].timestamp())
+            except Exception:
+                entry["_timestamp"] = datetime.now()
+                timestamp_int = int(entry["_timestamp"].timestamp())
+            
+            # Skip if we've already processed this timestamp
+            if timestamp_int and timestamp_int in self._known_timestamps:
+                continue
+            
+            # Mark as processed
+            if timestamp_int:
+                self._known_timestamps.add(timestamp_int)
+            
+            new_entries.append(entry)
         
-        return default
+        # Add new entries to history (keep last 100 entries to avoid memory issues)
+        self._scan_history.extend(new_entries)
+        if len(self._scan_history) > 100:
+            removed = self._scan_history[:-100]
+            for entry in removed:
+                ts = entry.get("_timestamp")
+                if ts:
+                    ts_int = int(ts.timestamp())
+                    self._known_timestamps.discard(ts_int)
+            self._scan_history = self._scan_history[-100:]
+            self._last_processed_count = max(0, self._last_processed_count - len(removed))
+        
+        # Sort by timestamp (most recent first)
+        self._scan_history.sort(key=lambda x: x.get("_timestamp", datetime.min), reverse=True)
+
+    def _get_latest_scan_entry(self) -> dict[str, Any] | None:
+        """Get the most recent scan entry, or average of recent entries if available."""
+        if not self._scan_history:
+            return None
+        
+        # Return the most recent entry (already sorted)
+        return self._scan_history[0] if self._scan_history else None
+
+    @callback
+    def _record_historical_values(self, transformed_data: dict[str, Any]) -> None:
+        """Track new scan entries for potential future timestamp-based recording."""
+        if not self._scan_history:
+            return
+        
+        new_count = len(self._scan_history) - self._last_processed_count
+        if new_count > 0:
+            _LOGGER.debug("Processed %d new scan entries with timestamps", new_count)
+            self._last_processed_count = len(self._scan_history)
+

@@ -108,6 +108,32 @@ class ImeonHttpClient:
                 raise ValueError(f"Unexpected response type {ctype}: {text_preview}")
             return await resp.json()
 
+    async def get_monitor(self, time: str = "hour") -> Dict[str, Any]:
+        """Fetch monitoring data from /api/monitor."""
+        import json
+        url = self._url(f"/api/monitor?time={time}")
+        headers = {
+            "Accept": "application/json",
+            "User-Agent": "homeassistant-imeon/1.0",
+            "Referer": f"http://{self.host}/",
+            "Origin": f"http://{self.host}",
+        }
+        async with self._session.get(url, timeout=self._timeout, headers=headers) as resp:
+            if resp.status != 200:
+                raise ValueError(f"GET monitor failed (status {resp.status})")
+            ctype = resp.headers.get("Content-Type", "").lower()
+            if "application/json" not in ctype:
+                text_preview = (await resp.text())[:200]
+                raise ValueError(f"Unexpected response type {ctype}: {text_preview}")
+            data = await resp.json()
+            # Parse the "result" field which is a JSON string
+            if "result" in data and isinstance(data["result"], str):
+                try:
+                    data["result"] = json.loads(data["result"])
+                except json.JSONDecodeError:
+                    pass
+            return data
+
     async def get_energy(self) -> Dict[str, Any]:
         """Fetch energy aggregates if available."""
         url = self._url("/api/energy")

@@ -137,7 +137,7 @@ packages/imeon_energy_api/
 
 ## Development
 
-This component is part of the `mirabelle-ha-blueprints` monorepo. It uses the official `imeon-inverter-api` Python package to communicate with Imeon inverters.
+This component is part of the `mirabelle-ha-blueprints` monorepo.
 
 ## Sources
 

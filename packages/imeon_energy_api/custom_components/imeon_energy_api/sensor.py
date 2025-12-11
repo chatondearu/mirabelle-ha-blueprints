@@ -4,13 +4,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from homeassistant.components.sensor import (
-    SensorEntity,
-    SensorDeviceClass,
-    SensorStateClass,
-)
+from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfEnergy, UnitOfPower, PERCENTAGE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -18,10 +13,26 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.util import dt as dt_util
 
-from .const import DOMAIN, DEFAULT_NAME
+from .const import DOMAIN
 from .coordinator import ImeonEnergyCoordinator
+from .sensor_config import SENSORS, get_energy_sensors, get_power_sensors
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _get_device_info(coordinator: ImeonEnergyCoordinator) -> DeviceInfo:
+    """Get device info for all sensors (shared across entities)."""
+    serial = coordinator.meta.get("serial") or coordinator.host
+    model = coordinator.meta.get("model") or "Imeon Inverter"
+    sw = coordinator.meta.get("sw_version")
+    return DeviceInfo(
+        identifiers={(DOMAIN, serial)},
+        name=f"Imeon Inverter {serial}",
+        manufacturer="Imeon",
+        model=model,
+        sw_version=sw,
+        configuration_url=f"http://{coordinator.host}/",
+    )
 
 
 async def async_setup_entry(
@@ -32,133 +43,48 @@ async def async_setup_entry(
     """Set up Imeon Energy sensors from a config entry."""
     coordinator: ImeonEnergyCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    entities = [
-        # Energy sensors for Energy Dashboard (kWh, total_increasing)
-        ImeonEnergySensor(
-            coordinator,
-            "grid_consumption",
-            "Grid Consumption",
-            SensorDeviceClass.ENERGY,
-            SensorStateClass.TOTAL_INCREASING,
-            UnitOfEnergy.KILO_WATT_HOUR,
-            "mdi:transmission-tower",
-            "grid_consumption_power",
-        ),
-        ImeonEnergySensor(
-            coordinator,
-            "grid_return",
-            "Grid Return",
-            SensorDeviceClass.ENERGY,
-            SensorStateClass.TOTAL_INCREASING,
-            UnitOfEnergy.KILO_WATT_HOUR,
-            "mdi:transmission-tower-export",
-            "grid_return_power",
-        ),
-        ImeonEnergySensor(
-            coordinator,
-            "solar_production",
-            "Solar Production",
-            SensorDeviceClass.ENERGY,
-            SensorStateClass.TOTAL_INCREASING,
-            UnitOfEnergy.KILO_WATT_HOUR,
-            "mdi:solar-power",
-            "solar_power",
-        ),
-        ImeonEnergySensor(
-            coordinator,
-            "battery_charging",
-            "Battery Charging",
-            SensorDeviceClass.ENERGY,
-            SensorStateClass.TOTAL_INCREASING,
-            UnitOfEnergy.KILO_WATT_HOUR,
-            "mdi:battery-charging",
-            "battery_charging_power",
-        ),
-        ImeonEnergySensor(
-            coordinator,
-            "battery_discharging",
-            "Battery Discharging",
-            SensorDeviceClass.ENERGY,
-            SensorStateClass.TOTAL_INCREASING,
-            UnitOfEnergy.KILO_WATT_HOUR,
-            "mdi:battery",
-            "battery_discharging_power",
-        ),
-        # Power sensors (W, measurement)
-        ImeonPowerSensor(
-            coordinator,
-            "grid_power",
-            "Grid Power",
-            "mdi:transmission-tower",
-        ),
-        ImeonPowerSensor(
-            coordinator,
-            "solar_power",
-            "Solar Power",
-            "mdi:solar-power",
-        ),
-        ImeonPowerSensor(
-            coordinator,
-            "battery_power",
-            "Battery Power",
-            "mdi:battery",
-        ),
-        ImeonPowerSensor(
-            coordinator,
-            "home_power",
-            "Home Consumption",
-            "mdi:home-lightning-bolt",
-        ),
-        # Battery state of charge (%)
-        ImeonBatterySocSensor(
-            coordinator,
-            "battery_soc",
-            "Battery State of Charge",
-            "mdi:battery-high",
-        ),
-    ]
+    entities = []
+    device_info = _get_device_info(coordinator)
+
+    # Create energy sensors
+    for config in get_energy_sensors():
+        entities.append(
+            ImeonEnergySensor(coordinator, config, device_info)
+        )
+
+    # Create power sensors
+    for config in get_power_sensors():
+        entities.append(
+            ImeonPowerSensor(coordinator, config, device_info)
+        )
 
     async_add_entities(entities)
 
 
 class ImeonEnergySensor(CoordinatorEntity[ImeonEnergyCoordinator], SensorEntity, RestoreEntity):
-    """Base class for energy sensors that integrate power over time."""
+    """Energy sensors that integrate power over time."""
 
     def __init__(
         self,
         coordinator: ImeonEnergyCoordinator,
-        sensor_id: str,
-        name: str,
-        device_class: SensorDeviceClass,
-        state_class: SensorStateClass,
-        unit: str,
-        icon: str,
-        power_key: str,
+        config: Any,
+        device_info: DeviceInfo,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
-        self._sensor_id = sensor_id
+        self._config = config
         serial = coordinator.meta.get("serial") or coordinator.host
-        model = coordinator.meta.get("model") or "Imeon Inverter"
-        sw = coordinator.meta.get("sw_version")
-        self._attr_name = f"{serial} {name}"
-        self._attr_unique_id = f"{serial}_{sensor_id}"
-        self._attr_device_class = device_class
-        self._attr_state_class = state_class
-        self._attr_native_unit_of_measurement = unit
-        self._attr_icon = icon
-        self._power_key = power_key
+        self._attr_name = config.name
+        self._attr_unique_id = f"{serial}_{config.sensor_id}"
+        self._attr_device_class = config.device_class
+        self._attr_state_class = config.state_class
+        self._attr_native_unit_of_measurement = config.unit
+        self._attr_icon = config.icon
+        self._power_key = config.power_key
         self._last_update = None
         self._last_power = 0.0
         self._accumulated_energy = 0.0
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, serial)},
-            name=f"Imeon Inverter {serial}",
-            manufacturer="Imeon",
-            model=model,
-            sw_version=sw,
-            configuration_url=f"http://{coordinator.host}/",
-        )
+        self._attr_device_info = device_info
 
     async def async_added_to_hass(self) -> None:
         """When entity is added to hass, restore state."""
@@ -185,10 +111,8 @@ class ImeonEnergySensor(CoordinatorEntity[ImeonEnergyCoordinator], SensorEntity,
             "battery_charging": "battery_energy_charged",
             "battery_discharging": "battery_energy_discharged",
         }
-        
-        energy_key = energy_mapping.get(self._sensor_id)
+        energy_key = energy_mapping.get(self._config.sensor_id)
         if energy_key and energy_key in data and data[energy_key] > 0:
-            # Use energy value from API if available (already in kWh)
             return data[energy_key]
 
         # If no energy value from API, integrate power over time
@@ -232,30 +156,20 @@ class ImeonPowerSensor(CoordinatorEntity[ImeonEnergyCoordinator], SensorEntity):
     def __init__(
         self,
         coordinator: ImeonEnergyCoordinator,
-        sensor_id: str,
-        name: str,
-        icon: str,
+        config: Any,
+        device_info: DeviceInfo,
     ) -> None:
         """Initialize the sensor."""
         super().__init__(coordinator)
-        self._sensor_id = sensor_id
+        self._config = config
         serial = coordinator.meta.get("serial") or coordinator.host
-        model = coordinator.meta.get("model") or "Imeon Inverter"
-        sw = coordinator.meta.get("sw_version")
-        self._attr_name = f"{serial} {name}"
-        self._attr_unique_id = f"{serial}_{sensor_id}"
-        self._attr_device_class = SensorDeviceClass.POWER
-        self._attr_state_class = SensorStateClass.MEASUREMENT
-        self._attr_native_unit_of_measurement = UnitOfPower.WATT
-        self._attr_icon = icon
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, serial)},
-            name=f"Imeon Inverter {serial}",
-            manufacturer="Imeon",
-            model=model,
-            sw_version=sw,
-            configuration_url=f"http://{coordinator.host}/",
-        )
+        self._attr_name = config.name
+        self._attr_unique_id = f"{serial}_{config.sensor_id}"
+        self._attr_device_class = config.device_class
+        self._attr_state_class = config.state_class
+        self._attr_native_unit_of_measurement = config.unit
+        self._attr_icon = config.icon
+        self._attr_device_info = device_info
 
     @property
     def native_value(self) -> float | None:
@@ -263,44 +177,4 @@ class ImeonPowerSensor(CoordinatorEntity[ImeonEnergyCoordinator], SensorEntity):
         data = self.coordinator.data
         if not data:
             return None
-        return data.get(self._sensor_id, 0.0)
-
-
-class ImeonBatterySocSensor(CoordinatorEntity[ImeonEnergyCoordinator], SensorEntity):
-    """Sensor for battery state of charge."""
-
-    def __init__(
-        self,
-        coordinator: ImeonEnergyCoordinator,
-        sensor_id: str,
-        name: str,
-        icon: str,
-    ) -> None:
-        """Initialize the sensor."""
-        super().__init__(coordinator)
-        self._sensor_id = sensor_id
-        serial = coordinator.meta.get("serial") or coordinator.host
-        model = coordinator.meta.get("model") or "Imeon Inverter"
-        sw = coordinator.meta.get("sw_version")
-        self._attr_name = f"{serial} {name}"
-        self._attr_unique_id = f"{serial}_{sensor_id}"
-        self._attr_device_class = SensorDeviceClass.BATTERY
-        self._attr_state_class = SensorStateClass.MEASUREMENT
-        self._attr_native_unit_of_measurement = PERCENTAGE
-        self._attr_icon = icon
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, serial)},
-            name=f"Imeon Inverter {serial}",
-            manufacturer="Imeon",
-            model=model,
-            sw_version=sw,
-            configuration_url=f"http://{coordinator.host}/",
-        )
-
-    @property
-    def native_value(self) -> float | None:
-        """Return the state of the sensor."""
-        data = self.coordinator.data
-        if not data:
-            return None
-        return data.get(self._sensor_id, 0.0)
+        return data.get(self._config.sensor_id, 0.0)
