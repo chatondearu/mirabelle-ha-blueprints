@@ -4,9 +4,11 @@ from __future__ import annotations
 import logging
 from datetime import timedelta
 from typing import Any
+from aiohttp import ClientSession
 
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DOMAIN
 
@@ -31,32 +33,49 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             name=DOMAIN,
             update_interval=timedelta(seconds=scan_interval),
         )
-        self.host = host
+        # Normalise host (strip protocol if provided)
+        self.host = host.replace("http://", "").replace("https://", "")
         self.username = username
         self.password = password
-        self._client = None
+        self._client: Any | None = None
+        self._session: ClientSession | None = None
 
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from Imeon Energy API."""
         try:
             if self._client is None:
-                from imeon_inverter_api import ImeonInverterClient
+                from imeon_inverter_api import Client
 
-                self._client = ImeonInverterClient(
-                    host=self.host,
-                    username=self.username,
-                    password=self.password,
-                )
+                # Reuse HA aiohttp session to avoid needless sockets and keep cookies
+                self._session = async_get_clientsession(self.hass)
 
-            # Fetch data from API
-            data = await self.hass.async_add_executor_job(self._client.get_data)
+                # Instantiate client (async API)
+                self._client = Client(self.host, self._session)
+                await self._client.login(self.username, self.password)
+
+            # Fetch data from API (instant snapshot)
+            data = await self._client.get_data_instant("data")
 
             # Transform data to a standardized format
             return self._transform_data(data)
 
         except Exception as err:
-            _LOGGER.exception("Error fetching Imeon Energy data: %s", err)
-            raise UpdateFailed(f"Error communicating with API: {err}") from err
+            # If session expired, try to re-login once
+            _LOGGER.warning("Error fetching Imeon Energy data, retrying login: %s", err)
+            try:
+                if self._client is None:
+                    from imeon_inverter_api import Client
+
+                    self._session = async_get_clientsession(self.hass)
+                    self._client = Client(self.host, self._session)
+
+                await self._client.login(self.username, self.password)
+                data = await self._client.get_data_instant("data")
+                return self._transform_data(data)
+            except Exception as err2:
+                _LOGGER.exception("Error fetching Imeon Energy data after retry: %s", err2)
+                raise UpdateFailed(f"Error communicating with API: {err2}") from err2
+
 
     def _transform_data(self, raw_data: dict[str, Any]) -> dict[str, Any]:
         """Transform raw API data to standardized format for sensors."""

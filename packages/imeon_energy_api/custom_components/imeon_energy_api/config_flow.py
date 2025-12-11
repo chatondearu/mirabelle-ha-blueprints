@@ -9,6 +9,7 @@ from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.const import CONF_HOST, CONF_USERNAME, CONF_PASSWORD
 
 from .const import DOMAIN, DEFAULT_SCAN_INTERVAL, CONF_SCAN_INTERVAL
@@ -19,16 +20,20 @@ _LOGGER = logging.getLogger(__name__)
 async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, Any]:
     """Validate the user input allows us to connect."""
     try:
-        from imeon_inverter_api import ImeonInverterClient
+        from imeon_inverter_api import Client
 
-        client = ImeonInverterClient(
-            host=data[CONF_HOST],
-            username=data[CONF_USERNAME],
-            password=data[CONF_PASSWORD],
-        )
+        # Normalise host (strip protocol if provided)
+        host = data[CONF_HOST].replace("http://", "").replace("https://", "")
 
-        # Test connection by fetching data
-        await hass.async_add_executor_job(client.get_data)
+        # Use HA shared aiohttp session
+        session = async_get_clientsession(hass)
+
+        # Client requires an aiohttp session and uses async methods
+        client = Client(host, session)
+
+        # Login then fetch a quick sample (instant data)
+        await client.login(data[CONF_USERNAME], data[CONF_PASSWORD])
+        await client.get_data_instant("data")
 
         return {"title": f"Imeon Energy ({data[CONF_HOST]})"}
     except Exception as err:

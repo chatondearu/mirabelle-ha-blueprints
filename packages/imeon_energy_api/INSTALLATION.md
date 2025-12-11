@@ -65,7 +65,7 @@
 
 When adding the integration, you'll be asked for:
 
-1. **Host**: The IP address of your Imeon inverter (e.g., `192.168.1.100`)
+1. **Host**: The IP address of your Imeon inverter (no protocol, e.g., `192.168.1.100`)
 2. **Username**: The username for your inverter
 3. **Password**: The password for your inverter
 4. **Update Interval**: How often to poll data from the inverter (default: 30 seconds, range: 10-300 seconds)

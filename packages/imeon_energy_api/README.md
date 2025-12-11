@@ -49,7 +49,7 @@ See [INSTALLATION.md](./INSTALLATION.md) for detailed installation instructions.
 2. Click **Add Integration**
 3. Search for "Imeon Energy API"
 4. Enter your inverter details:
-   - **Host**: IP address of your inverter
+   - **Host**: IP address of your inverter (without protocol, ex: `192.168.1.100`)
    - **Username**: Inverter username
    - **Password**: Inverter password
    - **Update Interval**: How often to poll data (default: 30 seconds)
