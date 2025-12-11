@@ -27,7 +27,7 @@ async def validate_input(hass: HomeAssistant, data: dict[str, Any]) -> dict[str,
         # Use HA shared aiohttp session
         session = async_get_clientsession(hass)
 
-        client = ImeonHttpClient(host, session)
+        client = ImeonHttpClient(host, session, username=data[CONF_USERNAME], password=data[CONF_PASSWORD])
         await client.login(data[CONF_USERNAME], data[CONF_PASSWORD])
         await client.get_data_instant("data")
 

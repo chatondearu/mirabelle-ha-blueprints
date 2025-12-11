@@ -49,7 +49,12 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self._session = async_get_clientsession(self.hass)
 
                 # Instantiate client (async API)
-                self._client = ImeonHttpClient(self.host, self._session)
+                self._client = ImeonHttpClient(
+                    self.host,
+                    self._session,
+                    username=self.username,
+                    password=self.password,
+                )
                 await self._client.login(self.username, self.password)
 
             # Fetch data from API (instant snapshot)
