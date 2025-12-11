@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Tuple
 
 from aiohttp import ClientSession, ClientError, FormData
 
@@ -63,12 +63,7 @@ class ImeonHttpClient:
     async def get_data_instant(self, info_type: str = "data", *, allow_retry: bool = True) -> Dict[str, Any]:
         """Fetch instant data (/data | /scan | /imeon-status)."""
         assert info_type in ("data", "scan", "status"), "info_type must be data|scan|status"
-        urls = {
-            "data": self._url("/data"),
-            "scan": self._url("/scan?scan_time=&single=true"),
-            "status": self._url("/imeon-status"),
-        }
-        url = urls[info_type]
+        url, fallback = self._instant_urls(info_type)
         headers = {
             "Accept": "application/json",
             "User-Agent": "homeassistant-imeon/1.0",
@@ -81,11 +76,30 @@ class ImeonHttpClient:
             ctype = resp.headers.get("Content-Type", "").lower()
             if "application/json" not in ctype:
                 text_preview = (await resp.text())[:200]
+                _LOGGER.debug(
+                    "Unexpected content-type on %s: %s (status %s, preview=%s)",
+                    url,
+                    ctype,
+                    resp.status,
+                    text_preview,
+                )
                 # If HTML/session expired, try to relogin once
                 if allow_retry and self._username and self._password:
                     _LOGGER.debug("Response type %s, retrying login then fetch", ctype)
                     await self.login(self._username, self._password)
-                    return await self.get_data_instant(info_type, allow_retry=False)
+                    # Retry same endpoint once
+                    try:
+                        return await self.get_data_instant(info_type, allow_retry=False)
+                    except ValueError as err:
+                        # If still HTML and a fallback exists (scan), try it once
+                        if info_type == "data" and fallback and allow_retry is False:
+                            _LOGGER.debug("Trying fallback endpoint for data: %s", fallback)
+                            return await self._fetch_fallback(fallback, headers)
+                        raise err
+                # If still not JSON, optionally try fallback for data
+                if info_type == "data" and fallback:
+                    _LOGGER.debug("Trying fallback endpoint for data: %s", fallback)
+                    return await self._fetch_fallback(fallback, headers)
                 raise ValueError(f"Unexpected response type {ctype}: {text_preview}")
             return await resp.json()
 
@@ -99,5 +113,24 @@ class ImeonHttpClient:
             if "application/json" not in ctype:
                 text_preview = (await resp.text())[:200]
                 raise ValueError(f"Unexpected response type {ctype}: {text_preview}")
+            return await resp.json()
+
+    def _instant_urls(self, info_type: str) -> Tuple[str, str | None]:
+        """Return primary and fallback URLs for instant data."""
+        urls = {
+            "data": self._url("/data"),
+            "scan": self._url("/scan?scan_time=&single=true"),
+            "status": self._url("/imeon-status"),
+        }
+        fallback = self._url("/scan?scan_time=&single=true") if info_type == "data" else None
+        return urls[info_type], fallback
+
+    async def _fetch_fallback(self, url: str, headers: Dict[str, str]) -> Dict[str, Any]:
+        """Fetch from a fallback endpoint once (no relogin)."""
+        async with self._session.get(url, timeout=self._timeout, headers=headers) as resp:
+            ctype = resp.headers.get("Content-Type", "").lower()
+            if "application/json" not in ctype:
+                text_preview = (await resp.text())[:200]
+                raise ValueError(f"Fallback also returned non-JSON ({ctype}): {text_preview}")
             return await resp.json()
 
