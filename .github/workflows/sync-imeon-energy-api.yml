@@ -1,0 +1,105 @@
+name: Sync Imeon Energy API to Sub-Repository
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "packages/imeon_energy_api/**"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout monorepo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare Imeon Energy API for sub-repository
+        run: |
+          # Create a temporary directory for the sub-repository structure
+          mkdir -p /tmp/imeon-energy-api-sync
+
+          # Copy custom_components to root (HACS requirement)
+          cp -r packages/imeon_energy_api/custom_components /tmp/imeon-energy-api-sync/
+
+          # Copy hacs.json to root
+          cp packages/imeon_energy_api/hacs.json /tmp/imeon-energy-api-sync/
+
+          # Copy README.md to root
+          cp packages/imeon_energy_api/README.md /tmp/imeon-energy-api-sync/
+
+          # Copy other documentation files
+          if [ -f packages/imeon_energy_api/INSTALLATION.md ]; then
+            cp packages/imeon_energy_api/INSTALLATION.md /tmp/imeon-energy-api-sync/
+          fi
+
+          # Copy LICENSE if it exists at monorepo root
+          if [ -f LICENSE ]; then
+            cp LICENSE /tmp/imeon-energy-api-sync/
+          fi
+
+      - name: Check if sub-repository exists
+        id: check_repo
+        run: |
+          # Check if repository exists using GitHub API
+          response=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "Authorization: token ${{ secrets.RELEASE_TOKEN }}" \
+            https://api.github.com/repos/chatondearu/myrabelle-hacs-imeon-energy)
+
+          if [ "$response" = "200" ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Clone sub-repository (handles empty repo)
+        if: steps.check_repo.outputs.exists == 'true'
+        run: |
+          git clone https://${{ secrets.RELEASE_TOKEN }}@github.com/chatondearu/myrabelle-hacs-imeon-energy.git sub-repo || true
+
+      - name: Initialize sub-repository
+        if: steps.check_repo.outputs.exists == 'false'
+        run: |
+          mkdir -p sub-repo
+          cd sub-repo
+          git init
+          git remote add origin https://${{ secrets.RELEASE_TOKEN }}@github.com/chatondearu/myrabelle-hacs-imeon-energy.git
+          git checkout -b main || git checkout main
+
+      - name: Sync files to sub-repository
+        run: |
+          cd sub-repo
+
+          # Remove all files except .git
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} + 2>/dev/null || true
+
+          # Copy prepared files
+          cp -r /tmp/imeon-energy-api-sync/* .
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Commit and push changes
+        run: |
+          cd sub-repo
+
+          # Ensure we're on main branch
+          git checkout main 2>/dev/null || git checkout -b main
+
+          # Check if there are changes
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "chore: sync from monorepo [skip ci]" || echo "No changes to commit"
+            
+            # Push to main branch
+            git push origin main || git push -u origin main
+          else
+            echo "No changes to commit"
+          fi
