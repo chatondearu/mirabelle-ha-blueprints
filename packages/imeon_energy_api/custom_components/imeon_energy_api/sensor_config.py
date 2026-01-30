@@ -25,15 +25,10 @@ class SensorConfig:
 
 # API field mappings
 API_FIELD_GRID_POWER = "em_power"
-API_FIELD_GRID_TO_BATTERY = "grid_power_r"
-API_FIELD_SOLAR_POWER = "pv_input_power"  # Will be summed
-API_FIELD_BATTERY_POWER = "battery_power"
-API_FIELD_BATTERY_CHARGING = "ac_input_total_active_power"
-API_FIELD_BATTERY_DISCHARGING = "ac_output_total_active_power"
-API_FIELD_BATTERY_CURRENT = "battery_current"
-API_FIELD_BATTERY_VOLTAGE = "p_battery_voltage"
-API_FIELD_BATTERY_SOC = "battery_soc"
+API_FIELD_BATTERY_POWER = "grid_power_r"
+API_FIELD_SOLAR_POWER = "pv_input_power"  # Will be summed from API_FIELD_PV_INPUTS
 API_FIELD_PV_INPUTS = ["pv_input_power1", "pv_input_power2", "pv_input_power3"]
+API_FIELD_BATTERY_SOC = "battery_soc"
 
 # Sensor definitions
 SENSORS: list[SensorConfig] = [
@@ -121,6 +116,38 @@ SENSORS: list[SensorConfig] = [
         unit=UnitOfPower.WATT,
         icon="mdi:home-lightning-bolt",
         calculation="sum_powers",
+    ),
+    SensorConfig(
+        sensor_id="grid_to_home",
+        name="Grid to Home",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit=UnitOfPower.WATT,
+        icon="mdi:transmission-tower",
+    ),
+    SensorConfig(
+        sensor_id="solar_to_home",
+        name="Solar to Home",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit=UnitOfPower.WATT,
+        icon="mdi:solar-power",
+    ),
+    SensorConfig(
+        sensor_id="solar_to_battery",
+        name="Solar to Battery",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit=UnitOfPower.WATT,
+        icon="mdi:battery-charging",
+    ),
+    SensorConfig(
+        sensor_id="grid_to_battery",
+        name="Grid to Battery",
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        unit=UnitOfPower.WATT,
+        icon="mdi:battery-charging",
     ),
     # Battery state of charge (%)
     SensorConfig(

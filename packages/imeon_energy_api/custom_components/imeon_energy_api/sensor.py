@@ -58,6 +58,11 @@ async def async_setup_entry(
             ImeonPowerSensor(coordinator, config, device_info)
         )
 
+    # Create battery state sensor
+    entities.append(
+        ImeonBatteryStateSensor(coordinator, device_info)
+    )
+
     async_add_entities(entities)
 
 
@@ -178,3 +183,28 @@ class ImeonPowerSensor(CoordinatorEntity[ImeonEnergyCoordinator], SensorEntity):
         if not data:
             return None
         return data.get(self._config.sensor_id, 0.0)
+
+
+class ImeonBatteryStateSensor(CoordinatorEntity[ImeonEnergyCoordinator], SensorEntity):
+    """Sensor for battery state (charging/discharging/idle)."""
+
+    def __init__(
+        self,
+        coordinator: ImeonEnergyCoordinator,
+        device_info: DeviceInfo,
+    ) -> None:
+        """Initialize the sensor."""
+        super().__init__(coordinator)
+        serial = coordinator.meta.get("serial") or coordinator.host
+        self._attr_name = "Battery State"
+        self._attr_unique_id = f"{serial}_battery_state"
+        self._attr_icon = "mdi:battery"
+        self._attr_device_info = device_info
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the state of the sensor."""
+        data = self.coordinator.data
+        if not data:
+            return None
+        return data.get("battery_state", "unknown")

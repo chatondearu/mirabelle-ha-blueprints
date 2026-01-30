@@ -15,10 +15,10 @@ from .const import DOMAIN
 from .client import ImeonHttpClient
 from .sensor_config import (
     API_FIELD_GRID_POWER,
+    API_FIELD_BATTERY_POWER,
+    API_FIELD_SOLAR_POWER,
     API_FIELD_BATTERY_SOC,
     API_FIELD_PV_INPUTS,
-    API_FIELD_BATTERY_CHARGING,
-    API_FIELD_BATTERY_DISCHARGING,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -120,35 +120,55 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         grid_power = float(payload.get(API_FIELD_GRID_POWER) or 0.0)
         solar_power = float(self._sum_pv_inputs(payload) or 0.0)
-        
+
         # Use AC fields for battery power (more accurate)
         # Fallback to estimation if AC fields are not available
-        if API_FIELD_BATTERY_CHARGING in payload or API_FIELD_BATTERY_DISCHARGING in payload:
-            battery_charging = float(payload.get(API_FIELD_BATTERY_CHARGING) or 0.0)
-            battery_discharging = float(payload.get(API_FIELD_BATTERY_DISCHARGING) or 0.0)
-            # battery_power: positive = discharging, negative = charging
-            battery_power = battery_discharging - battery_charging
+        if API_FIELD_BATTERY_POWER in payload:
+            # battery_power: negative = charging (receiving), positive = discharging (providing)
+            battery_power = float(payload.get(API_FIELD_BATTERY_POWER) or 0.0)
         else:
             # Fallback: estimate from current * voltage
             estimated = self._estimate_battery_power(payload)
             if estimated is not None:
                 battery_power = float(estimated)
-                battery_charging = battery_power if battery_power > 0 else 0.0
-                battery_discharging = abs(battery_power) if battery_power < 0 else 0.0
             else:
                 battery_power = 0.0
-                battery_charging = 0.0
-                battery_discharging = 0.0
+
+        battery_charging = abs(battery_power) if battery_power < 0 else 0.0
+        battery_discharging = battery_power if battery_power > 0 else 0.0
 
         battery_soc = float(payload.get(API_FIELD_BATTERY_SOC) or 0.0)
-        home_power = grid_power + solar_power + battery_power
+
+        # Solar is used first for battery charging; rest of charging comes from grid
+        solar_to_battery = min(solar_power, battery_charging)
+        grid_to_battery = (
+            max(0.0, battery_charging - solar_to_battery)
+            if grid_power > 0
+            else 0.0
+        )
+        grid_to_home = grid_power - grid_to_battery
+        solar_to_home = solar_power - solar_to_battery
+        home_power = grid_to_home + solar_to_home + battery_discharging
+
+        # Determine battery state
+        if battery_charging > battery_discharging:
+            battery_state = "charging"
+        elif battery_discharging > battery_charging:
+            battery_state = "discharging"
+        else:
+            battery_state = "idle"
 
         transformed = {
             "grid_power": grid_power,
             "solar_power": solar_power,
             "battery_power": battery_power,
             "home_power": home_power,
+            "grid_to_home": grid_to_home,
+            "solar_to_home": solar_to_home,
+            "solar_to_battery": solar_to_battery,
+            "grid_to_battery": grid_to_battery,
             "battery_soc": battery_soc,
+            "battery_state": battery_state,
             "grid_energy_import": 0.0,
             "grid_energy_export": 0.0,
             "solar_energy": 0.0,
@@ -157,6 +177,7 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         }
 
         # Calculate grid consumption/return from power
+        # grid_power (em_power) is net: positive = importing, negative = exporting
         if grid_power > 0:
             transformed["grid_consumption_power"] = grid_power
             transformed["grid_return_power"] = 0.0
