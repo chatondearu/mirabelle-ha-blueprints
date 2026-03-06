@@ -99,12 +99,6 @@ sequence:
       volume_level_before: "{{ state_attr(final_player, 'volume_level') | float }}"
       adjusted_volume: "{{ [volume_announce - volume_reduction, 0] | max }}"
   
-  - service: media_player.volume_set
-    target:
-      entity_id: "{{ final_player }}"
-    data:
-      volume_level: "{{ adjusted_volume }}"
-  
   # Play the media
   - service: media_player.play_media
     target:
@@ -113,6 +107,17 @@ sequence:
       media_content_id: "{{ final_sound }}"
       media_content_type: music
       announce: true
+
+  - delay:
+      hours: 0
+      minutes: 0
+      seconds: 0
+      milliseconds: 250
+  - service: media_player.volume_set
+    target:
+      entity_id: "{{ final_player }}"
+    data:
+      volume_level: "{{ adjusted_volume }}"
   
   # Wait for playback to finish
   - wait_template: "{{ states(final_player) != 'playing' }}"
