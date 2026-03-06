@@ -49,7 +49,7 @@ blueprint:
         volume_reduction_input:
           name: 'Sound Reduction'
           description: 'How much to reduce the volume for the announcement (0-1)'
-          default: 0.2
+          default: 0
           selector:
             number:
               min: 0.0
@@ -178,7 +178,7 @@ actions:
     data:
       media_player: !input player_input
       sound_file: !input sound_file_input
-      announce_volume: !input volume_announce_input
+      volume_announce: !input volume_announce_input
       volume_reduction: !input volume_reduction_input
       wait_time: !input wait_time_input
 

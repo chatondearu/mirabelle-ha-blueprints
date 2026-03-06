@@ -33,7 +33,7 @@ blueprint:
     volume_reduction_input:
       name: Volume Reduction
       description: How much to reduce the volume for the announcement (0-1)
-      default: 0.2
+      default: 0
       selector:
         number:
           min: 0.0
