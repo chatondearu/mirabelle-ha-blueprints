@@ -198,6 +198,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
             "last_direction": self._last_direction,
             "travel_time": self._travel_time,
             "pulse_gap": self._pulse_gap,
+            "switch_entity": self._switch_entity,
         }
 
     @property
