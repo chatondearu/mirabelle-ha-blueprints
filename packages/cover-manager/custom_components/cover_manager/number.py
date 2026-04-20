@@ -25,12 +25,14 @@ async def async_setup_entry(
         CoverManagerTravelTime(config_entry, cover),
         CoverManagerPosition(config_entry, cover),
         CoverManagerPulseGap(config_entry, cover),
+        CoverManagerAccelerationDuration(config_entry, cover),
     ]
     
     cover.register_sub_entities(
         travel=entities[0],
         position=entities[1],
         pulse_gap=entities[2],
+        acceleration=entities[3],
     )
     
     async_add_entities(entities)
@@ -118,3 +120,28 @@ class CoverManagerPulseGap(NumberEntity):
 
     async def async_set_native_value(self, value: float) -> None:
         self._cover.update_pulse_gap(value)
+
+
+class CoverManagerAccelerationDuration(NumberEntity):
+    """Number entity to adjust acceleration duration at startup."""
+
+    _attr_native_min_value = 0.0
+    _attr_native_max_value = 30.0
+    _attr_native_step = 0.1
+    _attr_native_unit_of_measurement = "s"
+    _attr_mode = NumberMode.BOX
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+
+    def __init__(self, entry: ConfigEntry, cover: CoverManagerCover) -> None:
+        self._cover = cover
+        self._attr_unique_id = f"{entry.entry_id}_acceleration_duration"
+        self._attr_name = "Acceleration Duration"
+        self._attr_device_info = cover.device_info
+
+    @property
+    def native_value(self) -> float | None:
+        return float(self._cover._acceleration_duration)  # noqa: SLF001
+
+    async def async_set_native_value(self, value: float) -> None:
+        self._cover.update_acceleration_duration(value)

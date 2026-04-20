@@ -43,6 +43,7 @@ class CoverManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         "travel_time": user_input["travel_time"],
                         "initial_position": user_input["initial_position"],
                         "pulse_gap": user_input.get("pulse_gap", 0.8),
+                        "acceleration_duration": user_input.get("acceleration_duration", 0.0),
                     },
                 )
             except InvalidSwitchEntity:
@@ -64,6 +65,9 @@ class CoverManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ),
                     vol.Optional("pulse_gap", default=0.8): selector.NumberSelector(
                         selector.NumberSelectorConfig(min=0.1, max=5.0, step=0.1, mode="box", unit_of_measurement="s")
+                    ),
+                    vol.Optional("acceleration_duration", default=0.0): selector.NumberSelector(
+                        selector.NumberSelectorConfig(min=0.0, max=30.0, step=0.1, mode="box", unit_of_measurement="s")
                     ),
                 }
             ),
@@ -102,7 +106,10 @@ class CoverManagerOptionsFlow(config_entries.OptionsFlow):
 
                 return self.async_create_entry(
                     title="",
-                    data={"switch_entity": switch_entity},
+                    data={
+                        "switch_entity": switch_entity,
+                        "acceleration_duration": user_input.get("acceleration_duration", 0.0),
+                    },
                 )
             except InvalidSwitchEntity:
                 errors["base"] = "invalid_switch_entity"
@@ -111,6 +118,10 @@ class CoverManagerOptionsFlow(config_entries.OptionsFlow):
             "switch_entity",
             self._config_entry.data["switch_entity"],
         )
+        current_acceleration_duration = self._config_entry.options.get(
+            "acceleration_duration",
+            self._config_entry.data.get("acceleration_duration", 0.0),
+        )
 
         return self.async_show_form(
             step_id="init",
@@ -118,6 +129,18 @@ class CoverManagerOptionsFlow(config_entries.OptionsFlow):
                 {
                     vol.Required("switch_entity", default=current_switch): selector.EntitySelector(
                         selector.EntitySelectorConfig(domain="switch")
+                    ),
+                    vol.Optional(
+                        "acceleration_duration",
+                        default=current_acceleration_duration,
+                    ): selector.NumberSelector(
+                        selector.NumberSelectorConfig(
+                            min=0.0,
+                            max=30.0,
+                            step=0.1,
+                            mode="box",
+                            unit_of_measurement="s",
+                        )
                     ),
                 }
             ),

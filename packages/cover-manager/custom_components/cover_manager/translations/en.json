@@ -7,7 +7,8 @@
         "data": {
           "name": "Cover Name",
           "switch_entity": "Switch Entity",
-          "travel_time": "Travel Time (seconds)"
+          "travel_time": "Travel Time (seconds)",
+          "acceleration_duration": "Acceleration Duration (seconds)"
         }
       }
     },
@@ -26,7 +27,8 @@
         "title": "Cover Manager options",
         "description": "Update your cover manager configuration",
         "data": {
-          "switch_entity": "Switch Entity"
+          "switch_entity": "Switch Entity",
+          "acceleration_duration": "Acceleration Duration (seconds)"
         }
       }
     },

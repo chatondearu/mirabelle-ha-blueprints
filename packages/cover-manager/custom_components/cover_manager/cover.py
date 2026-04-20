@@ -60,6 +60,14 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         self._travel_time = max(1, int(config_entry.data["travel_time"]))
         self._initial_position = self._clamp_position(float(config_entry.data.get("initial_position", 0)))
         self._pulse_gap = max(0.1, min(5.0, float(config_entry.data.get("pulse_gap", 0.8))))
+        self._acceleration_duration = self._normalize_acceleration_duration(
+            float(
+                config_entry.options.get(
+                    "acceleration_duration",
+                    config_entry.data.get("acceleration_duration", 0.0),
+                )
+            )
+        )
         self._position: float = float(self._initial_position)
         self._direction: str = DIRECTION_IDLE
         self._last_direction: str = DIRECTION_CLOSING
@@ -74,6 +82,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         self._direction_entity: Optional[Any] = None
         self._lastdirection_entity: Optional[Any] = None
         self._pulsegap_entity: Optional[Any] = None
+        self._acceleration_entity: Optional[Any] = None
         self._attr_supported_features = (
             CoverEntityFeature.OPEN
             | CoverEntityFeature.CLOSE
@@ -109,10 +118,40 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         if start_time is None:
             return start_pos
         elapsed = time.monotonic() - start_time
-        delta = (elapsed / self._travel_time) * 100
+        delta = self._distance_fraction_for_elapsed(elapsed, float(self._travel_time)) * 100
         if direction == DIRECTION_OPENING:
             return self._clamp_position(start_pos + delta)
         return self._clamp_position(start_pos - delta)
+
+    def _normalize_acceleration_duration(self, value: float, duration: Optional[float] = None) -> float:
+        """Clamp acceleration duration for a given movement duration."""
+        movement_duration = float(duration if duration is not None else self._travel_time)
+        if movement_duration <= 0:
+            return 0.0
+        return max(0.0, min(float(value), movement_duration * 0.9))
+
+    def _distance_fraction_for_elapsed(self, elapsed: float, duration: float) -> float:
+        """Calculate movement progress fraction with acceleration ramp."""
+        if duration <= 0:
+            return 1.0
+
+        elapsed_clamped = max(0.0, min(float(elapsed), duration))
+        acceleration = self._normalize_acceleration_duration(self._acceleration_duration, duration)
+
+        if acceleration <= 0:
+            return min(1.0, elapsed_clamped / duration)
+
+        ramp_distance = acceleration / 2.0
+        total_distance = duration - ramp_distance
+        if total_distance <= 0:
+            return min(1.0, elapsed_clamped / duration)
+
+        if elapsed_clamped <= acceleration:
+            distance = (elapsed_clamped * elapsed_clamped) / (2.0 * acceleration)
+        else:
+            distance = ramp_distance + (elapsed_clamped - acceleration)
+
+        return max(0.0, min(1.0, distance / total_distance))
 
     def _calculate_position_from_progress(
         self, direction: str, start_pos: float, remaining: float, progress: float
@@ -160,6 +199,10 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
                 self._travel_time = max(1, int(last_state.attributes["travel_time"]))
             if "pulse_gap" in last_state.attributes:
                 self._pulse_gap = max(0.1, min(5.0, float(last_state.attributes["pulse_gap"])))
+            if "acceleration_duration" in last_state.attributes:
+                self._acceleration_duration = self._normalize_acceleration_duration(
+                    float(last_state.attributes["acceleration_duration"])
+                )
         self._listener_remove = async_track_state_change_event(
             self.hass, [self._switch_entity], self._handle_switch_event
         )
@@ -198,6 +241,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
             "last_direction": self._last_direction,
             "travel_time": self._travel_time,
             "pulse_gap": self._pulse_gap,
+            "acceleration_duration": round(self._acceleration_duration, 2),
             "switch_entity": self._switch_entity,
         }
 
@@ -387,6 +431,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         direction: Any = None,
         last_direction: Any = None,
         pulse_gap: Any = None,
+        acceleration: Any = None,
     ) -> None:
         if travel is not None:
             self._traveltime_entity = travel
@@ -398,6 +443,8 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
             self._lastdirection_entity = last_direction
         if pulse_gap is not None:
             self._pulsegap_entity = pulse_gap
+        if acceleration is not None:
+            self._acceleration_entity = acceleration
 
     def _notify_dynamic_entities(self) -> None:
         """Notify entities that change during cover operation (position, direction, last_direction)."""
@@ -406,15 +453,18 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
                 ent.schedule_update_ha_state()
     
     def _notify_static_entities(self) -> None:
-        """Notify entities that only change when user modifies them (travel_time, pulse_gap)."""
-        for ent in (self._traveltime_entity, self._pulsegap_entity):
+        """Notify entities that only change when user modifies configuration."""
+        for ent in (self._traveltime_entity, self._pulsegap_entity, self._acceleration_entity):
             if ent:
                 ent.schedule_update_ha_state()
 
     def update_travel_time(self, new_time: int) -> None:
         self._travel_time = max(1, int(new_time))
+        self._acceleration_duration = self._normalize_acceleration_duration(self._acceleration_duration)
         if self._traveltime_entity:
             self._traveltime_entity.schedule_update_ha_state()
+        if self._acceleration_entity:
+            self._acceleration_entity.schedule_update_ha_state()
 
     def update_position(self, new_pos: float) -> None:
         self._position = self._clamp_position(new_pos)
@@ -440,6 +490,11 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         self._pulse_gap = max(0.1, min(5.0, float(new_gap)))
         if self._pulsegap_entity:
             self._pulsegap_entity.schedule_update_ha_state()
+
+    def update_acceleration_duration(self, new_duration: float) -> None:
+        self._acceleration_duration = self._normalize_acceleration_duration(float(new_duration))
+        if self._acceleration_entity:
+            self._acceleration_entity.schedule_update_ha_state()
 
     async def _go_direction(self, direction: str, target: Optional[int] = None, skip_stop_pulse: bool = False) -> None:
         """
@@ -514,7 +569,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
                 total_duration = self._travel_time * (remaining / 100)
                 while self._direction == direction:
                     elapsed = time.monotonic() - start_time
-                    progress = min(1.0, elapsed / total_duration)
+                    progress = self._distance_fraction_for_elapsed(elapsed, total_duration)
                     self._position = self._calculate_position_from_progress(
                         direction, self._start_position, remaining, progress
                     )
