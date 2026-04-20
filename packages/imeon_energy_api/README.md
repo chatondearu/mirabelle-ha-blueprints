@@ -7,6 +7,7 @@ A Home Assistant custom integration to monitor your Imeon Energy inverter, provi
 This custom component is part of a monorepo structure. It is automatically synced to a dedicated sub-repository for HACS installation.
 
 **Use the dedicated repository for HACS:**
+
 - Repository: `https://github.com/chatondearu/myrabelle-hacs-imeon-energy` (to be created)
 - This repository is automatically synced from the monorepo
 
@@ -49,10 +50,10 @@ See [INSTALLATION.md](./INSTALLATION.md) for detailed installation instructions.
 2. Click **Add Integration**
 3. Search for "Imeon Energy API"
 4. Enter your inverter details:
-   - **Host**: IP address of your inverter (without protocol, ex: `192.168.1.100`)
-   - **Username**: Inverter username
-   - **Password**: Inverter password
-   - **Update Interval**: How often to poll data (default: 30 seconds)
+  - **Host**: IP address of your inverter (without protocol, ex: `192.168.1.100`)
+  - **Username**: Inverter username
+  - **Password**: Inverter password
+  - **Update Interval**: How often to poll data (default: 30 seconds)
 
 ## Sensors Created
 
@@ -86,11 +87,11 @@ After installation, configure your Energy Dashboard:
 1. Go to **Settings** > **Dashboards** > **Energy**
 2. Click **Configure**
 3. Select your sensors:
-   - **Grid Consumption**: `sensor.<host>_grid_consumption`
-   - **Grid Return**: `sensor.<host>_grid_return`
-   - **Solar Production**: `sensor.<host>_solar_production`
-   - **Battery Charging**: `sensor.<host>_battery_charging`
-   - **Battery Discharging**: `sensor.<host>_battery_discharging`
+  - **Grid Consumption**: `sensor.<host>_grid_consumption`
+  - **Grid Return**: `sensor.<host>_grid_return`
+  - **Solar Production**: `sensor.<host>_solar_production`
+  - **Battery Charging**: `sensor.<host>_battery_charging`
+  - **Battery Discharging**: `sensor.<host>_battery_discharging`
 
 ## Repository Structure
 
@@ -141,8 +142,8 @@ This component is part of the `mirabelle-ha-blueprints` monorepo.
 
 ## Sources
 
-- Official API package: https://github.com/Imeon-Inverters-for-Home-Assistant/inverter-api
-- Home Assistant core integration (reference): https://github.com/home-assistant/core/tree/dev/homeassistant/components/imeon_inverter
+- Official API package: [https://github.com/Imeon-Inverters-for-Home-Assistant/inverter-api](https://github.com/Imeon-Inverters-for-Home-Assistant/inverter-api)
+- Home Assistant core integration (reference): [https://github.com/home-assistant/core/tree/dev/homeassistant/components/imeon_inverter](https://github.com/home-assistant/core/tree/dev/homeassistant/components/imeon_inverter)
 
 ## License
 
