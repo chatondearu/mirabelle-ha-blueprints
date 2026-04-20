@@ -496,6 +496,22 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         if self._acceleration_entity:
             self._acceleration_entity.schedule_update_ha_state()
 
+    def reset_position_state(self) -> None:
+        """Reset internal position state to the configured initial position."""
+        if self._update_task:
+            self._update_task.cancel()
+            self._update_task = None
+        self._direction = DIRECTION_IDLE
+        self._movement_start_time = None
+        self._position = float(self._initial_position)
+        self._start_position = self._position
+        if self._position <= POSITION_MIN:
+            self._last_direction = DIRECTION_CLOSING
+        elif self._position >= POSITION_MAX:
+            self._last_direction = DIRECTION_OPENING
+        self._last_limit_stop_time = None
+        self._update_and_notify()
+
     async def _go_direction(self, direction: str, target: Optional[int] = None, skip_stop_pulse: bool = False) -> None:
         """
         Handle direction change with impulse switch.
