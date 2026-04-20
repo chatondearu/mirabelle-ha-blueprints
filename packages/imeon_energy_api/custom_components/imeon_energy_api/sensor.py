@@ -15,7 +15,12 @@ from homeassistant.util import dt as dt_util
 
 from .const import DOMAIN
 from .coordinator import ImeonEnergyCoordinator
-from .sensor_config import SENSORS, get_energy_sensors, get_power_sensors
+from .sensor_config import (
+    SENSORS,
+    get_energy_sensors,
+    get_power_sensors,
+    get_sensor_config,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -56,6 +61,13 @@ async def async_setup_entry(
     for config in get_power_sensors():
         entities.append(
             ImeonPowerSensor(coordinator, config, device_info)
+        )
+
+    # Create battery state-of-charge sensor (device_class=battery)
+    battery_soc_config = get_sensor_config("battery_soc")
+    if battery_soc_config is not None:
+        entities.append(
+            ImeonPowerSensor(coordinator, battery_soc_config, device_info)
         )
 
     # Create battery state sensor
