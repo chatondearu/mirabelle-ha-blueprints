@@ -53,7 +53,10 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         self.config_entry = config_entry
         self._attr_name = config_entry.data["name"]
         self._attr_unique_id = config_entry.entry_id
-        self._switch_entity = config_entry.data["switch_entity"]
+        self._switch_entity = config_entry.options.get(
+            "switch_entity",
+            config_entry.data["switch_entity"],
+        )
         self._travel_time = max(1, int(config_entry.data["travel_time"]))
         self._initial_position = self._clamp_position(float(config_entry.data.get("initial_position", 0)))
         self._pulse_gap = max(0.1, min(5.0, float(config_entry.data.get("pulse_gap", 0.8))))

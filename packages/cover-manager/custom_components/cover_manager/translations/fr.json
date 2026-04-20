@@ -13,10 +13,25 @@
     },
     "error": {
       "invalid_switch": "Entité switch invalide",
+      "invalid_switch_entity": "Entité switch invalide",
       "invalid_travel_time": "Temps de trajet invalide"
     },
     "abort": {
       "already_configured": "Ce volet est déjà configuré"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options du Gestionnaire de Volet",
+        "description": "Modifiez la configuration de votre gestionnaire de volet",
+        "data": {
+          "switch_entity": "Entité Switch"
+        }
+      }
+    },
+    "error": {
+      "invalid_switch_entity": "Entité switch invalide"
     }
   }
 }

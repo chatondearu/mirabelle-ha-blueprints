@@ -13,10 +13,25 @@
     },
     "error": {
       "invalid_switch": "Invalid switch entity",
+      "invalid_switch_entity": "Invalid switch entity",
       "invalid_travel_time": "Invalid travel time"
     },
     "abort": {
       "already_configured": "This cover is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Cover Manager options",
+        "description": "Update your cover manager configuration",
+        "data": {
+          "switch_entity": "Switch Entity"
+        }
+      }
+    },
+    "error": {
+      "invalid_switch_entity": "Invalid switch entity"
     }
   }
 }

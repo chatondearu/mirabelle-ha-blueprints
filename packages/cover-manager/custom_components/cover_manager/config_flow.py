@@ -4,7 +4,7 @@ from __future__ import annotations
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.core import HomeAssistant
+from homeassistant.core import callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import selector
 
@@ -64,6 +64,60 @@ class CoverManagerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ),
                     vol.Optional("pulse_gap", default=0.8): selector.NumberSelector(
                         selector.NumberSelectorConfig(min=0.1, max=5.0, step=0.1, mode="box", unit_of_measurement="s")
+                    ),
+                }
+            ),
+            errors=errors,
+        )
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Create the options flow."""
+        return CoverManagerOptionsFlow(config_entry)
+
+
+class CoverManagerOptionsFlow(config_entries.OptionsFlow):
+    """Handle options flow for Cover Manager."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        self._config_entry = config_entry
+
+    async def async_step_init(self, user_input=None):
+        """Manage integration options."""
+        errors = {}
+
+        if user_input is not None:
+            try:
+                switch_entity = user_input["switch_entity"]
+                state = self.hass.states.get(switch_entity)
+                if not state:
+                    raise InvalidSwitchEntity
+
+                entity_domain = switch_entity.split(".")[0] if "." in switch_entity else None
+                if entity_domain != "switch":
+                    raise InvalidSwitchEntity
+
+                return self.async_create_entry(
+                    title="",
+                    data={"switch_entity": switch_entity},
+                )
+            except InvalidSwitchEntity:
+                errors["base"] = "invalid_switch_entity"
+
+        current_switch = self._config_entry.options.get(
+            "switch_entity",
+            self._config_entry.data["switch_entity"],
+        )
+
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("switch_entity", default=current_switch): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="switch")
                     ),
                 }
             ),
