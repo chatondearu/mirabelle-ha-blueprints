@@ -34,7 +34,10 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 - One indoor temperature sensor
 - One wind speed sensor
 - One or more `person` entities for home presence detection
-- One awake entity (`input_boolean` or `binary_sensor`)
+- Optional awake source:
+  - one awake entity (`input_boolean` or `binary_sensor`), or
+  - one schedule helper (`schedule`)
+  - if none is configured, awake defaults to daylight (`sun.sun` above horizon)
 
 ## Configuration
 
@@ -42,7 +45,9 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 
 - **All Managed Covers**: all covers controlled by the automation
 - **Persons At Home**: select one or more persons; automation runs if at least one is `home`
-- **Awake Entity**: indicates if someone is awake
+- **Awake Entity (Optional)**: primary awake source when set
+- **Awake Schedule (Optional)**: used when Awake Entity is empty
+- **Fallback awake mode**: if both are empty, daylight is used (`sun.sun` above horizon)
 - **Outdoor Temperature Sensor**
 - **Indoor Temperature Sensor**
 - **Wind Speed Sensor**
@@ -85,7 +90,7 @@ Each value is selected from key positions (`0`, `25`, `50`, `75`, `100`):
 The automation reevaluates on:
 
 - Presence changes
-- Awake state changes
+- Awake source changes (entity/schedule) trigger an immediate reevaluation
 - Indoor/outdoor temperature changes
 - Wind speed changes
 - `sun.sun` state changes
@@ -103,6 +108,12 @@ Decision order:
 5. **Fallback**:
    - winter daylight: `Winter Day Position (No Solar Gains Needed)`
    - otherwise: `Neutral Position`
+
+Awake gating priority:
+
+1. If **Awake Entity** is set, it is used (`on`/`home` = awake)
+2. Else if **Awake Schedule** is set, it is used (`on` = awake)
+3. Else daylight is used (`sun.sun` above horizon = awake)
 
 ## Orientation Mapping
 
@@ -135,7 +146,9 @@ The sun-facing facade is inferred using `sun.sun` azimuth:
 
 - **No movement**:
   - check selected persons (at least one must be `home`)
-  - check awake state (`on` or `home`)
+  - if Awake Entity is set, check awake state (`on` or `home`)
+  - if Awake Schedule is set, check schedule state (`on`)
+  - if none is set, behavior follows daylight
 - **Unexpected facade selection**:
   - verify facade groups and current `sun.sun` azimuth
 - **Position service errors**:

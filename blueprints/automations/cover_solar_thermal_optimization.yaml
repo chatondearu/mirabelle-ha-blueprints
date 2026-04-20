@@ -6,6 +6,7 @@ blueprint:
     Automatically open or close covers based on sun, outdoor temperature, and wind,
     with seasonal behavior (summer/winter) to help optimize indoor temperature.
     Actions run only when someone is home and awake.
+    Awake can be driven by an entity, a schedule, or fallback to daylight.
     Uses key positions (0/25/50/75/100) instead of only full open/close.
   domain: automation
   input:
@@ -63,14 +64,27 @@ blueprint:
           domain: person
           multiple: true
     awake_entity:
-      name: Awake Entity
+      name: Awake Entity (Optional)
       description: >
-        Entity that indicates someone is awake (typically input_boolean or binary_sensor).
+        Optional entity that indicates someone is awake
+        (typically input_boolean or binary_sensor).
+        If empty and no schedule is set, daylight is used as awake fallback.
+      default: ""
       selector:
         entity:
           domain:
             - input_boolean
             - binary_sensor
+    awake_schedule:
+      name: Awake Schedule (Optional)
+      description: >
+        Optional schedule helper to define awake hours.
+        Used only when Awake Entity is not set.
+        If both are empty, daylight is used as awake fallback.
+      default: ""
+      selector:
+        entity:
+          domain: schedule
     outdoor_temperature:
       name: Outdoor Temperature Sensor
       description: Outdoor temperature sensor in °C.
@@ -244,11 +258,22 @@ blueprint:
 
 mode: single
 
+trigger_variables:
+  awake_entity_input: !input awake_entity
+  awake_schedule_input: !input awake_schedule
+
 trigger:
   - platform: state
     entity_id: !input presence_persons
-  - platform: state
-    entity_id: !input awake_entity
+  - platform: template
+    value_template: >
+      {% if awake_entity_input | length > 0 %}
+        {{ states(awake_entity_input) }}
+      {% elif awake_schedule_input | length > 0 %}
+        {{ states(awake_schedule_input) }}
+      {% else %}
+        {{ is_state('sun.sun', 'above_horizon') }}
+      {% endif %}
   - platform: state
     entity_id: !input outdoor_temperature
   - platform: state
@@ -267,7 +292,8 @@ variables:
   south_cover_entities: !input south_covers
   west_cover_entities: !input west_covers
   presence_person_entities: !input presence_persons
-  awake_entity: !input awake_entity
+  awake_entity_input: !input awake_entity
+  awake_schedule_input: !input awake_schedule
   outdoor_temperature_entity: !input outdoor_temperature
   indoor_temperature_entity: !input indoor_temperature
   wind_speed_entity: !input wind_speed
@@ -298,8 +324,17 @@ variables:
       | list
       | count > 0
     }}
-  is_awake: "{{ states(awake_entity) in ['on', 'home'] }}"
   is_daylight: "{{ is_state('sun.sun', 'above_horizon') }}"
+  has_awake_entity: "{{ awake_entity_input is string and awake_entity_input | length > 0 }}"
+  has_awake_schedule: "{{ awake_schedule_input is string and awake_schedule_input | length > 0 }}"
+  is_awake: >
+    {% if has_awake_entity %}
+      {{ states(awake_entity_input) in ['on', 'home'] }}
+    {% elif has_awake_schedule %}
+      {{ is_state(awake_schedule_input, 'on') }}
+    {% else %}
+      {{ is_daylight }}
+    {% endif %}
   sun_azimuth: "{{ state_attr('sun.sun', 'azimuth') | float(0) }}"
   has_oriented_groups: >
     {{
