@@ -82,6 +82,20 @@ The workflow triggers when:
 - Changes are pushed to `main` branch in `packages/{package-name}/**`
 - Manual trigger via `workflow_dispatch`
 
+### Release Trigger (new)
+
+Sub-repository releases are driven by dedicated monorepo tags:
+
+- `cover-manager-vX.Y.Z` → `chatondearu/myrabelle-hacs-cover-manager` release `vX.Y.Z`
+- `imeon-energy-api-vX.Y.Z` → `chatondearu/myrabelle-hacs-imeon-energy` release `vX.Y.Z`
+
+The `release-hacs-subrepos.yml` workflow will:
+
+1. Prepare package files from `packages/{package}/`
+2. Sync content to the sub-repository `main` branch
+3. Create/push the corresponding tag in the sub-repository
+4. Create a GitHub Release in the sub-repository
+
 ### Process
 
 1. **Checkout monorepo**: Gets the latest code
@@ -181,13 +195,12 @@ Once synced, the sub-repository can be added to HACS:
 2. **Test locally** before pushing to ensure structure is correct
 3. **Monitor workflows** after major changes
 4. **Keep sub-repos in sync** - don't edit them directly
-5. **Use tags/releases** in sub-repos for versioning (can be automated)
+5. **Use package-scoped tags** in monorepo (`{package}-vX.Y.Z`) to publish sub-repository releases
 
 ## Future Enhancements
 
 Potential improvements:
-- [ ] Automatic tag creation in sub-repos from monorepo tags
-- [ ] Release creation in sub-repos
-- [ ] Multi-package sync in single workflow
-- [ ] Validation before sync
+- [x] Automatic tag creation in sub-repos from monorepo tags
+- [x] Release creation in sub-repos
+- [ ] Validation before release sync
 - [ ] Rollback mechanism

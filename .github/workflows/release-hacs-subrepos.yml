@@ -1,0 +1,131 @@
+name: Release HACS Sub-Repositories
+
+on:
+  push:
+    tags:
+      - "cover-manager-v*"
+      - "imeon-energy-api-v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-subrepo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout monorepo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release target from tag
+        id: target
+        shell: bash
+        run: |
+          TAG_NAME="${GITHUB_REF_NAME}"
+
+          case "$TAG_NAME" in
+            cover-manager-v*)
+              VERSION="${TAG_NAME#cover-manager-v}"
+              echo "package_dir=packages/cover-manager" >> "$GITHUB_OUTPUT"
+              echo "sub_repo=myrabelle-hacs-cover-manager" >> "$GITHUB_OUTPUT"
+              echo "release_tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+              echo "component=Cover Manager" >> "$GITHUB_OUTPUT"
+              ;;
+            imeon-energy-api-v*)
+              VERSION="${TAG_NAME#imeon-energy-api-v}"
+              echo "package_dir=packages/imeon_energy_api" >> "$GITHUB_OUTPUT"
+              echo "sub_repo=myrabelle-hacs-imeon-energy" >> "$GITHUB_OUTPUT"
+              echo "release_tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+              echo "component=Imeon Energy API" >> "$GITHUB_OUTPUT"
+              ;;
+            *)
+              echo "Unsupported tag: ${TAG_NAME}"
+              exit 1
+              ;;
+          esac
+
+      - name: Prepare package for sub-repository
+        shell: bash
+        run: |
+          PACKAGE_DIR="${{ steps.target.outputs.package_dir }}"
+          PREPARED_DIR="/tmp/hacs-subrepo-release"
+
+          mkdir -p "${PREPARED_DIR}"
+          cp -r "${PACKAGE_DIR}/custom_components" "${PREPARED_DIR}/"
+          cp "${PACKAGE_DIR}/hacs.json" "${PREPARED_DIR}/"
+          cp "${PACKAGE_DIR}/README.md" "${PREPARED_DIR}/"
+
+          if [ -f "${PACKAGE_DIR}/INSTALLATION.md" ]; then
+            cp "${PACKAGE_DIR}/INSTALLATION.md" "${PREPARED_DIR}/"
+          fi
+
+          if [ -f "${PACKAGE_DIR}/TESTING.md" ]; then
+            cp "${PACKAGE_DIR}/TESTING.md" "${PREPARED_DIR}/"
+          fi
+
+          if [ -f LICENSE ]; then
+            cp LICENSE "${PREPARED_DIR}/"
+          fi
+
+      - name: Clone sub-repository
+        shell: bash
+        run: |
+          git clone "https://${{ secrets.RELEASE_TOKEN }}@github.com/chatondearu/${{ steps.target.outputs.sub_repo }}.git" sub-repo
+
+      - name: Sync files and push main
+        shell: bash
+        run: |
+          cd sub-repo
+
+          git checkout main 2>/dev/null || git checkout -b main
+
+          # Keep repository content strictly aligned with the monorepo package.
+          find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} + 2>/dev/null || true
+          cp -r /tmp/hacs-subrepo-release/* .
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if [ -n "$(git status --porcelain)" ]; then
+            git add -A
+            git commit -m "chore(release): sync ${{ steps.target.outputs.release_tag }} from monorepo [skip ci]"
+            git push origin main
+          else
+            echo "No content changes to commit on main."
+          fi
+
+      - name: Create and push release tag in sub-repository
+        shell: bash
+        run: |
+          cd sub-repo
+          RELEASE_TAG="${{ steps.target.outputs.release_tag }}"
+
+          git fetch --tags
+
+          if git rev-parse "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Tag ${RELEASE_TAG} already exists, skipping tag creation."
+          else
+            git tag -a "${RELEASE_TAG}" -m "${{ steps.target.outputs.component }} ${RELEASE_TAG}"
+            git push origin "${RELEASE_TAG}"
+          fi
+
+      - name: Create GitHub release in sub-repository
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          SUB_REPO="${{ steps.target.outputs.sub_repo }}"
+          RELEASE_TAG="${{ steps.target.outputs.release_tag }}"
+          SOURCE_TAG="${GITHUB_REF_NAME}"
+          TITLE="${{ steps.target.outputs.component }} ${RELEASE_TAG}"
+
+          if gh release view "${RELEASE_TAG}" --repo "chatondearu/${SUB_REPO}" >/dev/null 2>&1; then
+            echo "Release ${RELEASE_TAG} already exists in ${SUB_REPO}, skipping."
+          else
+            gh release create "${RELEASE_TAG}" \
+              --repo "chatondearu/${SUB_REPO}" \
+              --title "${TITLE}" \
+              --notes "Automated release from monorepo tag \`${SOURCE_TAG}\`."
+          fi
