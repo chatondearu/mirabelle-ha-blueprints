@@ -74,6 +74,22 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scri
 
 See [Cover Manager Installation Guide](packages/cover-manager/INSTALLATION.md) for detailed instructions.
 
+### Imeon Energy API
+
+[Imeon Energy API](packages/imeon_energy_api/README.md) - A Home Assistant custom integration to monitor Imeon Energy inverters with Energy Dashboard compatible sensors.
+
+**Installation via HACS:**
+
+1. Add the dedicated sub-repository as a custom repository in HACS:
+  - **Repository**: `https://github.com/chatondearu/myrabelle-hacs-imeon-energy`
+  - **Category**: Integration
+2. Search for "Imeon Energy API" and install
+3. Restart Home Assistant and configure via Settings > Devices & Services
+
+**Note**: Imeon Energy API is automatically synced from this monorepo to the dedicated sub-repository. See [Monorepo Sync Documentation](.github/MONOREPO_SYNC.md) for details.
+
+See [Imeon Energy API Installation Guide](packages/imeon_energy_api/INSTALLATION.md) for detailed instructions.
+
 ## Available Blueprints
 
 ### Scheduled Bell Sound
