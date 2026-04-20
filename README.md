@@ -17,6 +17,7 @@ A collection of custom blueprints for Home Assistant.
 - [[CDA] 🔔 Scheduled Bell Sound](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fscheduled_bell_sound.yaml)
 - [[CDA] 💡 Presence Based Lighting](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fpresence_based_lighting.yaml)
 - [[CDA] 🪟 Cover Control](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_control.yaml)
+- [[CDA] 🌞 Smart Cover Solar & Thermal Optimization](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_solar_thermal_optimization.yaml)
 - [[CDA] 🪟 Blind Cover Template](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_cover.yaml)
 - [[CDA] 🪟 Blind State Tracker](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_state_tracker.yaml)
 - [Keypad Frient (KEPZB-110) for Alarmo by Darktoinon (FR/EN)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Ffrient_keypad_with_alarmo.yaml)
@@ -43,6 +44,7 @@ If the quick links don't work, you can manually import the blueprints:
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/scheduled_bell_sound.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/presence_based_lighting.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_control.yaml
+https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_solar_thermal_optimization.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_cover.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_state_tracker.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/frient_keypad_with_alarmo.yaml
@@ -125,6 +127,13 @@ Automatically control lights based on presence detection with configurable delay
 [CDA] 🪟 Cover Control
 Control a cover using a switch with position support (0-100%).
 
+### Smart Cover Solar & Thermal Optimization
+
+[CDA] 🌞 Smart Cover Solar & Thermal Optimization
+Automatically optimize cover positions using weather, sun azimuth, facade orientation, and indoor/outdoor temperature with seasonal behavior.
+
+[View Documentation](docs/cover_solar_thermal_optimization.md)
+
 ### Blind Cover Template
 
 [CDA] 🪟 Blind Cover Template
@@ -159,6 +168,7 @@ mirabelle-ha-blueprints/
 │   │   ├── scheduled_bell_sound.yaml
 │   │   ├── presence_based_lighting.yaml
 │   │   ├── cover_control.yaml
+│   │   ├── cover_solar_thermal_optimization.yaml
 │   │   ├── cover_cover.yaml
 │   │   ├── cover_state_tracker.yaml
 │   │   └── frient_keypad_with_alarmo.yaml
@@ -171,6 +181,7 @@ mirabelle-ha-blueprints/
 │   ├── play_sound_with_volume_control.md
 │   ├── create_schedule.md
 │   ├── presence_based_lighting.md
+│   ├── cover_solar_thermal_optimization.md
 │   ├── blind_states.md
 │   └── cover_generator.md
 └── README.md
