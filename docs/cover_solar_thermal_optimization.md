@@ -33,7 +33,7 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 - One outdoor temperature sensor
 - One indoor temperature sensor
 - One wind speed sensor
-- One presence entity (`person`, `group`, `device_tracker`, `input_boolean`, or `binary_sensor`)
+- One or more `person` entities for home presence detection
 - One awake entity (`input_boolean` or `binary_sensor`)
 
 ## Configuration
@@ -41,7 +41,7 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 ### Required Inputs
 
 - **All Managed Covers**: all covers controlled by the automation
-- **Presence Entity**: indicates if someone is home
+- **Persons At Home**: select one or more persons; automation runs if at least one is `home`
 - **Awake Entity**: indicates if someone is awake
 - **Outdoor Temperature Sensor**
 - **Indoor Temperature Sensor**
@@ -134,7 +134,7 @@ The sun-facing facade is inferred using `sun.sun` azimuth:
 ## Troubleshooting
 
 - **No movement**:
-  - check presence state (`home` or `on`)
+  - check selected persons (at least one must be `home`)
   - check awake state (`on` or `home`)
 - **Unexpected facade selection**:
   - verify facade groups and current `sun.sun` azimuth

@@ -52,19 +52,16 @@ blueprint:
         entity:
           domain: cover
           multiple: true
-    presence_entity:
-      name: Presence Entity
+    presence_persons:
+      name: Persons At Home
       description: >
-        Entity used to detect if someone is at home
-        (for example a person, group, device_tracker, or occupancy boolean).
+        Select one or more person entities.
+        The automation runs when at least one selected person is home.
+      default: []
       selector:
         entity:
-          domain:
-            - person
-            - group
-            - device_tracker
-            - input_boolean
-            - binary_sensor
+          domain: person
+          multiple: true
     awake_entity:
       name: Awake Entity
       description: >
@@ -249,7 +246,7 @@ mode: single
 
 trigger:
   - platform: state
-    entity_id: !input presence_entity
+    entity_id: !input presence_persons
   - platform: state
     entity_id: !input awake_entity
   - platform: state
@@ -269,7 +266,7 @@ variables:
   east_cover_entities: !input east_covers
   south_cover_entities: !input south_covers
   west_cover_entities: !input west_covers
-  presence_entity: !input presence_entity
+  presence_person_entities: !input presence_persons
   awake_entity: !input awake_entity
   outdoor_temperature_entity: !input outdoor_temperature
   indoor_temperature_entity: !input indoor_temperature
@@ -294,7 +291,13 @@ variables:
   winter_day_gain_position: "{{ winter_day_gain_position_input | int(100) }}"
   winter_day_hold_position: "{{ winter_day_hold_position_input | int(50) }}"
   neutral_position: "{{ neutral_position_input | int(100) }}"
-  is_home: "{{ states(presence_entity) in ['home', 'on'] }}"
+  is_home: >
+    {{
+      expand(presence_person_entities)
+      | selectattr('state', 'eq', 'home')
+      | list
+      | count > 0
+    }}
   is_awake: "{{ states(awake_entity) in ['on', 'home'] }}"
   is_daylight: "{{ is_state('sun.sun', 'above_horizon') }}"
   sun_azimuth: "{{ state_attr('sun.sun', 'azimuth') | float(0) }}"
