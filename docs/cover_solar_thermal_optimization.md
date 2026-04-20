@@ -30,9 +30,11 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 
 - Home Assistant `2025.5.3` or later
 - Covers supporting `cover.set_cover_position` (0-100 position support)
-- One outdoor temperature sensor
-- One indoor temperature sensor
-- One wind speed sensor
+- Optional outdoor temperature source:
+  - an outdoor temperature sensor, or
+  - a weather entity fallback (forecast first, then weather temperature)
+- Optional indoor temperature sensor
+- Optional wind speed sensor
 - One or more `person` entities for home presence detection
 - Optional awake source:
   - one awake entity (`input_boolean` or `binary_sensor`), or
@@ -48,9 +50,10 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 - **Awake Entity (Optional)**: primary awake source when set
 - **Awake Schedule (Optional)**: used when Awake Entity is empty
 - **Fallback awake mode**: if both are empty, daylight is used (`sun.sun` above horizon)
-- **Outdoor Temperature Sensor**
-- **Indoor Temperature Sensor**
-- **Wind Speed Sensor**
+- **Outdoor Temperature Sensor (Optional)**: primary outdoor temperature source
+- **Weather Entity (Optional Fallback)**: used when Outdoor Temperature Sensor is empty
+- **Indoor Temperature Sensor (Optional)**
+- **Wind Speed Sensor (Optional)**: if empty, wind protection is disabled
 
 ### Optional Facade Inputs
 
@@ -73,6 +76,16 @@ If no facade group is configured, all covers are treated as one group.
 - **Winter Indoor Cold Temperature**: indoor threshold to favor winter solar gains
 - **Max Wind Speed**: wind safety threshold
 
+Sensor fallback behavior:
+
+- Outdoor temperature priority:
+  1. Outdoor Temperature Sensor
+  2. Weather forecast temperature (first forecast item)
+  3. Weather current temperature attribute
+  4. `0` if no source is available
+- Indoor temperature: `0` when no indoor sensor is configured
+- Wind: disabled when no wind sensor is configured
+
 ### Position Inputs
 
 Each value is selected from key positions (`0`, `25`, `50`, `75`, `100`):
@@ -91,8 +104,8 @@ The automation reevaluates on:
 
 - Presence changes
 - Awake source changes (entity/schedule) trigger an immediate reevaluation
-- Indoor/outdoor temperature changes
-- Wind speed changes
+- Indoor/outdoor/weather temperature changes
+- Wind speed changes (if wind sensor configured)
 - `sun.sun` state changes
 - Every 10 minutes
 
@@ -108,6 +121,11 @@ Decision order:
 5. **Fallback**:
    - winter daylight: `Winter Day Position (No Solar Gains Needed)`
    - otherwise: `Neutral Position`
+
+When optional sensors are missing:
+
+- Summer/winter thermal decisions use only available temperature sources
+- Wind safety branch is skipped if no wind sensor is configured
 
 Awake gating priority:
 
@@ -149,6 +167,7 @@ The sun-facing facade is inferred using `sun.sun` azimuth:
   - if Awake Entity is set, check awake state (`on` or `home`)
   - if Awake Schedule is set, check schedule state (`on`)
   - if none is set, behavior follows daylight
+  - verify optional sensor availability (outdoor/weather, indoor, wind)
 - **Unexpected facade selection**:
   - verify facade groups and current `sun.sun` azimuth
 - **Position service errors**:

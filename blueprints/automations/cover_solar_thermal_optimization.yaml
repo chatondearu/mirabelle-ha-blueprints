@@ -86,22 +86,38 @@ blueprint:
         entity:
           domain: schedule
     outdoor_temperature:
-      name: Outdoor Temperature Sensor
-      description: Outdoor temperature sensor in °C.
+      name: Outdoor Temperature Sensor (Optional)
+      description: >
+        Optional outdoor temperature sensor in °C.
+        If empty, weather forecast/current weather temperature can be used.
+      default: ""
       selector:
         entity:
           domain: sensor
           device_class: temperature
+    weather_entity:
+      name: Weather Entity (Optional Fallback)
+      description: >
+        Optional weather entity used when Outdoor Temperature Sensor is empty.
+        The blueprint first tries forecast temperature, then weather temperature attribute.
+      default: ""
+      selector:
+        entity:
+          domain: weather
     indoor_temperature:
-      name: Indoor Temperature Sensor
-      description: Indoor temperature sensor in °C.
+      name: Indoor Temperature Sensor (Optional)
+      description: Optional indoor temperature sensor in °C.
+      default: ""
       selector:
         entity:
           domain: sensor
           device_class: temperature
     wind_speed:
-      name: Wind Speed Sensor
-      description: Wind speed sensor (same unit as threshold below).
+      name: Wind Speed Sensor (Optional)
+      description: >
+        Optional wind speed sensor (same unit as threshold below).
+        If empty, wind protection is disabled.
+      default: ""
       selector:
         entity:
           domain: sensor
@@ -261,6 +277,10 @@ mode: single
 trigger_variables:
   awake_entity_input: !input awake_entity
   awake_schedule_input: !input awake_schedule
+  outdoor_temperature_input: !input outdoor_temperature
+  indoor_temperature_input: !input indoor_temperature
+  wind_speed_input: !input wind_speed
+  weather_entity_input: !input weather_entity
 
 trigger:
   - platform: state
@@ -274,12 +294,15 @@ trigger:
       {% else %}
         {{ is_state('sun.sun', 'above_horizon') }}
       {% endif %}
-  - platform: state
-    entity_id: !input outdoor_temperature
-  - platform: state
-    entity_id: !input indoor_temperature
-  - platform: state
-    entity_id: !input wind_speed
+  - platform: template
+    value_template: >
+      {% set outdoor = states(outdoor_temperature_input) if outdoor_temperature_input | length > 0 else '' %}
+      {% set indoor = states(indoor_temperature_input) if indoor_temperature_input | length > 0 else '' %}
+      {% set wind = states(wind_speed_input) if wind_speed_input | length > 0 else '' %}
+      {% set weather_temp = state_attr(weather_entity_input, 'temperature') if weather_entity_input | length > 0 else '' %}
+      {% set forecast = state_attr(weather_entity_input, 'forecast') if weather_entity_input | length > 0 else none %}
+      {% set forecast_temp = forecast[0].temperature if forecast is iterable and forecast is not string and forecast | count > 0 and forecast[0].temperature is defined else '' %}
+      {{ outdoor ~ '|' ~ indoor ~ '|' ~ wind ~ '|' ~ weather_temp ~ '|' ~ forecast_temp }}
   - platform: state
     entity_id: sun.sun
   - platform: time_pattern
@@ -295,6 +318,7 @@ variables:
   awake_entity_input: !input awake_entity
   awake_schedule_input: !input awake_schedule
   outdoor_temperature_entity: !input outdoor_temperature
+  weather_entity: !input weather_entity
   indoor_temperature_entity: !input indoor_temperature
   wind_speed_entity: !input wind_speed
   season_mode: !input season_mode
@@ -327,6 +351,10 @@ variables:
   is_daylight: "{{ is_state('sun.sun', 'above_horizon') }}"
   has_awake_entity: "{{ awake_entity_input is string and awake_entity_input | length > 0 }}"
   has_awake_schedule: "{{ awake_schedule_input is string and awake_schedule_input | length > 0 }}"
+  has_outdoor_temperature: "{{ outdoor_temperature_entity is string and outdoor_temperature_entity | length > 0 }}"
+  has_weather_entity: "{{ weather_entity is string and weather_entity | length > 0 }}"
+  has_indoor_temperature: "{{ indoor_temperature_entity is string and indoor_temperature_entity | length > 0 }}"
+  has_wind_sensor: "{{ wind_speed_entity is string and wind_speed_entity | length > 0 }}"
   is_awake: >
     {% if has_awake_entity %}
       {{ states(awake_entity_input) in ['on', 'home'] }}
@@ -343,9 +371,31 @@ variables:
       or (south_cover_entities | count > 0)
       or (west_cover_entities | count > 0)
     }}
-  temp_value: "{{ states(outdoor_temperature_entity) | float(0) }}"
-  indoor_temp_value: "{{ states(indoor_temperature_entity) | float(0) }}"
-  wind_value: "{{ states(wind_speed_entity) | float(0) }}"
+  temp_value: >
+    {% if has_outdoor_temperature %}
+      {{ states(outdoor_temperature_entity) | float(0) }}
+    {% elif has_weather_entity %}
+      {% set forecast = state_attr(weather_entity, 'forecast') %}
+      {% if forecast is iterable and forecast is not string and forecast | count > 0 and forecast[0].temperature is defined %}
+        {{ forecast[0].temperature | float(state_attr(weather_entity, 'temperature') | float(0)) }}
+      {% else %}
+        {{ state_attr(weather_entity, 'temperature') | float(0) }}
+      {% endif %}
+    {% else %}
+      0
+    {% endif %}
+  indoor_temp_value: >
+    {% if has_indoor_temperature %}
+      {{ states(indoor_temperature_entity) | float(0) }}
+    {% else %}
+      0
+    {% endif %}
+  wind_value: >
+    {% if has_wind_sensor %}
+      {{ states(wind_speed_entity) | float(0) }}
+    {% else %}
+      0
+    {% endif %}
   is_summer: >
     {% if season_mode == 'summer' %}
       true
@@ -354,19 +404,25 @@ variables:
     {% else %}
       {{ now().month in [4, 5, 6, 7, 8, 9] }}
     {% endif %}
-  wind_high: "{{ wind_value > max_wind_speed }}"
+  wind_high: "{{ has_wind_sensor and (wind_value > max_wind_speed) }}"
   winter_night: "{{ (not is_summer) and (not is_daylight) }}"
   summer_hot: >
     {{
       is_summer
       and is_daylight
-      and (temp_value >= summer_close_temp or indoor_temp_value >= indoor_hot_temp)
+      and (
+        (has_outdoor_temperature or has_weather_entity) and temp_value >= summer_close_temp
+        or has_indoor_temperature and indoor_temp_value >= indoor_hot_temp
+      )
     }}
   winter_need_solar_gain: >
     {{
       (not is_summer)
       and is_daylight
-      and (indoor_temp_value <= winter_indoor_cold_temp or temp_value <= winter_open_temp_below)
+      and (
+        has_indoor_temperature and indoor_temp_value <= winter_indoor_cold_temp
+        or (has_outdoor_temperature or has_weather_entity) and temp_value <= winter_open_temp_below
+      )
     }}
 
 condition:
