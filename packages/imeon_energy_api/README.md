@@ -73,7 +73,7 @@ All power sensors use `device_class: power`, `state_class: measurement`, and `un
 
 - **Grid Power**: Current grid power (positive = import, negative = export)
 - **Solar Power**: Current solar production
-- **Battery Power**: Current battery power (positive = charging, negative = discharging)
+- **Battery Power**: Current battery power (positive = discharging, negative = charging)
 - **Home Consumption**: Current home power consumption
 
 ### Battery Sensor

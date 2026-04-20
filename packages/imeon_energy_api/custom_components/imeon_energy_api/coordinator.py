@@ -121,12 +121,16 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         grid_power = float(payload.get(API_FIELD_GRID_POWER) or 0.0)
         solar_power = float(self._sum_pv_inputs(payload) or 0.0)
 
-        battery_power = self._get_battery_power(payload)
-        # Convention used by this integration:
-        # - positive battery power = charging
-        # - negative battery power = discharging
-        battery_charging = battery_power if battery_power > 0 else 0.0
-        battery_discharging = abs(battery_power) if battery_power < 0 else 0.0
+        raw_battery_power = self._get_battery_power(payload)
+        # Keep source semantics for directional split:
+        # - positive raw battery power = charging
+        # - negative raw battery power = discharging
+        battery_charging = raw_battery_power if raw_battery_power > 0 else 0.0
+        battery_discharging = abs(raw_battery_power) if raw_battery_power < 0 else 0.0
+        # Expose battery power with Home Assistant Energy convention:
+        # - positive = discharging
+        # - negative = charging
+        battery_power = battery_discharging - battery_charging
 
         battery_soc = float(payload.get(API_FIELD_BATTERY_SOC) or 0.0)
 

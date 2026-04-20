@@ -97,7 +97,7 @@ After configuration, the integration creates the following sensors:
 
 - `sensor.<host>_grid_power` - Grid power (positive = import, negative = export)
 - `sensor.<host>_solar_power` - Solar power production
-- `sensor.<host>_battery_power` - Battery power (positive = charging, negative = discharging)
+- `sensor.<host>_battery_power` - Battery power (positive = discharging, negative = charging)
 - `sensor.<host>_home_power` - Home power consumption
 
 ### Battery Sensor
