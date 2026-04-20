@@ -1,0 +1,422 @@
+blueprint:
+  homeassistant:
+    min_version: 2025.5.3
+  name: "[CDA] 🌞 Smart Cover Solar & Thermal Optimization"
+  description: >
+    Automatically open or close covers based on sun, outdoor temperature, and wind,
+    with seasonal behavior (summer/winter) to help optimize indoor temperature.
+    Actions run only when someone is home and awake.
+    Uses key positions (0/25/50/75/100) instead of only full open/close.
+  domain: automation
+  input:
+    covers:
+      name: All Managed Covers
+      description: All covers that can be controlled by this automation.
+      selector:
+        entity:
+          domain: cover
+          multiple: true
+    north_covers:
+      name: North-Facing Covers
+      description: >
+        Optional. Covers on the north facade. Leave empty if not used.
+      default: []
+      selector:
+        entity:
+          domain: cover
+          multiple: true
+    east_covers:
+      name: East-Facing Covers
+      description: >
+        Optional. Covers on the east facade. Leave empty if not used.
+      default: []
+      selector:
+        entity:
+          domain: cover
+          multiple: true
+    south_covers:
+      name: South-Facing Covers
+      description: >
+        Optional. Covers on the south facade. Leave empty if not used.
+      default: []
+      selector:
+        entity:
+          domain: cover
+          multiple: true
+    west_covers:
+      name: West-Facing Covers
+      description: >
+        Optional. Covers on the west facade. Leave empty if not used.
+      default: []
+      selector:
+        entity:
+          domain: cover
+          multiple: true
+    presence_entity:
+      name: Presence Entity
+      description: >
+        Entity used to detect if someone is at home
+        (for example a person, group, device_tracker, or occupancy boolean).
+      selector:
+        entity:
+          domain:
+            - person
+            - group
+            - device_tracker
+            - input_boolean
+            - binary_sensor
+    awake_entity:
+      name: Awake Entity
+      description: >
+        Entity that indicates someone is awake (typically input_boolean or binary_sensor).
+      selector:
+        entity:
+          domain:
+            - input_boolean
+            - binary_sensor
+    outdoor_temperature:
+      name: Outdoor Temperature Sensor
+      description: Outdoor temperature sensor in °C.
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    indoor_temperature:
+      name: Indoor Temperature Sensor
+      description: Indoor temperature sensor in °C.
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    wind_speed:
+      name: Wind Speed Sensor
+      description: Wind speed sensor (same unit as threshold below).
+      selector:
+        entity:
+          domain: sensor
+    season_mode:
+      name: Season Mode
+      description: >
+        Select Auto to infer season from month (Apr-Sep = summer, Oct-Mar = winter),
+        or force Summer/Winter mode.
+      default: auto
+      selector:
+        select:
+          options:
+            - label: Auto
+              value: auto
+            - label: Summer
+              value: summer
+            - label: Winter
+              value: winter
+    summer_close_temp:
+      name: Summer Close Temperature
+      description: Close covers in summer when daylight and temperature is above this value.
+      default: 24
+      selector:
+        number:
+          min: 10
+          max: 40
+          step: 0.5
+          unit_of_measurement: °C
+    winter_open_temp_below:
+      name: Winter Open Temperature Below
+      description: Open covers in winter daylight when temperature is below this value.
+      default: 17
+      selector:
+        number:
+          min: -10
+          max: 25
+          step: 0.5
+          unit_of_measurement: °C
+    max_wind_speed:
+      name: Max Wind Speed
+      description: Covers stay/return closed when wind is above this threshold.
+      default: 35
+      selector:
+        number:
+          min: 0
+          max: 150
+          step: 1
+    indoor_hot_temp:
+      name: Indoor Hot Temperature
+      description: In summer/daylight, shading is activated above this indoor temperature.
+      default: 24
+      selector:
+        number:
+          min: 15
+          max: 35
+          step: 0.5
+          unit_of_measurement: °C
+    winter_indoor_cold_temp:
+      name: Winter Indoor Cold Temperature
+      description: In winter/daylight, allow solar gains when indoor temp is below this value.
+      default: 19
+      selector:
+        number:
+          min: 10
+          max: 25
+          step: 0.5
+          unit_of_measurement: °C
+    wind_position:
+      name: Position With High Wind
+      description: Cover position when wind is above threshold.
+      default: "0"
+      selector:
+        select:
+          options:
+            - "0"
+            - "25"
+            - "50"
+            - "75"
+            - "100"
+    winter_night_position:
+      name: Winter Night Position
+      description: Cover position at night in winter.
+      default: "0"
+      selector:
+        select:
+          options:
+            - "0"
+            - "25"
+            - "50"
+            - "75"
+            - "100"
+    summer_non_sun_position:
+      name: Summer Position (Non Sun-Facing)
+      description: Base position for facades not directly exposed to the sun.
+      default: "75"
+      selector:
+        select:
+          options:
+            - "0"
+            - "25"
+            - "50"
+            - "75"
+            - "100"
+    summer_sun_facing_position:
+      name: Summer Position (Sun-Facing Facade)
+      description: Shading position for the currently sun-exposed facade.
+      default: "25"
+      selector:
+        select:
+          options:
+            - "0"
+            - "25"
+            - "50"
+            - "75"
+            - "100"
+    winter_day_gain_position:
+      name: Winter Day Position (Solar Gains)
+      description: Position used in winter daylight when heat gains are needed.
+      default: "100"
+      selector:
+        select:
+          options:
+            - "0"
+            - "25"
+            - "50"
+            - "75"
+            - "100"
+    winter_day_hold_position:
+      name: Winter Day Position (No Solar Gains Needed)
+      description: Position used in winter daylight when gains are not needed.
+      default: "50"
+      selector:
+        select:
+          options:
+            - "0"
+            - "25"
+            - "50"
+            - "75"
+            - "100"
+    neutral_position:
+      name: Neutral Position
+      description: Position used when no strong summer/winter condition applies.
+      default: "100"
+      selector:
+        select:
+          options:
+            - "0"
+            - "25"
+            - "50"
+            - "75"
+            - "100"
+
+  source_url: https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_solar_thermal_optimization.yaml
+
+mode: single
+
+trigger:
+  - platform: state
+    entity_id: !input presence_entity
+  - platform: state
+    entity_id: !input awake_entity
+  - platform: state
+    entity_id: !input outdoor_temperature
+  - platform: state
+    entity_id: !input indoor_temperature
+  - platform: state
+    entity_id: !input wind_speed
+  - platform: state
+    entity_id: sun.sun
+  - platform: time_pattern
+    minutes: "/10"
+
+variables:
+  cover_entities: !input covers
+  north_cover_entities: !input north_covers
+  east_cover_entities: !input east_covers
+  south_cover_entities: !input south_covers
+  west_cover_entities: !input west_covers
+  presence_entity: !input presence_entity
+  awake_entity: !input awake_entity
+  outdoor_temperature_entity: !input outdoor_temperature
+  indoor_temperature_entity: !input indoor_temperature
+  wind_speed_entity: !input wind_speed
+  season_mode: !input season_mode
+  summer_close_temp: !input summer_close_temp
+  winter_open_temp_below: !input winter_open_temp_below
+  max_wind_speed: !input max_wind_speed
+  indoor_hot_temp: !input indoor_hot_temp
+  winter_indoor_cold_temp: !input winter_indoor_cold_temp
+  wind_position_input: !input wind_position
+  winter_night_position_input: !input winter_night_position
+  summer_non_sun_position_input: !input summer_non_sun_position
+  summer_sun_facing_position_input: !input summer_sun_facing_position
+  winter_day_gain_position_input: !input winter_day_gain_position
+  winter_day_hold_position_input: !input winter_day_hold_position
+  neutral_position_input: !input neutral_position
+  wind_position: "{{ wind_position_input | int(0) }}"
+  winter_night_position: "{{ winter_night_position_input | int(0) }}"
+  summer_non_sun_position: "{{ summer_non_sun_position_input | int(75) }}"
+  summer_sun_facing_position: "{{ summer_sun_facing_position_input | int(25) }}"
+  winter_day_gain_position: "{{ winter_day_gain_position_input | int(100) }}"
+  winter_day_hold_position: "{{ winter_day_hold_position_input | int(50) }}"
+  neutral_position: "{{ neutral_position_input | int(100) }}"
+  is_home: "{{ states(presence_entity) in ['home', 'on'] }}"
+  is_awake: "{{ states(awake_entity) in ['on', 'home'] }}"
+  is_daylight: "{{ is_state('sun.sun', 'above_horizon') }}"
+  sun_azimuth: "{{ state_attr('sun.sun', 'azimuth') | float(0) }}"
+  has_oriented_groups: >
+    {{
+      (north_cover_entities | count > 0)
+      or (east_cover_entities | count > 0)
+      or (south_cover_entities | count > 0)
+      or (west_cover_entities | count > 0)
+    }}
+  temp_value: "{{ states(outdoor_temperature_entity) | float(0) }}"
+  indoor_temp_value: "{{ states(indoor_temperature_entity) | float(0) }}"
+  wind_value: "{{ states(wind_speed_entity) | float(0) }}"
+  is_summer: >
+    {% if season_mode == 'summer' %}
+      true
+    {% elif season_mode == 'winter' %}
+      false
+    {% else %}
+      {{ now().month in [4, 5, 6, 7, 8, 9] }}
+    {% endif %}
+  wind_high: "{{ wind_value > max_wind_speed }}"
+  winter_night: "{{ (not is_summer) and (not is_daylight) }}"
+  summer_hot: >
+    {{
+      is_summer
+      and is_daylight
+      and (temp_value >= summer_close_temp or indoor_temp_value >= indoor_hot_temp)
+    }}
+  winter_need_solar_gain: >
+    {{
+      (not is_summer)
+      and is_daylight
+      and (indoor_temp_value <= winter_indoor_cold_temp or temp_value <= winter_open_temp_below)
+    }}
+
+condition:
+  - condition: template
+    value_template: "{{ is_home }}"
+  - condition: template
+    value_template: "{{ is_awake }}"
+
+action:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ wind_high or winter_night }}"
+        sequence:
+          - service: cover.set_cover_position
+            target:
+              entity_id: !input covers
+            data:
+              position: >
+                {% if wind_high %}
+                  {{ wind_position }}
+                {% else %}
+                  {{ winter_night_position }}
+                {% endif %}
+      - conditions:
+          - condition: template
+            value_template: "{{ summer_hot }}"
+        sequence:
+          - service: cover.set_cover_position
+            target:
+              entity_id: !input covers
+            data:
+              position: "{{ summer_non_sun_position }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ not has_oriented_groups }}"
+                sequence:
+                  - service: cover.set_cover_position
+                    target:
+                      entity_id: !input covers
+                    data:
+                      position: "{{ summer_sun_facing_position }}"
+              - conditions:
+                  - condition: template
+                    value_template: "{{ sun_azimuth >= 45 and sun_azimuth < 135 }}"
+                sequence:
+                  - service: cover.set_cover_position
+                    target:
+                      entity_id: !input east_covers
+                    data:
+                      position: "{{ summer_sun_facing_position }}"
+              - conditions:
+                  - condition: template
+                    value_template: "{{ sun_azimuth >= 135 and sun_azimuth < 225 }}"
+                sequence:
+                  - service: cover.set_cover_position
+                    target:
+                      entity_id: !input south_covers
+                    data:
+                      position: "{{ summer_sun_facing_position }}"
+              - conditions:
+                  - condition: template
+                    value_template: "{{ sun_azimuth >= 225 and sun_azimuth < 315 }}"
+                sequence:
+                  - service: cover.set_cover_position
+                    target:
+                      entity_id: !input west_covers
+                    data:
+                      position: "{{ summer_sun_facing_position }}"
+            default:
+              - service: cover.set_cover_position
+                target:
+                  entity_id: !input north_covers
+                data:
+                  position: "{{ summer_sun_facing_position }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ winter_need_solar_gain }}"
+        sequence:
+          - service: cover.set_cover_position
+            target:
+              entity_id: !input covers
+            data:
+              position: "{{ winter_day_gain_position }}"
+    default:
+      - service: cover.set_cover_position
+        target:
+          entity_id: !input covers
+        data:
+          position: "{{ winter_day_hold_position if is_daylight and (not is_summer) else neutral_position }}"
