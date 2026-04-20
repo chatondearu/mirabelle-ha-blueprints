@@ -121,21 +121,12 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         grid_power = float(payload.get(API_FIELD_GRID_POWER) or 0.0)
         solar_power = float(self._sum_pv_inputs(payload) or 0.0)
 
-        # Use AC fields for battery power (more accurate)
-        # Fallback to estimation if AC fields are not available
-        if API_FIELD_BATTERY_POWER in payload:
-            # battery_power: negative = charging (receiving), positive = discharging (providing)
-            battery_power = float(payload.get(API_FIELD_BATTERY_POWER) or 0.0)
-        else:
-            # Fallback: estimate from current * voltage
-            estimated = self._estimate_battery_power(payload)
-            if estimated is not None:
-                battery_power = float(estimated)
-            else:
-                battery_power = 0.0
-
-        battery_charging = abs(battery_power) if battery_power < 0 else 0.0
-        battery_discharging = battery_power if battery_power > 0 else 0.0
+        battery_power = self._get_battery_power(payload)
+        # Convention used by this integration:
+        # - positive battery power = charging
+        # - negative battery power = discharging
+        battery_charging = battery_power if battery_power > 0 else 0.0
+        battery_discharging = abs(battery_power) if battery_power < 0 else 0.0
 
         battery_soc = float(payload.get(API_FIELD_BATTERY_SOC) or 0.0)
 
@@ -248,6 +239,24 @@ class ImeonEnergyCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             return float(current) * float(voltage)
         except (ValueError, TypeError):
             return None
+
+    def _get_battery_power(self, payload: dict[str, Any]) -> float:
+        """Get battery power from scan payload, with estimation fallback.
+
+        The scan field `battery_power` can be null while battery current/voltage are present.
+        In that case we fall back to current * voltage to keep an instantaneous estimate.
+        """
+        raw_battery_power = payload.get(API_FIELD_BATTERY_POWER)
+        if raw_battery_power is not None:
+            try:
+                return float(raw_battery_power)
+            except (ValueError, TypeError):
+                pass
+
+        estimated = self._estimate_battery_power(payload)
+        if estimated is not None:
+            return float(estimated)
+        return 0.0
 
     def _process_scan_history(self, scan_data: dict[str, Any]) -> None:
         """Process scan data with timestamps to build a history, avoiding duplicates."""

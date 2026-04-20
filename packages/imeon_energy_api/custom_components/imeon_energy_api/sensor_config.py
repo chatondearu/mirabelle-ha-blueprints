@@ -25,7 +25,7 @@ class SensorConfig:
 
 # API field mappings
 API_FIELD_GRID_POWER = "em_power"
-API_FIELD_BATTERY_POWER = "grid_power_r"
+API_FIELD_BATTERY_POWER = "battery_power"
 API_FIELD_SOLAR_POWER = "pv_input_power"  # Will be summed from API_FIELD_PV_INPUTS
 API_FIELD_PV_INPUTS = ["pv_input_power1", "pv_input_power2", "pv_input_power3"]
 API_FIELD_BATTERY_SOC = "battery_soc"
