@@ -70,6 +70,13 @@ blueprint:
       default: true
       selector:
         boolean: {}
+    close_at_night:
+      name: Close Covers At Night
+      description: >
+        If enabled, all managed covers are closed when sun is below horizon.
+      default: true
+      selector:
+        boolean: {}
     awake_entity:
       name: Awake Entity (Optional)
       description: >
@@ -131,7 +138,7 @@ blueprint:
     season_mode:
       name: Season Mode
       description: >
-        Select Auto to infer season from month (Apr-Sep = summer, Oct-Mar = winter),
+        Select Auto to infer season from configurable summer dates,
         or force Summer/Winter mode.
       default: auto
       selector:
@@ -143,6 +150,42 @@ blueprint:
               value: summer
             - label: Winter
               value: winter
+    summer_start_month:
+      name: Summer Start Month (Auto Mode)
+      description: Month when summer starts in auto mode.
+      default: 4
+      selector:
+        number:
+          min: 1
+          max: 12
+          step: 1
+    summer_start_day:
+      name: Summer Start Day (Auto Mode)
+      description: Day when summer starts in auto mode.
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 31
+          step: 1
+    summer_end_month:
+      name: Summer End Month (Auto Mode)
+      description: Month when summer ends in auto mode.
+      default: 9
+      selector:
+        number:
+          min: 1
+          max: 12
+          step: 1
+    summer_end_day:
+      name: Summer End Day (Auto Mode)
+      description: Day when summer ends in auto mode.
+      default: 30
+      selector:
+        number:
+          min: 1
+          max: 31
+          step: 1
     summer_close_temp:
       name: Summer Close Temperature
       description: Close covers in summer when daylight and temperature is above this value.
@@ -323,6 +366,7 @@ variables:
   west_cover_entities: !input west_covers
   presence_person_entities: !input presence_persons
   close_when_away: !input close_when_away
+  close_at_night: !input close_at_night
   awake_entity_input: !input awake_entity
   awake_schedule_input: !input awake_schedule
   outdoor_temperature_entity: !input outdoor_temperature
@@ -330,6 +374,10 @@ variables:
   indoor_temperature_entity: !input indoor_temperature
   wind_speed_entity: !input wind_speed
   season_mode: !input season_mode
+  summer_start_month: !input summer_start_month
+  summer_start_day: !input summer_start_day
+  summer_end_month: !input summer_end_month
+  summer_end_day: !input summer_end_day
   summer_close_temp: !input summer_close_temp
   winter_open_temp_below: !input winter_open_temp_below
   max_wind_speed: !input max_wind_speed
@@ -410,9 +458,17 @@ variables:
     {% elif season_mode == 'winter' %}
       false
     {% else %}
-      {{ now().month in [4, 5, 6, 7, 8, 9] }}
+      {% set now_md = now().month * 100 + now().day %}
+      {% set start_md = summer_start_month * 100 + summer_start_day %}
+      {% set end_md = summer_end_month * 100 + summer_end_day %}
+      {% if start_md <= end_md %}
+        {{ now_md >= start_md and now_md <= end_md }}
+      {% else %}
+        {{ now_md >= start_md or now_md <= end_md }}
+      {% endif %}
     {% endif %}
   wind_high: "{{ has_wind_sensor and (wind_value > max_wind_speed) }}"
+  is_night: "{{ not is_daylight }}"
   winter_night: "{{ (not is_summer) and (not is_daylight) }}"
   summer_hot: >
     {{
@@ -448,22 +504,35 @@ action:
         sequence: []
       - conditions:
           - condition: template
+            value_template: "{{ is_night and close_at_night and is_summer }}"
+        sequence:
+          - service: cover.close_cover
+            target:
+              entity_id: !input covers
+      - conditions:
+          - condition: template
             value_template: "{{ not is_awake }}"
         sequence: []
       - conditions:
           - condition: template
             value_template: "{{ wind_high or winter_night }}"
         sequence:
-          - service: cover.set_cover_position
-            target:
-              entity_id: !input covers
-            data:
-              position: >
-                {% if wind_high %}
-                  {{ wind_position }}
-                {% else %}
-                  {{ winter_night_position }}
-                {% endif %}
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ wind_high }}"
+                sequence:
+                  - service: cover.set_cover_position
+                    target:
+                      entity_id: !input covers
+                    data:
+                      position: "{{ wind_position }}"
+            default:
+              - service: cover.set_cover_position
+                target:
+                  entity_id: !input covers
+                data:
+                  position: "{{ winter_night_position }}"
       - conditions:
           - condition: template
             value_template: "{{ summer_hot }}"

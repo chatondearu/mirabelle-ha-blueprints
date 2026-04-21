@@ -68,14 +68,17 @@ If no facade group is configured, all covers are treated as one group.
 ### Season and Thermal Inputs
 
 - **Season Mode**:
-  - `auto` = Apr-Sep as summer, Oct-Mar as winter
+  - `auto` = summer between configured summer start/end dates
   - `summer` = force summer behavior
   - `winter` = force winter behavior
+- **Summer Start Month (Auto Mode)** / **Summer Start Day (Auto Mode)**
+- **Summer End Month (Auto Mode)** / **Summer End Day (Auto Mode)**
 - **Summer Close Temperature**: outdoor threshold for summer shading
 - **Winter Open Temperature Below**: outdoor threshold to favor winter solar gains
 - **Indoor Hot Temperature**: indoor threshold to activate summer shading
 - **Winter Indoor Cold Temperature**: indoor threshold to favor winter solar gains
 - **Max Wind Speed**: wind safety threshold
+- **Close Covers At Night**: enable/disable automatic closure when sun is below horizon
 
 Sensor fallback behavior:
 
@@ -115,17 +118,26 @@ Decision order:
 1. **Away handling**:
    - if `Close Covers When Away` is enabled and nobody is home, all managed covers are closed
    - if disabled and nobody is home, no further action is taken
-2. **Awake gating**: if not awake, no further action is taken
-3. **Wind high**: all managed covers move to `Position With High Wind`
-4. **Winter night**: all managed covers move to `Winter Night Position`
-5. **Summer hot** (indoor or outdoor threshold reached):
+2. **Night handling**:
+   - if `Close Covers At Night` is enabled, after sunset in **summer** all managed covers are closed
+   - in **winter** night, managed covers use `Winter Night Position` (0/25/50/75/100)
+3. **Awake gating**: if not awake, no further action is taken
+4. **Wind high**: all managed covers move to `Position With High Wind`
+5. **Winter night**: all managed covers move to `Winter Night Position`
+6. **Summer hot** (indoor or outdoor threshold reached):
    - all covers move to `Summer Position (Non Sun-Facing)`
    - sun-facing facade moves to `Summer Position (Sun-Facing Facade)`
-6. **Winter day and heat gain needed**:
+7. **Winter day and heat gain needed**:
    - all covers move to `Winter Day Position (Solar Gains)`
-7. **Fallback**:
+8. **Fallback**:
    - winter daylight: `Winter Day Position (No Solar Gains Needed)`
    - otherwise: `Neutral Position`
+
+Auto season behavior:
+
+- Summer is active between configured start/end dates (month + day)
+- Winter is active outside that range
+- Cross-year ranges are supported (for example: start in November, end in March)
 
 When optional sensors are missing:
 
