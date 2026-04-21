@@ -378,9 +378,15 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         self._start_movement(dir_to_start)
 
     async def async_open_cover(self, **kwargs: Any) -> None:
+        """Open cover only if not already fully open."""
+        if self.current_cover_position >= int(POSITION_MAX) and self._direction == DIRECTION_IDLE:
+            return
         await self._go_direction(DIRECTION_OPENING)
 
     async def async_close_cover(self, **kwargs: Any) -> None:
+        """Close cover only if not already fully closed."""
+        if self.current_cover_position <= int(POSITION_MIN) and self._direction == DIRECTION_IDLE:
+            return
         await self._go_direction(DIRECTION_CLOSING)
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
