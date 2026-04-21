@@ -495,6 +495,8 @@ action:
           - condition: template
             value_template: "{{ (not is_home) and close_when_away }}"
         sequence:
+          - condition: template
+            value_template: "{{ expand(cover_entities) | selectattr('state', 'ne', 'closed') | list | count > 0 }}"
           - service: cover.close_cover
             target:
               entity_id: !input covers
@@ -506,6 +508,8 @@ action:
           - condition: template
             value_template: "{{ is_night and close_at_night and is_summer }}"
         sequence:
+          - condition: template
+            value_template: "{{ expand(cover_entities) | selectattr('state', 'ne', 'closed') | list | count > 0 }}"
           - service: cover.close_cover
             target:
               entity_id: !input covers
@@ -522,12 +526,40 @@ action:
                   - condition: template
                     value_template: "{{ wind_high }}"
                 sequence:
+                  - condition: template
+                    value_template: >
+                      {{
+                        expand(cover_entities)
+                        | selectattr('attributes.current_position', 'defined')
+                        | selectattr('attributes.current_position', 'ne', wind_position | int)
+                        | list
+                        | count > 0
+                        or
+                        expand(cover_entities)
+                        | selectattr('attributes.current_position', 'undefined')
+                        | list
+                        | count > 0
+                      }}
                   - service: cover.set_cover_position
                     target:
                       entity_id: !input covers
                     data:
                       position: "{{ wind_position }}"
             default:
+              - condition: template
+                value_template: >
+                  {{
+                    expand(cover_entities)
+                    | selectattr('attributes.current_position', 'defined')
+                    | selectattr('attributes.current_position', 'ne', winter_night_position | int)
+                    | list
+                    | count > 0
+                    or
+                    expand(cover_entities)
+                    | selectattr('attributes.current_position', 'undefined')
+                    | list
+                    | count > 0
+                  }}
               - service: cover.set_cover_position
                 target:
                   entity_id: !input covers
@@ -537,6 +569,20 @@ action:
           - condition: template
             value_template: "{{ summer_hot }}"
         sequence:
+          - condition: template
+            value_template: >
+              {{
+                expand(cover_entities)
+                | selectattr('attributes.current_position', 'defined')
+                | selectattr('attributes.current_position', 'ne', summer_non_sun_position | int)
+                | list
+                | count > 0
+                or
+                expand(cover_entities)
+                | selectattr('attributes.current_position', 'undefined')
+                | list
+                | count > 0
+              }}
           - service: cover.set_cover_position
             target:
               entity_id: !input covers
@@ -547,6 +593,20 @@ action:
                   - condition: template
                     value_template: "{{ not has_oriented_groups }}"
                 sequence:
+                  - condition: template
+                    value_template: >
+                      {{
+                        expand(cover_entities)
+                        | selectattr('attributes.current_position', 'defined')
+                        | selectattr('attributes.current_position', 'ne', summer_sun_facing_position | int)
+                        | list
+                        | count > 0
+                        or
+                        expand(cover_entities)
+                        | selectattr('attributes.current_position', 'undefined')
+                        | list
+                        | count > 0
+                      }}
                   - service: cover.set_cover_position
                     target:
                       entity_id: !input covers
@@ -556,6 +616,20 @@ action:
                   - condition: template
                     value_template: "{{ sun_azimuth >= 45 and sun_azimuth < 135 }}"
                 sequence:
+                  - condition: template
+                    value_template: >
+                      {{
+                        expand(east_cover_entities)
+                        | selectattr('attributes.current_position', 'defined')
+                        | selectattr('attributes.current_position', 'ne', summer_sun_facing_position | int)
+                        | list
+                        | count > 0
+                        or
+                        expand(east_cover_entities)
+                        | selectattr('attributes.current_position', 'undefined')
+                        | list
+                        | count > 0
+                      }}
                   - service: cover.set_cover_position
                     target:
                       entity_id: !input east_covers
@@ -565,6 +639,20 @@ action:
                   - condition: template
                     value_template: "{{ sun_azimuth >= 135 and sun_azimuth < 225 }}"
                 sequence:
+                  - condition: template
+                    value_template: >
+                      {{
+                        expand(south_cover_entities)
+                        | selectattr('attributes.current_position', 'defined')
+                        | selectattr('attributes.current_position', 'ne', summer_sun_facing_position | int)
+                        | list
+                        | count > 0
+                        or
+                        expand(south_cover_entities)
+                        | selectattr('attributes.current_position', 'undefined')
+                        | list
+                        | count > 0
+                      }}
                   - service: cover.set_cover_position
                     target:
                       entity_id: !input south_covers
@@ -574,12 +662,40 @@ action:
                   - condition: template
                     value_template: "{{ sun_azimuth >= 225 and sun_azimuth < 315 }}"
                 sequence:
+                  - condition: template
+                    value_template: >
+                      {{
+                        expand(west_cover_entities)
+                        | selectattr('attributes.current_position', 'defined')
+                        | selectattr('attributes.current_position', 'ne', summer_sun_facing_position | int)
+                        | list
+                        | count > 0
+                        or
+                        expand(west_cover_entities)
+                        | selectattr('attributes.current_position', 'undefined')
+                        | list
+                        | count > 0
+                      }}
                   - service: cover.set_cover_position
                     target:
                       entity_id: !input west_covers
                     data:
                       position: "{{ summer_sun_facing_position }}"
             default:
+              - condition: template
+                value_template: >
+                  {{
+                    expand(north_cover_entities)
+                    | selectattr('attributes.current_position', 'defined')
+                    | selectattr('attributes.current_position', 'ne', summer_sun_facing_position | int)
+                    | list
+                    | count > 0
+                    or
+                    expand(north_cover_entities)
+                    | selectattr('attributes.current_position', 'undefined')
+                    | list
+                    | count > 0
+                  }}
               - service: cover.set_cover_position
                 target:
                   entity_id: !input north_covers
@@ -589,12 +705,41 @@ action:
           - condition: template
             value_template: "{{ winter_need_solar_gain }}"
         sequence:
+          - condition: template
+            value_template: >
+              {{
+                expand(cover_entities)
+                | selectattr('attributes.current_position', 'defined')
+                | selectattr('attributes.current_position', 'ne', winter_day_gain_position | int)
+                | list
+                | count > 0
+                or
+                expand(cover_entities)
+                | selectattr('attributes.current_position', 'undefined')
+                | list
+                | count > 0
+              }}
           - service: cover.set_cover_position
             target:
               entity_id: !input covers
             data:
               position: "{{ winter_day_gain_position }}"
     default:
+      - condition: template
+        value_template: >
+          {% set fallback_position = winter_day_hold_position | int if is_daylight and (not is_summer) else neutral_position | int %}
+          {{
+            expand(cover_entities)
+            | selectattr('attributes.current_position', 'defined')
+            | selectattr('attributes.current_position', 'ne', fallback_position)
+            | list
+            | count > 0
+            or
+            expand(cover_entities)
+            | selectattr('attributes.current_position', 'undefined')
+            | list
+            | count > 0
+          }}
       - service: cover.set_cover_position
         target:
           entity_id: !input covers

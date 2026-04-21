@@ -143,6 +143,7 @@ When optional sensors are missing:
 
 - Summer/winter thermal decisions use only available temperature sources
 - Wind safety branch is skipped if no wind sensor is configured
+- Cover commands are guarded to avoid sending actions when targets are already at the requested state/position
 
 Awake gating priority:
 
