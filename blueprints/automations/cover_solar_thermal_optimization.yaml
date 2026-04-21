@@ -63,6 +63,13 @@ blueprint:
         entity:
           domain: person
           multiple: true
+    close_when_away:
+      name: Close Covers When Away
+      description: >
+        If enabled, all managed covers are closed when nobody is home.
+      default: true
+      selector:
+        boolean: {}
     awake_entity:
       name: Awake Entity (Optional)
       description: >
@@ -315,6 +322,7 @@ variables:
   south_cover_entities: !input south_covers
   west_cover_entities: !input west_covers
   presence_person_entities: !input presence_persons
+  close_when_away: !input close_when_away
   awake_entity_input: !input awake_entity
   awake_schedule_input: !input awake_schedule
   outdoor_temperature_entity: !input outdoor_temperature
@@ -425,14 +433,23 @@ variables:
       )
     }}
 
-condition:
-  - condition: template
-    value_template: "{{ is_home }}"
-  - condition: template
-    value_template: "{{ is_awake }}"
-
 action:
   - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ (not is_home) and close_when_away }}"
+        sequence:
+          - service: cover.close_cover
+            target:
+              entity_id: !input covers
+      - conditions:
+          - condition: template
+            value_template: "{{ not is_home }}"
+        sequence: []
+      - conditions:
+          - condition: template
+            value_template: "{{ not is_awake }}"
+        sequence: []
       - conditions:
           - condition: template
             value_template: "{{ wind_high or winter_night }}"

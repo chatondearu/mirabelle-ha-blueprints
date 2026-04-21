@@ -47,6 +47,7 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 
 - **All Managed Covers**: all covers controlled by the automation
 - **Persons At Home**: select one or more persons; automation runs if at least one is `home`
+- **Close Covers When Away**: if enabled, all managed covers close when nobody is home
 - **Awake Entity (Optional)**: primary awake source when set
 - **Awake Schedule (Optional)**: used when Awake Entity is empty
 - **Fallback awake mode**: if both are empty, daylight is used (`sun.sun` above horizon)
@@ -111,14 +112,18 @@ The automation reevaluates on:
 
 Decision order:
 
-1. **Wind high**: all managed covers move to `Position With High Wind`
-2. **Winter night**: all managed covers move to `Winter Night Position`
-3. **Summer hot** (indoor or outdoor threshold reached):
+1. **Away handling**:
+   - if `Close Covers When Away` is enabled and nobody is home, all managed covers are closed
+   - if disabled and nobody is home, no further action is taken
+2. **Awake gating**: if not awake, no further action is taken
+3. **Wind high**: all managed covers move to `Position With High Wind`
+4. **Winter night**: all managed covers move to `Winter Night Position`
+5. **Summer hot** (indoor or outdoor threshold reached):
    - all covers move to `Summer Position (Non Sun-Facing)`
    - sun-facing facade moves to `Summer Position (Sun-Facing Facade)`
-4. **Winter day and heat gain needed**:
+6. **Winter day and heat gain needed**:
    - all covers move to `Winter Day Position (Solar Gains)`
-5. **Fallback**:
+7. **Fallback**:
    - winter daylight: `Winter Day Position (No Solar Gains Needed)`
    - otherwise: `Neutral Position`
 
@@ -164,6 +169,7 @@ The sun-facing facade is inferred using `sun.sun` azimuth:
 
 - **No movement**:
   - check selected persons (at least one must be `home`)
+  - check `Close Covers When Away` option for away behavior
   - if Awake Entity is set, check awake state (`on` or `home`)
   - if Awake Schedule is set, check schedule state (`on`)
   - if none is set, behavior follows daylight
