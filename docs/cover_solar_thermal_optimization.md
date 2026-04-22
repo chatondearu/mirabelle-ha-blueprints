@@ -12,6 +12,7 @@ This blueprint adjusts cover positions using key positions (`0`, `25`, `50`, `75
 ## Installation
 
 1. Click this import link:
+
 [Import Smart Cover Solar & Thermal Optimization Blueprint](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_solar_thermal_optimization.yaml)
 
 Or import manually:
@@ -77,6 +78,8 @@ If no facade group is configured, all covers are treated as one group.
 - **Winter Open Temperature Below**: outdoor threshold to favor winter solar gains
 - **Indoor Hot Temperature**: indoor threshold to activate summer shading
 - **Winter Indoor Cold Temperature**: indoor threshold to favor winter solar gains
+- **Temperature Hysteresis Buffer**: deadband in °C to reduce threshold oscillation
+- **Sensor Stability Window (Minutes)**: minimum unchanged duration before using sensor values (`0`, `5`, `10`, `15`)
 - **Max Wind Speed**: wind safety threshold
 - **Close Covers At Night**: enable/disable automatic closure when sun is below horizon
 
@@ -89,6 +92,7 @@ Sensor fallback behavior:
   4. `0` if no source is available
 - Indoor temperature: `0` when no indoor sensor is configured
 - Wind: disabled when no wind sensor is configured
+- Stability window: when enabled, temperature/weather/wind values must remain unchanged for the configured duration
 
 ### Position Inputs
 
@@ -116,22 +120,21 @@ The automation reevaluates on:
 Decision order:
 
 1. **Away handling**:
-   - if `Close Covers When Away` is enabled and nobody is home, all managed covers are closed
-   - if disabled and nobody is home, no further action is taken
+  - if `Close Covers When Away` is enabled and nobody is home, all managed covers are closed
+  - if disabled and nobody is home, no further action is taken
 2. **Night handling**:
-   - if `Close Covers At Night` is enabled, after sunset in **summer** all managed covers are closed
-   - in **winter** night, managed covers use `Winter Night Position` (0/25/50/75/100)
-3. **Awake gating**: if not awake, no further action is taken
-4. **Wind high**: all managed covers move to `Position With High Wind`
-5. **Winter night**: all managed covers move to `Winter Night Position`
-6. **Summer hot** (indoor or outdoor threshold reached):
-   - all covers move to `Summer Position (Non Sun-Facing)`
-   - sun-facing facade moves to `Summer Position (Sun-Facing Facade)`
-7. **Winter day and heat gain needed**:
-   - all covers move to `Winter Day Position (Solar Gains)`
-8. **Fallback**:
-   - winter daylight: `Winter Day Position (No Solar Gains Needed)`
-   - otherwise: `Neutral Position`
+  - in **summer** night, if `Close Covers At Night` is enabled, all managed covers are closed
+  - in **winter** night, all managed covers move to `Winter Night Position` (0/25/50/75/100)
+3. **Awake gating (daytime only)**: if not awake, no further action is taken
+4. **Wind high (daytime only)**: all managed covers move to `Position With High Wind`
+5. **Summer hot** (daytime, indoor or outdoor threshold reached):
+  - all covers move to `Summer Position (Non Sun-Facing)`
+  - sun-facing facade moves to `Summer Position (Sun-Facing Facade)`
+6. **Winter day and heat gain needed**:
+  - all covers move to `Winter Day Position (Solar Gains)`
+7. **Fallback (daytime)**:
+  - winter daylight: `Winter Day Position (No Solar Gains Needed)`
+  - otherwise: `Neutral Position`
 
 Auto season behavior:
 
@@ -144,6 +147,22 @@ When optional sensors are missing:
 - Summer/winter thermal decisions use only available temperature sources
 - Wind safety branch is skipped if no wind sensor is configured
 - Cover commands are guarded to avoid sending actions when targets are already at the requested state/position
+
+Anti-oscillation safeguards:
+
+- Temperature thresholds use hysteresis:
+  - summer hot checks use `threshold + buffer`
+  - winter gain checks use `threshold - buffer`
+- Sensor values are considered only when stable for the configured window (or immediately when set to `0`)
+
+Recommended presets:
+
+- **Stable profile** (less frequent movements):
+  - `Temperature Hysteresis Buffer`: `0.8`
+  - `Sensor Stability Window (Minutes)`: `10`
+- **Reactive profile** (faster response):
+  - `Temperature Hysteresis Buffer`: `0.3`
+  - `Sensor Stability Window (Minutes)`: `5`
 
 Awake gating priority:
 
@@ -193,3 +212,4 @@ The sun-facing facade is inferred using `sun.sun` azimuth:
   - ensure the cover integration supports `cover.set_cover_position`
 - **Too frequent movements**:
   - increase thresholds or reduce trigger sensitivity (duplicate sensors can cause many updates)
+

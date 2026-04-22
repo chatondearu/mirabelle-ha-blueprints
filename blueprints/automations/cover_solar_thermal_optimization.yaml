@@ -225,6 +225,34 @@ blueprint:
           max: 35
           step: 0.5
           unit_of_measurement: °C
+    temperature_hysteresis:
+      name: Temperature Hysteresis Buffer
+      description: >
+        Buffer in °C applied around temperature thresholds to reduce oscillations.
+      default: 0.5
+      selector:
+        number:
+          min: 0
+          max: 5
+          step: 0.1
+          unit_of_measurement: °C
+    sensor_stability_minutes:
+      name: Sensor Stability Window (Minutes)
+      description: >
+        Minimum time (in minutes) a sensor value must stay unchanged before being used.
+        Helps prevent rapid reactions to noisy sensor updates.
+      default: 5
+      selector:
+        select:
+          options:
+            - label: "0 (disabled)"
+              value: "0"
+            - label: "5"
+              value: "5"
+            - label: "10"
+              value: "10"
+            - label: "15"
+              value: "15"
     winter_indoor_cold_temp:
       name: Winter Indoor Cold Temperature
       description: In winter/daylight, allow solar gains when indoor temp is below this value.
@@ -382,6 +410,8 @@ variables:
   winter_open_temp_below: !input winter_open_temp_below
   max_wind_speed: !input max_wind_speed
   indoor_hot_temp: !input indoor_hot_temp
+  temperature_hysteresis: !input temperature_hysteresis
+  sensor_stability_minutes_input: !input sensor_stability_minutes
   winter_indoor_cold_temp: !input winter_indoor_cold_temp
   wind_position_input: !input wind_position
   winter_night_position_input: !input winter_night_position
@@ -397,6 +427,7 @@ variables:
   winter_day_gain_position: "{{ winter_day_gain_position_input | int(100) }}"
   winter_day_hold_position: "{{ winter_day_hold_position_input | int(50) }}"
   neutral_position: "{{ neutral_position_input | int(100) }}"
+  sensor_stability_minutes: "{{ sensor_stability_minutes_input | int(5) }}"
   is_home: >
     {{
       expand(presence_person_entities)
@@ -411,6 +442,30 @@ variables:
   has_weather_entity: "{{ weather_entity is string and weather_entity | length > 0 }}"
   has_indoor_temperature: "{{ indoor_temperature_entity is string and indoor_temperature_entity | length > 0 }}"
   has_wind_sensor: "{{ wind_speed_entity is string and wind_speed_entity | length > 0 }}"
+  outdoor_stable: >
+    {{
+      (not has_outdoor_temperature)
+      or sensor_stability_minutes == 0
+      or (as_timestamp(now()) - as_timestamp(states[outdoor_temperature_entity].last_changed)) >= (sensor_stability_minutes * 60)
+    }}
+  indoor_stable: >
+    {{
+      (not has_indoor_temperature)
+      or sensor_stability_minutes == 0
+      or (as_timestamp(now()) - as_timestamp(states[indoor_temperature_entity].last_changed)) >= (sensor_stability_minutes * 60)
+    }}
+  wind_stable: >
+    {{
+      (not has_wind_sensor)
+      or sensor_stability_minutes == 0
+      or (as_timestamp(now()) - as_timestamp(states[wind_speed_entity].last_changed)) >= (sensor_stability_minutes * 60)
+    }}
+  weather_stable: >
+    {{
+      (not has_weather_entity)
+      or sensor_stability_minutes == 0
+      or (as_timestamp(now()) - as_timestamp(states[weather_entity].last_changed)) >= (sensor_stability_minutes * 60)
+    }}
   is_awake: >
     {% if has_awake_entity %}
       {{ states(awake_entity_input) in ['on', 'home'] }}
@@ -467,7 +522,7 @@ variables:
         {{ now_md >= start_md or now_md <= end_md }}
       {% endif %}
     {% endif %}
-  wind_high: "{{ has_wind_sensor and (wind_value > max_wind_speed) }}"
+  wind_high: "{{ has_wind_sensor and wind_stable and (wind_value > max_wind_speed) }}"
   is_night: "{{ not is_daylight }}"
   winter_night: "{{ (not is_summer) and (not is_daylight) }}"
   summer_hot: >
@@ -475,8 +530,12 @@ variables:
       is_summer
       and is_daylight
       and (
-        (has_outdoor_temperature or has_weather_entity) and temp_value >= summer_close_temp
-        or has_indoor_temperature and indoor_temp_value >= indoor_hot_temp
+        (
+          ((has_outdoor_temperature and outdoor_stable) or (has_weather_entity and weather_stable))
+          and temp_value >= (summer_close_temp + temperature_hysteresis)
+        )
+        or
+        (has_indoor_temperature and indoor_stable and indoor_temp_value >= (indoor_hot_temp + temperature_hysteresis))
       )
     }}
   winter_need_solar_gain: >
@@ -484,8 +543,12 @@ variables:
       (not is_summer)
       and is_daylight
       and (
-        has_indoor_temperature and indoor_temp_value <= winter_indoor_cold_temp
-        or (has_outdoor_temperature or has_weather_entity) and temp_value <= winter_open_temp_below
+        (has_indoor_temperature and indoor_stable and indoor_temp_value <= (winter_indoor_cold_temp - temperature_hysteresis))
+        or
+        (
+          ((has_outdoor_temperature and outdoor_stable) or (has_weather_entity and weather_stable))
+          and temp_value <= (winter_open_temp_below - temperature_hysteresis)
+        )
       )
     }}
 
