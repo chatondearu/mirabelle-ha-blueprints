@@ -123,8 +123,8 @@ Decision order:
   - if `Close Covers When Away` is enabled and nobody is home, all managed covers are closed
   - if disabled and nobody is home, no further action is taken
 2. **Night handling**:
-  - in **summer** night, if `Close Covers At Night` is enabled, all managed covers are closed
-  - in **winter** night, all managed covers move to `Winter Night Position` (0/25/50/75/100)
+  - if `Close Covers At Night` is enabled, all managed covers are closed at night (summer and winter)
+  - if `Close Covers At Night` is disabled, winter night uses `Winter Night Position` (0/25/50/75/100)
 3. **Awake gating (daytime only)**: if not awake, no further action is taken
 4. **Wind high (daytime only)**: all managed covers move to `Position With High Wind`
 5. **Summer hot** (daytime, indoor or outdoor threshold reached):
@@ -147,6 +147,7 @@ When optional sensors are missing:
 - Summer/winter thermal decisions use only available temperature sources
 - Wind safety branch is skipped if no wind sensor is configured
 - Cover commands are guarded to avoid sending actions when targets are already at the requested state/position
+- Position guards apply to covers exposing `current_position`; covers without this attribute are ignored for position no-op checks
 
 Anti-oscillation safeguards:
 
@@ -154,6 +155,7 @@ Anti-oscillation safeguards:
   - summer hot checks use `threshold + buffer`
   - winter gain checks use `threshold - buffer`
 - Sensor values are considered only when stable for the configured window (or immediately when set to `0`)
+- Optional sensor entities are validated before use (`unknown`/`unavailable`/missing entities are ignored)
 
 Recommended presets:
 

@@ -438,33 +438,33 @@ variables:
   is_daylight: "{{ is_state('sun.sun', 'above_horizon') }}"
   has_awake_entity: "{{ awake_entity_input is string and awake_entity_input | length > 0 }}"
   has_awake_schedule: "{{ awake_schedule_input is string and awake_schedule_input | length > 0 }}"
-  has_outdoor_temperature: "{{ outdoor_temperature_entity is string and outdoor_temperature_entity | length > 0 }}"
-  has_weather_entity: "{{ weather_entity is string and weather_entity | length > 0 }}"
-  has_indoor_temperature: "{{ indoor_temperature_entity is string and indoor_temperature_entity | length > 0 }}"
-  has_wind_sensor: "{{ wind_speed_entity is string and wind_speed_entity | length > 0 }}"
+  has_outdoor_temperature: "{{ outdoor_temperature_entity is string and outdoor_temperature_entity | length > 0 and has_value(outdoor_temperature_entity) }}"
+  has_weather_entity: "{{ weather_entity is string and weather_entity | length > 0 and states(weather_entity) not in ['unknown', 'unavailable', ''] }}"
+  has_indoor_temperature: "{{ indoor_temperature_entity is string and indoor_temperature_entity | length > 0 and has_value(indoor_temperature_entity) }}"
+  has_wind_sensor: "{{ wind_speed_entity is string and wind_speed_entity | length > 0 and has_value(wind_speed_entity) }}"
   outdoor_stable: >
     {{
       (not has_outdoor_temperature)
       or sensor_stability_minutes == 0
-      or (as_timestamp(now()) - as_timestamp(states[outdoor_temperature_entity].last_changed)) >= (sensor_stability_minutes * 60)
+      or (as_timestamp(now()) - as_timestamp(states[outdoor_temperature_entity].last_updated)) >= (sensor_stability_minutes * 60)
     }}
   indoor_stable: >
     {{
       (not has_indoor_temperature)
       or sensor_stability_minutes == 0
-      or (as_timestamp(now()) - as_timestamp(states[indoor_temperature_entity].last_changed)) >= (sensor_stability_minutes * 60)
+      or (as_timestamp(now()) - as_timestamp(states[indoor_temperature_entity].last_updated)) >= (sensor_stability_minutes * 60)
     }}
   wind_stable: >
     {{
       (not has_wind_sensor)
       or sensor_stability_minutes == 0
-      or (as_timestamp(now()) - as_timestamp(states[wind_speed_entity].last_changed)) >= (sensor_stability_minutes * 60)
+      or (as_timestamp(now()) - as_timestamp(states[wind_speed_entity].last_updated)) >= (sensor_stability_minutes * 60)
     }}
   weather_stable: >
     {{
       (not has_weather_entity)
       or sensor_stability_minutes == 0
-      or (as_timestamp(now()) - as_timestamp(states[weather_entity].last_changed)) >= (sensor_stability_minutes * 60)
+      or (as_timestamp(now()) - as_timestamp(states[weather_entity].last_updated)) >= (sensor_stability_minutes * 60)
     }}
   is_awake: >
     {% if has_awake_entity %}
@@ -569,7 +569,7 @@ action:
         sequence: []
       - conditions:
           - condition: template
-            value_template: "{{ is_night and close_at_night and is_summer }}"
+            value_template: "{{ is_night and close_at_night }}"
         sequence:
           - condition: template
             value_template: "{{ expand(cover_entities) | selectattr('state', 'ne', 'closed') | list | count > 0 }}"
@@ -597,11 +597,6 @@ action:
                         | selectattr('attributes.current_position', 'ne', wind_position | int)
                         | list
                         | count > 0
-                        or
-                        expand(cover_entities)
-                        | selectattr('attributes.current_position', 'undefined')
-                        | list
-                        | count > 0
                       }}
                   - service: cover.set_cover_position
                     target:
@@ -615,11 +610,6 @@ action:
                     expand(cover_entities)
                     | selectattr('attributes.current_position', 'defined')
                     | selectattr('attributes.current_position', 'ne', winter_night_position | int)
-                    | list
-                    | count > 0
-                    or
-                    expand(cover_entities)
-                    | selectattr('attributes.current_position', 'undefined')
                     | list
                     | count > 0
                   }}
@@ -638,11 +628,6 @@ action:
                 expand(cover_entities)
                 | selectattr('attributes.current_position', 'defined')
                 | selectattr('attributes.current_position', 'ne', summer_non_sun_position | int)
-                | list
-                | count > 0
-                or
-                expand(cover_entities)
-                | selectattr('attributes.current_position', 'undefined')
                 | list
                 | count > 0
               }}
@@ -664,11 +649,6 @@ action:
                         | selectattr('attributes.current_position', 'ne', summer_sun_facing_position | int)
                         | list
                         | count > 0
-                        or
-                        expand(cover_entities)
-                        | selectattr('attributes.current_position', 'undefined')
-                        | list
-                        | count > 0
                       }}
                   - service: cover.set_cover_position
                     target:
@@ -685,11 +665,6 @@ action:
                         expand(east_cover_entities)
                         | selectattr('attributes.current_position', 'defined')
                         | selectattr('attributes.current_position', 'ne', summer_sun_facing_position | int)
-                        | list
-                        | count > 0
-                        or
-                        expand(east_cover_entities)
-                        | selectattr('attributes.current_position', 'undefined')
                         | list
                         | count > 0
                       }}
@@ -710,11 +685,6 @@ action:
                         | selectattr('attributes.current_position', 'ne', summer_sun_facing_position | int)
                         | list
                         | count > 0
-                        or
-                        expand(south_cover_entities)
-                        | selectattr('attributes.current_position', 'undefined')
-                        | list
-                        | count > 0
                       }}
                   - service: cover.set_cover_position
                     target:
@@ -733,11 +703,6 @@ action:
                         | selectattr('attributes.current_position', 'ne', summer_sun_facing_position | int)
                         | list
                         | count > 0
-                        or
-                        expand(west_cover_entities)
-                        | selectattr('attributes.current_position', 'undefined')
-                        | list
-                        | count > 0
                       }}
                   - service: cover.set_cover_position
                     target:
@@ -751,11 +716,6 @@ action:
                     expand(north_cover_entities)
                     | selectattr('attributes.current_position', 'defined')
                     | selectattr('attributes.current_position', 'ne', summer_sun_facing_position | int)
-                    | list
-                    | count > 0
-                    or
-                    expand(north_cover_entities)
-                    | selectattr('attributes.current_position', 'undefined')
                     | list
                     | count > 0
                   }}
@@ -776,11 +736,6 @@ action:
                 | selectattr('attributes.current_position', 'ne', winter_day_gain_position | int)
                 | list
                 | count > 0
-                or
-                expand(cover_entities)
-                | selectattr('attributes.current_position', 'undefined')
-                | list
-                | count > 0
               }}
           - service: cover.set_cover_position
             target:
@@ -795,11 +750,6 @@ action:
             expand(cover_entities)
             | selectattr('attributes.current_position', 'defined')
             | selectattr('attributes.current_position', 'ne', fallback_position)
-            | list
-            | count > 0
-            or
-            expand(cover_entities)
-            | selectattr('attributes.current_position', 'undefined')
             | list
             | count > 0
           }}
