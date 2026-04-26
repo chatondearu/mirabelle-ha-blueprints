@@ -52,6 +52,7 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 - **Awake Entity (Optional)**: primary awake source when set
 - **Awake Schedule (Optional)**: used when Awake Entity is empty
 - **Fallback awake mode**: if both are empty, daylight is used (`sun.sun` above horizon)
+- **Summer Shading Latch Helper (Optional)**: an `input_boolean` to persist summer shading state and avoid close/open oscillation
 - **Outdoor Temperature Sensor (Optional)**: primary outdoor temperature source
 - **Weather Entity (Optional Fallback)**: used when Outdoor Temperature Sensor is empty
 - **Indoor Temperature Sensor (Optional)**
@@ -135,6 +136,14 @@ Decision order:
 7. **Fallback (daytime)**:
   - winter daylight: `Winter Day Position (No Solar Gains Needed)`
   - otherwise: `Neutral Position`
+
+Summer shading state (anti-loop):
+
+- Summer shading turns **on** when summer heat thresholds are exceeded (`threshold + buffer`)
+- Summer shading turns **off** only when both summer release conditions are met (`threshold - buffer`)
+- Between those two bands, current shading state is retained
+- If `Summer Shading Latch Helper` is configured, it is used as persistent state memory
+- If no helper is configured, shading state is inferred from current cover positions
 
 Auto season behavior:
 

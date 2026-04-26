@@ -77,6 +77,15 @@ blueprint:
       default: true
       selector:
         boolean: {}
+    summer_shading_latch_helper:
+      name: Summer Shading Latch Helper (Optional)
+      description: >
+        Optional input_boolean helper used to keep summer shading state stable across
+        triggers. If empty, shading state is inferred from current cover positions.
+      default: ""
+      selector:
+        entity:
+          domain: input_boolean
     awake_entity:
       name: Awake Entity (Optional)
       description: >
@@ -395,6 +404,7 @@ variables:
   presence_person_entities: !input presence_persons
   close_when_away: !input close_when_away
   close_at_night: !input close_at_night
+  summer_shading_latch_helper: !input summer_shading_latch_helper
   awake_entity_input: !input awake_entity
   awake_schedule_input: !input awake_schedule
   outdoor_temperature_entity: !input outdoor_temperature
@@ -442,6 +452,7 @@ variables:
   has_weather_entity: "{{ weather_entity is string and weather_entity | length > 0 and states(weather_entity) not in ['unknown', 'unavailable', ''] }}"
   has_indoor_temperature: "{{ indoor_temperature_entity is string and indoor_temperature_entity | length > 0 and has_value(indoor_temperature_entity) }}"
   has_wind_sensor: "{{ wind_speed_entity is string and wind_speed_entity | length > 0 and has_value(wind_speed_entity) }}"
+  has_summer_latch_helper: "{{ summer_shading_latch_helper is string and summer_shading_latch_helper | length > 0 and states(summer_shading_latch_helper) in ['on', 'off'] }}"
   outdoor_stable: >
     {{
       (not has_outdoor_temperature)
@@ -538,6 +549,48 @@ variables:
         (has_indoor_temperature and indoor_stable and indoor_temp_value >= (indoor_hot_temp + temperature_hysteresis))
       )
     }}
+  summer_cool_enough: >
+    {{
+      is_summer
+      and is_daylight
+      and (
+        (
+          (not has_outdoor_temperature and not has_weather_entity)
+          or temp_value <= (summer_close_temp - temperature_hysteresis)
+        )
+        and
+        (
+          (not has_indoor_temperature)
+          or indoor_temp_value <= (indoor_hot_temp - temperature_hysteresis)
+        )
+      )
+    }}
+  summer_shading_position_detected: >
+    {{
+      expand(cover_entities)
+      | selectattr('attributes.current_position', 'defined')
+      | selectattr('attributes.current_position', 'eq', summer_sun_facing_position | int)
+      | list
+      | count > 0
+    }}
+  summer_shading_active: >
+    {% if has_summer_latch_helper %}
+      {% if summer_hot %}
+        true
+      {% elif summer_cool_enough %}
+        false
+      {% else %}
+        {{ is_state(summer_shading_latch_helper, 'on') }}
+      {% endif %}
+    {% else %}
+      {% if summer_hot %}
+        true
+      {% elif summer_cool_enough %}
+        false
+      {% else %}
+        {{ summer_shading_position_detected }}
+      {% endif %}
+    {% endif %}
   winter_need_solar_gain: >
     {{
       (not is_summer)
@@ -582,6 +635,20 @@ action:
         sequence: []
       - conditions:
           - condition: template
+            value_template: "{{ has_summer_latch_helper and summer_hot and is_state(summer_shading_latch_helper, 'off') }}"
+        sequence:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: "{{ summer_shading_latch_helper }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ has_summer_latch_helper and summer_cool_enough and is_state(summer_shading_latch_helper, 'on') }}"
+        sequence:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: "{{ summer_shading_latch_helper }}"
+      - conditions:
+          - condition: template
             value_template: "{{ wind_high or winter_night }}"
         sequence:
           - choose:
@@ -620,7 +687,7 @@ action:
                   position: "{{ winter_night_position }}"
       - conditions:
           - condition: template
-            value_template: "{{ summer_hot }}"
+            value_template: "{{ summer_shading_active }}"
         sequence:
           - condition: template
             value_template: >
