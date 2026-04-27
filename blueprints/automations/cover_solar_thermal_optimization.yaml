@@ -86,6 +86,16 @@ blueprint:
       selector:
         entity:
           domain: input_boolean
+    action_priority_helper:
+      name: Action Priority Helper (Optional)
+      description: >
+        Optional input_number helper used to store the last applied action priority.
+        Higher priority actions can override lower ones; lower priority actions are blocked
+        to prevent unwanted reopen/close loops from periodic triggers.
+      default: ""
+      selector:
+        entity:
+          domain: input_number
     awake_entity:
       name: Awake Entity (Optional)
       description: >
@@ -405,6 +415,7 @@ variables:
   close_when_away: !input close_when_away
   close_at_night: !input close_at_night
   summer_shading_latch_helper: !input summer_shading_latch_helper
+  action_priority_helper: !input action_priority_helper
   awake_entity_input: !input awake_entity
   awake_schedule_input: !input awake_schedule
   outdoor_temperature_entity: !input outdoor_temperature
@@ -453,6 +464,19 @@ variables:
   has_indoor_temperature: "{{ indoor_temperature_entity is string and indoor_temperature_entity | length > 0 and has_value(indoor_temperature_entity) }}"
   has_wind_sensor: "{{ wind_speed_entity is string and wind_speed_entity | length > 0 and has_value(wind_speed_entity) }}"
   has_summer_latch_helper: "{{ summer_shading_latch_helper is string and summer_shading_latch_helper | length > 0 and states(summer_shading_latch_helper) in ['on', 'off'] }}"
+  has_action_priority_helper: "{{ action_priority_helper is string and action_priority_helper | length > 0 and has_value(action_priority_helper) }}"
+  current_action_priority: "{{ states(action_priority_helper) | float(0) if has_action_priority_helper else 0 }}"
+  priority_away: 100
+  priority_night: 90
+  priority_weather_guard: 80
+  priority_summer_hot: 70
+  priority_winter_gain: 60
+  priority_fallback: 10
+  can_apply_night: "{{ (not has_action_priority_helper) or (priority_night >= current_action_priority) }}"
+  can_apply_weather_guard: "{{ (not has_action_priority_helper) or (priority_weather_guard >= current_action_priority) }}"
+  can_apply_summer_hot: "{{ (not has_action_priority_helper) or (priority_summer_hot >= current_action_priority) }}"
+  can_apply_winter_gain: "{{ (not has_action_priority_helper) or (priority_winter_gain >= current_action_priority) }}"
+  can_apply_fallback: "{{ (not has_action_priority_helper) or (priority_fallback >= current_action_priority) }}"
   outdoor_stable: >
     {{
       (not has_outdoor_temperature)
@@ -609,6 +633,23 @@ action:
   - choose:
       - conditions:
           - condition: template
+            value_template: >
+              {{
+                has_action_priority_helper
+                and (
+                  (is_home and current_action_priority >= priority_away)
+                  or (is_daylight and current_action_priority >= priority_night)
+                )
+              }}
+        sequence:
+          - service: input_number.set_value
+            target:
+              entity_id: "{{ action_priority_helper }}"
+            data:
+              value: 0
+  - choose:
+      - conditions:
+          - condition: template
             value_template: "{{ (not is_home) and close_when_away }}"
         sequence:
           - condition: template
@@ -616,19 +657,37 @@ action:
           - service: cover.close_cover
             target:
               entity_id: !input covers
+          - if:
+              - condition: template
+                value_template: "{{ has_action_priority_helper }}"
+            then:
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ action_priority_helper }}"
+                data:
+                  value: "{{ priority_away }}"
       - conditions:
           - condition: template
             value_template: "{{ not is_home }}"
         sequence: []
       - conditions:
           - condition: template
-            value_template: "{{ is_night and close_at_night }}"
+            value_template: "{{ is_night and close_at_night and can_apply_night }}"
         sequence:
           - condition: template
             value_template: "{{ expand(cover_entities) | selectattr('state', 'ne', 'closed') | list | count > 0 }}"
           - service: cover.close_cover
             target:
               entity_id: !input covers
+          - if:
+              - condition: template
+                value_template: "{{ has_action_priority_helper }}"
+            then:
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ action_priority_helper }}"
+                data:
+                  value: "{{ priority_night }}"
       - conditions:
           - condition: template
             value_template: "{{ not is_awake }}"
@@ -649,7 +708,7 @@ action:
               entity_id: "{{ summer_shading_latch_helper }}"
       - conditions:
           - condition: template
-            value_template: "{{ wind_high or winter_night }}"
+            value_template: "{{ (wind_high or winter_night) and can_apply_weather_guard }}"
         sequence:
           - choose:
               - conditions:
@@ -670,6 +729,15 @@ action:
                       entity_id: !input covers
                     data:
                       position: "{{ wind_position }}"
+                  - if:
+                      - condition: template
+                        value_template: "{{ has_action_priority_helper }}"
+                    then:
+                      - service: input_number.set_value
+                        target:
+                          entity_id: "{{ action_priority_helper }}"
+                        data:
+                          value: "{{ priority_weather_guard }}"
             default:
               - condition: template
                 value_template: >
@@ -685,9 +753,18 @@ action:
                   entity_id: !input covers
                 data:
                   position: "{{ winter_night_position }}"
+              - if:
+                  - condition: template
+                    value_template: "{{ has_action_priority_helper }}"
+                then:
+                  - service: input_number.set_value
+                    target:
+                      entity_id: "{{ action_priority_helper }}"
+                    data:
+                      value: "{{ priority_weather_guard }}"
       - conditions:
           - condition: template
-            value_template: "{{ summer_shading_active }}"
+            value_template: "{{ summer_shading_active and can_apply_summer_hot }}"
         sequence:
           - condition: template
             value_template: >
@@ -791,9 +868,18 @@ action:
                   entity_id: !input north_covers
                 data:
                   position: "{{ summer_sun_facing_position }}"
+          - if:
+              - condition: template
+                value_template: "{{ has_action_priority_helper }}"
+            then:
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ action_priority_helper }}"
+                data:
+                  value: "{{ priority_summer_hot }}"
       - conditions:
           - condition: template
-            value_template: "{{ winter_need_solar_gain }}"
+            value_template: "{{ winter_need_solar_gain and can_apply_winter_gain }}"
         sequence:
           - condition: template
             value_template: >
@@ -809,7 +895,18 @@ action:
               entity_id: !input covers
             data:
               position: "{{ winter_day_gain_position }}"
+          - if:
+              - condition: template
+                value_template: "{{ has_action_priority_helper }}"
+            then:
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ action_priority_helper }}"
+                data:
+                  value: "{{ priority_winter_gain }}"
     default:
+      - condition: template
+        value_template: "{{ can_apply_fallback }}"
       - condition: template
         value_template: >
           {% set fallback_position = winter_day_hold_position | int if is_daylight and (not is_summer) else neutral_position | int %}
@@ -825,3 +922,12 @@ action:
           entity_id: !input covers
         data:
           position: "{{ winter_day_hold_position if is_daylight and (not is_summer) else neutral_position }}"
+      - if:
+          - condition: template
+            value_template: "{{ has_action_priority_helper }}"
+        then:
+          - service: input_number.set_value
+            target:
+              entity_id: "{{ action_priority_helper }}"
+            data:
+              value: "{{ priority_fallback }}"
