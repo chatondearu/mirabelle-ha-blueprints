@@ -53,6 +53,7 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 - **Awake Schedule (Optional)**: used when Awake Entity is empty
 - **Fallback awake mode**: if both are empty, daylight is used (`sun.sun` above horizon)
 - **Summer Shading Latch Helper (Optional)**: an `input_boolean` to persist summer shading state and avoid close/open oscillation
+- **Action Priority Helper (Optional)**: an `input_number` to store last applied action priority and block unwanted lower-priority overrides
 - **Outdoor Temperature Sensor (Optional)**: primary outdoor temperature source
 - **Weather Entity (Optional Fallback)**: used when Outdoor Temperature Sensor is empty
 - **Indoor Temperature Sensor (Optional)**
@@ -145,6 +146,15 @@ Summer shading state (anti-loop):
 - If `Summer Shading Latch Helper` is configured, it is used as persistent state memory
 - If no helper is configured, shading state is inferred from current cover positions
 
+Action priority memory (anti-fallback loop):
+
+- If `Action Priority Helper` is configured, each branch writes a numeric priority
+- Lower-priority branches are blocked while a higher-priority action remains active
+- Automatic reset to `0` happens when:
+  - returning home after away-priority action
+  - switching back to daytime after night-priority action
+- Suggested helper configuration: `input_number` with min `0`, max `100`, step `1`
+
 Auto season behavior:
 
 - Summer is active between configured start/end dates (month + day)
@@ -223,4 +233,3 @@ The sun-facing facade is inferred using `sun.sun` azimuth:
   - ensure the cover integration supports `cover.set_cover_position`
 - **Too frequent movements**:
   - increase thresholds or reduce trigger sensitivity (duplicate sensors can cause many updates)
-
