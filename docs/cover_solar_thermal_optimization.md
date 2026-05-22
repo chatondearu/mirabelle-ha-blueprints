@@ -142,9 +142,10 @@ Summer shading state (anti-loop):
 
 - Summer shading turns **on** when summer heat thresholds are exceeded (`threshold + buffer`)
 - Summer shading turns **off** only when both summer release conditions are met (`threshold - buffer`)
-- Between those two bands, current shading state is retained
+- Between those two bands, shading stays active (without latch helper) until release thresholds are met
 - If `Summer Shading Latch Helper` is configured, it is used as persistent state memory
-- If no helper is configured, shading state is inferred from current cover positions
+- Sun-facing covers target `Summer Position (Sun-Facing Facade)`; other facades target `Summer Position (Non Sun-Facing)`
+- If a facade group is empty for the current sun azimuth, all managed covers are treated as sun-facing for shading (safety fallback)
 
 Action priority memory (anti-fallback loop):
 
@@ -233,3 +234,8 @@ The sun-facing facade is inferred using `sun.sun` azimuth:
   - ensure the cover integration supports `cover.set_cover_position`
 - **Too frequent movements**:
   - increase thresholds or reduce trigger sensitivity (duplicate sensors can cause many updates)
+- **Hot day but covers stay at 75% all day**:
+  - verify `South-Facing Covers` / `North-Facing Covers` are filled for your house layout
+  - expected behavior in summer heat: sun-facing facade at `Summer Position (Sun-Facing Facade)` (default `25`), others at `75`
+  - re-import the latest blueprint version (older versions could skip shading when all covers were already at `75%`)
+  - check `Sensor Stability Window` is not blocking hot thresholds for noisy sensors
