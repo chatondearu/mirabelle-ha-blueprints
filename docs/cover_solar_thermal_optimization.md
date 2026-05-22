@@ -54,10 +54,16 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 - **Fallback awake mode**: if both are empty, daylight is used (`sun.sun` above horizon)
 - **Summer Shading Latch Helper (Optional)**: an `input_boolean` to persist summer shading state and avoid close/open oscillation
 - **Action Priority Helper (Optional)**: an `input_number` to store last applied action priority and block unwanted lower-priority overrides
+- **Control Strategy**: choose `balanced`, `thermal_comfort`, or `motor_wear`
+- **Manual Override Hold (Minutes)**: hold manual per-cover actions before comfort logic takes back control
+- **Minimum Position Delta**: ignore small comfort/fallback moves below this difference
+- **Minimum Action Interval (Minutes)**: minimum delay between comfort/fallback moves for the same cover
 - **Outdoor Temperature Sensor (Optional)**: primary outdoor temperature source
 - **Weather Entity (Optional Fallback)**: used when Outdoor Temperature Sensor is empty
 - **Indoor Temperature Sensor (Optional)**
 - **Wind Speed Sensor (Optional)**: if empty, wind protection is disabled
+- **Contact Sensors (Optional)**: door/window sensors that can request an opening position
+- **Covers For Contact Opening (Optional)**: target covers for contact-based opening (all covers if empty)
 
 ### Optional Facade Inputs
 
@@ -101,6 +107,7 @@ Sensor fallback behavior:
 Each value is selected from key positions (`0`, `25`, `50`, `75`, `100`):
 
 - **Position With High Wind**
+- **Contact Open Position**
 - **Winter Night Position**
 - **Summer Position (Non Sun-Facing)**
 - **Summer Position (Sun-Facing Facade)**
@@ -113,9 +120,11 @@ Each value is selected from key positions (`0`, `25`, `50`, `75`, `100`):
 The automation reevaluates on:
 
 - Presence changes
+- Managed cover state changes
 - Awake source changes (entity/schedule) trigger an immediate reevaluation
 - Indoor/outdoor/weather temperature changes
 - Wind speed changes (if wind sensor configured)
+- Contact sensor changes (if configured)
 - `sun.sun` state changes
 - Every 10 minutes
 
@@ -129,12 +138,13 @@ Decision order:
   - if `Close Covers At Night` is disabled, winter night uses `Winter Night Position` (0/25/50/75/100)
 3. **Awake gating (daytime only)**: if not awake, no further action is taken
 4. **Wind high (daytime only)**: all managed covers move to `Position With High Wind`
-5. **Summer hot** (daytime, indoor or outdoor threshold reached):
+5. **Contact open**: when any configured contact sensor is open, target covers move to `Contact Open Position`
+6. **Summer hot** (daytime, indoor or outdoor threshold reached):
   - all covers move to `Summer Position (Non Sun-Facing)`
   - sun-facing facade moves to `Summer Position (Sun-Facing Facade)`
-6. **Winter day and heat gain needed**:
+7. **Winter day and heat gain needed**:
   - all covers move to `Winter Day Position (Solar Gains)`
-7. **Fallback (daytime)**:
+8. **Fallback (daytime)**:
   - winter daylight: `Winter Day Position (No Solar Gains Needed)`
   - otherwise: `Neutral Position`
 
@@ -146,6 +156,19 @@ Summer shading state (anti-loop):
 - If `Summer Shading Latch Helper` is configured, it is used as persistent state memory
 - Sun-facing covers target `Summer Position (Sun-Facing Facade)`; other facades target `Summer Position (Non Sun-Facing)`
 - If a facade group is empty for the current sun azimuth, all managed covers are treated as sun-facing for shading (safety fallback)
+- Non-sun and sun-facing updates are now independent, so one cannot block the other
+
+Manual override and motor protection:
+
+- Manual changes are detected per cover and held for `Manual Override Hold (Minutes)` before comfort/fallback branches can move that cover again
+- Manual hold applies to comfort branches only; safety branches (away/night/wind) can still override
+- `Control Strategy` adjusts defaults for movement aggressiveness:
+  - `thermal_comfort`: fastest thermal reaction
+  - `balanced`: moderate anti-wear filtering
+  - `motor_wear`: stronger anti-wear filtering
+- Effective anti-wear filtering uses the max between strategy defaults and your explicit values:
+  - `Minimum Position Delta`
+  - `Minimum Action Interval (Minutes)`
 
 Action priority memory (anti-fallback loop):
 
@@ -154,6 +177,7 @@ Action priority memory (anti-fallback loop):
 - Automatic reset to `0` happens when:
   - returning home after away-priority action
   - switching back to daytime after night-priority action
+  - safety/contact priority is no longer active (wind/night/contact cleared)
 - Suggested helper configuration: `input_number` with min `0`, max `100`, step `1`
 
 Auto season behavior:
@@ -233,9 +257,14 @@ The sun-facing facade is inferred using `sun.sun` azimuth:
 - **Position service errors**:
   - ensure the cover integration supports `cover.set_cover_position`
 - **Too frequent movements**:
-  - increase thresholds or reduce trigger sensitivity (duplicate sensors can cause many updates)
+  - increase `Minimum Position Delta`
+  - increase `Minimum Action Interval (Minutes)`
+  - use `motor_wear` strategy
 - **Hot day but covers stay at 75% all day**:
   - verify `South-Facing Covers` / `North-Facing Covers` are filled for your house layout
   - expected behavior in summer heat: sun-facing facade at `Summer Position (Sun-Facing Facade)` (default `25`), others at `75`
   - re-import the latest blueprint version (older versions could skip shading when all covers were already at `75%`)
   - check `Sensor Stability Window` is not blocking hot thresholds for noisy sensors
+- **Manual move gets reverted too quickly**:
+  - increase `Manual Override Hold (Minutes)`
+  - verify the move was a real state change on the cover (not only attribute noise)
