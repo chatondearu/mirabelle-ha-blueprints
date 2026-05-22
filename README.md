@@ -16,6 +16,7 @@ A collection of custom blueprints for Home Assistant.
 
 - [[CDA] 🔔 Scheduled Bell Sound](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fscheduled_bell_sound.yaml)
 - [[CDA] 💡 Presence Based Lighting](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fpresence_based_lighting.yaml)
+- [[CDA] 🛋️ Living Area Adaptive Lighting](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fliving-area-adaptive-lighting.yaml)
 - [[CDA] 🪟 Cover Control](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_control.yaml)
 - [[CDA] 🌞 Smart Cover Solar & Thermal Optimization](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_solar_thermal_optimization.yaml)
 - [[CDA] 🪟 Blind Cover Template](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_cover.yaml)
@@ -43,6 +44,7 @@ If the quick links don't work, you can manually import the blueprints:
 ```
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/scheduled_bell_sound.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/presence_based_lighting.yaml
+https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/living-area-adaptive-lighting.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_control.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_solar_thermal_optimization.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_cover.yaml
@@ -122,6 +124,13 @@ Automatically control lights based on presence detection with configurable delay
 
 [View Documentation](docs/presence_based_lighting.md)
 
+### Living Area Adaptive Lighting
+
+[CDA] 🛋️ Living Area Adaptive Lighting
+Adaptive day and night lighting for living areas with computed profiles (blue starlight at night, warm adaptive day light from sun, lux, and cover shading). Supports zone occupancy, optional person home checks, and manual helpers.
+
+[View Documentation](docs/living-area-adaptive-lighting.md)
+
 ### Cover Control
 
 [CDA] 🪟 Cover Control
@@ -167,6 +176,7 @@ mirabelle-ha-blueprints/
 │   ├── automations/
 │   │   ├── scheduled_bell_sound.yaml
 │   │   ├── presence_based_lighting.yaml
+│   │   ├── living-area-adaptive-lighting.yaml
 │   │   ├── cover_control.yaml
 │   │   ├── cover_solar_thermal_optimization.yaml
 │   │   ├── cover_cover.yaml
@@ -181,6 +191,7 @@ mirabelle-ha-blueprints/
 │   ├── play_sound_with_volume_control.md
 │   ├── create_schedule.md
 │   ├── presence_based_lighting.md
+│   ├── living-area-adaptive-lighting.md
 │   ├── cover_solar_thermal_optimization.md
 │   ├── blind_states.md
 │   └── cover_generator.md
