@@ -597,6 +597,65 @@ variables:
       | list
       | count > 0
     }}
+  sun_facing_cover_entity_list: >
+    {% if not has_oriented_groups %}
+      {{ cover_entities }}
+    {% elif sun_azimuth >= 45 and sun_azimuth < 135 %}
+      {{ east_cover_entities }}
+    {% elif sun_azimuth >= 135 and sun_azimuth < 225 %}
+      {{ south_cover_entities }}
+    {% elif sun_azimuth >= 225 and sun_azimuth < 315 %}
+      {{ west_cover_entities }}
+    {% else %}
+      {{ north_cover_entities }}
+    {% endif %}
+  active_sun_facing_cover_entities: >
+    {% if has_oriented_groups and (expand(sun_facing_cover_entity_list) | count == 0) %}
+      {{ cover_entities }}
+    {% else %}
+      {{ sun_facing_cover_entity_list }}
+    {% endif %}
+  sun_facing_cover_ids: >
+    {{ expand(active_sun_facing_cover_entities) | map(attribute='entity_id') | list }}
+  non_sun_cover_entity_ids: >
+    {{
+      expand(cover_entities)
+      | rejectattr('entity_id', 'in', sun_facing_cover_ids)
+      | map(attribute='entity_id')
+      | list
+    }}
+  needs_summer_shading_action: >
+    {% if not has_oriented_groups %}
+      {{
+        expand(cover_entities)
+        | selectattr('attributes.current_position', 'defined')
+        | selectattr('attributes.current_position', 'ne', summer_sun_facing_position | int)
+        | list
+        | count > 0
+      }}
+    {% else %}
+      {% set ns = namespace(needs=false) %}
+      {% for cover in expand(cover_entities) %}
+        {% if cover.attributes.current_position is defined %}
+          {% if cover.entity_id in sun_facing_cover_ids %}
+            {% if cover.attributes.current_position | int != summer_sun_facing_position | int %}
+              {% set ns.needs = true %}
+            {% endif %}
+          {% elif cover.attributes.current_position | int != summer_non_sun_position | int %}
+            {% set ns.needs = true %}
+          {% endif %}
+        {% endif %}
+      {% endfor %}
+      {{ ns.needs }}
+    {% endif %}
+  needs_non_sun_position_update: >
+    {{
+      expand(non_sun_cover_entity_ids)
+      | selectattr('attributes.current_position', 'defined')
+      | selectattr('attributes.current_position', 'ne', summer_non_sun_position | int)
+      | list
+      | count > 0
+    }}
   summer_shading_active: >
     {% if has_summer_latch_helper %}
       {% if summer_hot %}
@@ -612,7 +671,7 @@ variables:
       {% elif summer_cool_enough %}
         false
       {% else %}
-        {{ summer_shading_position_detected }}
+        true
       {% endif %}
     {% endif %}
   winter_need_solar_gain: >
@@ -767,20 +826,33 @@ action:
             value_template: "{{ summer_shading_active and can_apply_summer_hot }}"
         sequence:
           - condition: template
-            value_template: >
-              {{
-                expand(cover_entities)
-                | selectattr('attributes.current_position', 'defined')
-                | selectattr('attributes.current_position', 'ne', summer_non_sun_position | int)
-                | list
-                | count > 0
-              }}
-          - service: cover.set_cover_position
-            target:
-              entity_id: !input covers
-            data:
-              position: "{{ summer_non_sun_position }}"
+            value_template: "{{ needs_summer_shading_action }}"
           - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ has_oriented_groups }}"
+                sequence:
+                  - condition: template
+                    value_template: "{{ needs_non_sun_position_update }}"
+                  - service: cover.set_cover_position
+                    target:
+                      entity_id: "{{ non_sun_cover_entity_ids }}"
+                    data:
+                      position: "{{ summer_non_sun_position }}"
+                  - condition: template
+                    value_template: >
+                      {{
+                        expand(active_sun_facing_cover_entities)
+                        | selectattr('attributes.current_position', 'defined')
+                        | selectattr('attributes.current_position', 'ne', summer_sun_facing_position | int)
+                        | list
+                        | count > 0
+                      }}
+                  - service: cover.set_cover_position
+                    target:
+                      entity_id: "{{ active_sun_facing_cover_entities }}"
+                    data:
+                      position: "{{ summer_sun_facing_position }}"
               - conditions:
                   - condition: template
                     value_template: "{{ not has_oriented_groups }}"
@@ -799,75 +871,6 @@ action:
                       entity_id: !input covers
                     data:
                       position: "{{ summer_sun_facing_position }}"
-              - conditions:
-                  - condition: template
-                    value_template: "{{ sun_azimuth >= 45 and sun_azimuth < 135 }}"
-                sequence:
-                  - condition: template
-                    value_template: >
-                      {{
-                        expand(east_cover_entities)
-                        | selectattr('attributes.current_position', 'defined')
-                        | selectattr('attributes.current_position', 'ne', summer_sun_facing_position | int)
-                        | list
-                        | count > 0
-                      }}
-                  - service: cover.set_cover_position
-                    target:
-                      entity_id: !input east_covers
-                    data:
-                      position: "{{ summer_sun_facing_position }}"
-              - conditions:
-                  - condition: template
-                    value_template: "{{ sun_azimuth >= 135 and sun_azimuth < 225 }}"
-                sequence:
-                  - condition: template
-                    value_template: >
-                      {{
-                        expand(south_cover_entities)
-                        | selectattr('attributes.current_position', 'defined')
-                        | selectattr('attributes.current_position', 'ne', summer_sun_facing_position | int)
-                        | list
-                        | count > 0
-                      }}
-                  - service: cover.set_cover_position
-                    target:
-                      entity_id: !input south_covers
-                    data:
-                      position: "{{ summer_sun_facing_position }}"
-              - conditions:
-                  - condition: template
-                    value_template: "{{ sun_azimuth >= 225 and sun_azimuth < 315 }}"
-                sequence:
-                  - condition: template
-                    value_template: >
-                      {{
-                        expand(west_cover_entities)
-                        | selectattr('attributes.current_position', 'defined')
-                        | selectattr('attributes.current_position', 'ne', summer_sun_facing_position | int)
-                        | list
-                        | count > 0
-                      }}
-                  - service: cover.set_cover_position
-                    target:
-                      entity_id: !input west_covers
-                    data:
-                      position: "{{ summer_sun_facing_position }}"
-            default:
-              - condition: template
-                value_template: >
-                  {{
-                    expand(north_cover_entities)
-                    | selectattr('attributes.current_position', 'defined')
-                    | selectattr('attributes.current_position', 'ne', summer_sun_facing_position | int)
-                    | list
-                    | count > 0
-                  }}
-              - service: cover.set_cover_position
-                target:
-                  entity_id: !input north_covers
-                data:
-                  position: "{{ summer_sun_facing_position }}"
           - if:
               - condition: template
                 value_template: "{{ has_action_priority_helper }}"
