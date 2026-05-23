@@ -28,6 +28,7 @@ A collection of custom blueprints for Home Assistant.
 - [[CDA] 🔊 Play Sound with Volume Control](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fplay_sound_with_volume_control.yaml)
 - [[CDA] 📅 Create Schedule](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fcreate_schedule.yaml)
 - [[CDA] 🪟 Set Cover Position](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fset_cover_position.yaml)
+- [[CDA] 🛋️ Create Living Area Lighting Helpers](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fcreate-living-area-lighting-helpers.yaml)
 
 ### Manual Installation
 
@@ -58,6 +59,7 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/play_sound_with_volume_control.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/create_schedule.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/set_cover_position.yaml
+https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/create-living-area-lighting-helpers.yaml
 ```
 
 ## Custom Components
@@ -127,9 +129,16 @@ Automatically control lights based on presence detection with configurable delay
 ### Living Area Adaptive Lighting
 
 [CDA] 🛋️ Living Area Adaptive Lighting
-Adaptive day and night lighting for living areas with computed profiles (blue starlight at night, warm adaptive day light from sun, lux, and cover shading). Supports zone occupancy, optional person home checks, and manual helpers.
+Adaptive day and night lighting for living areas with computed profiles (blue starlight at night, warm adaptive day light from sun, lux, and cover shading). Supports zone occupancy, optional person home checks, and automatic dashboard helper creation (`input_select` mode + `input_boolean` hold).
 
 [View Documentation](docs/living-area-adaptive-lighting.md)
+
+### Create Living Area Lighting Helpers
+
+[CDA] 🛋️ Create Living Area Lighting Helpers
+Companion script blueprint to create mode/hold helpers via a package file (used by Living Area Adaptive Lighting when automatic creation on startup is enabled).
+
+[View Documentation](docs/living-area-adaptive-lighting.md#automatic-helper-creation-recommended)
 
 ### Cover Control
 
@@ -185,7 +194,8 @@ mirabelle-ha-blueprints/
 │   └── scripts/
 │       ├── play_sound_with_volume_control.yaml
 │       ├── create_schedule.yaml
-│       └── set_cover_position.yaml
+│       ├── set_cover_position.yaml
+│       └── create-living-area-lighting-helpers.yaml
 ├── docs/
 │   ├── scheduled_bell_sound.md
 │   ├── play_sound_with_volume_control.md

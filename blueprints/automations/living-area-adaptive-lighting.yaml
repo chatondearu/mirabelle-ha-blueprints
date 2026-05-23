@@ -133,8 +133,8 @@ blueprint:
         covers:
           name: Living Area Covers
           description: >
-            Optional cover entities. Average current_position increases artificial
-            light need and warmth during the day (0 = open, 100 = closed).
+            Optional cover entities. Uses Home Assistant cover positions (0 = closed,
+            100 = open). Mostly closed blinds increase artificial light need.
           default: []
           selector:
             entity:
@@ -143,8 +143,8 @@ blueprint:
         cover_shade_threshold:
           name: Cover Shade Threshold
           description: >
-            Average cover position (%) above which covers alone can trigger lighting
-            during the day (when lux is between dark and bright thresholds).
+            Average closed amount (%) above which covers alone trigger lighting.
+            Computed as 100 minus current_position (e.g. position 25 open = 75% closed).
           default: 60
           selector:
             number:
@@ -251,20 +251,52 @@ blueprint:
     control_section:
       name: Manual Control
       icon: mdi:tune
+      description: >
+        Dashboard helpers (input_select / input_boolean) can be created automatically
+        on Home Assistant start when enabled below. Requires a one-time shell_command
+        in configuration.yaml (see documentation).
       input:
-        manual_mode_helper:
-          name: Manual Mode Helper
+        create_dashboard_helpers:
+          name: Create Dashboard Control Helpers
           description: >
-            Optional input_select with options auto, day, night, off. When set to
-            day or night, forces that profile when lighting is needed.
+            When enabled, creates input_select.{slug}_mode and input_boolean.{slug}_hold
+            on Home Assistant start if they do not exist yet.
+          default: true
+          selector:
+            boolean: {}
+        control_helper_slug:
+          name: Control Helper Slug
+          description: >
+            Base slug for auto-created helpers (letters, numbers, underscores).
+            Example slug living_area_lighting creates input_select.living_area_lighting_mode.
+          default: living_area_lighting
+          selector:
+            text: {}
+        control_mode_helper_name:
+          name: Mode Helper Display Name
+          description: Friendly name for the auto-created mode dropdown helper.
+          default: Living Area Lighting Mode
+          selector:
+            text: {}
+        control_hold_helper_name:
+          name: Hold Helper Display Name
+          description: Friendly name for the auto-created hold toggle helper.
+          default: Living Area Lighting Hold
+          selector:
+            text: {}
+        manual_mode_helper:
+          name: Manual Mode Helper Override
+          description: >
+            Optional existing input_select (options: auto, day, night, off). When set,
+            overrides auto-created mode helper entity id.
           default: ""
           selector:
             entity:
               domain: input_select
         manual_hold_helper:
-          name: Manual Hold Helper
+          name: Manual Hold Helper Override
           description: >
-            Optional input_boolean. When on, the automation does not change lights.
+            Optional existing input_boolean. When set, overrides auto-created hold helper.
           default: ""
           selector:
             entity:
@@ -287,6 +319,10 @@ trigger_variables:
   lux_bright_input: !input lux_bright
   manual_mode_helper_input: !input manual_mode_helper
   manual_hold_helper_input: !input manual_hold_helper
+  create_dashboard_helpers_input: !input create_dashboard_helpers
+  control_helper_slug_input: !input control_helper_slug
+  control_mode_helper_name_input: !input control_mode_helper_name
+  control_hold_helper_name_input: !input control_hold_helper_name
   presence_persons_input: !input presence_persons
   cover_entities_input: !input covers
 
@@ -329,10 +365,14 @@ trigger:
       {% endif %}
   - platform: time_pattern
     minutes: "/15"
+  - platform: homeassistant
+    event: start
   - platform: template
     value_template: >
       {% if manual_mode_helper_input | length > 0 %}
         {{ states(manual_mode_helper_input) }}
+      {% elif create_dashboard_helpers_input %}
+        {{ states('input_select.' ~ (control_helper_slug_input | regex_replace('[^a-zA-Z0-9_]+', '_') | lower | regex_replace('^_+|_+$', '')) ~ '_mode') }}
       {% else %}
         none
       {% endif %}
@@ -340,6 +380,8 @@ trigger:
     value_template: >
       {% if manual_hold_helper_input | length > 0 %}
         {{ states(manual_hold_helper_input) }}
+      {% elif create_dashboard_helpers_input %}
+        {{ states('input_boolean.' ~ (control_helper_slug_input | regex_replace('[^a-zA-Z0-9_]+', '_') | lower | regex_replace('^_+|_+$', '')) ~ '_hold') }}
       {% else %}
         none
       {% endif %}
@@ -369,7 +411,63 @@ variables:
   cover_kelvin_warm_shift: !input cover_kelvin_warm_shift
   manual_mode_helper: !input manual_mode_helper
   manual_hold_helper: !input manual_hold_helper
+  create_dashboard_helpers: !input create_dashboard_helpers
+  control_helper_slug_input: !input control_helper_slug
+  control_mode_helper_name: !input control_mode_helper_name
+  control_hold_helper_name: !input control_hold_helper_name
   transition_seconds: !input transition_seconds
+  control_helper_slug: >
+    {{
+      control_helper_slug_input
+      | regex_replace('[^a-zA-Z0-9_]+', '_')
+      | lower
+      | regex_replace('^_+|_+$', '')
+    }}
+  mode_helper_entity: >
+    {% if manual_mode_helper is string and manual_mode_helper | length > 0 %}
+      {{ manual_mode_helper }}
+    {% elif create_dashboard_helpers %}
+      input_select.{{ control_helper_slug }}_mode
+    {% else %}
+    {% endif %}
+  hold_helper_entity: >
+    {% if manual_hold_helper is string and manual_hold_helper | length > 0 %}
+      {{ manual_hold_helper }}
+    {% elif create_dashboard_helpers %}
+      input_boolean.{{ control_helper_slug }}_hold
+    {% else %}
+    {% endif %}
+  mode_helper_exists: >
+    {{
+      mode_helper_entity is string
+      and mode_helper_entity | length > 0
+      and states(mode_helper_entity) not in ['unknown', 'unavailable', '']
+    }}
+  hold_helper_exists: >
+    {{
+      hold_helper_entity is string
+      and hold_helper_entity | length > 0
+      and states(hold_helper_entity) not in ['unknown', 'unavailable', '']
+    }}
+  helpers_ready: "{{ mode_helper_exists and hold_helper_exists }}"
+  helper_package_filename: "cda_{{ control_helper_slug }}_living_area_lighting_helpers.yaml"
+  helper_package_yaml: |
+    # Generated by [CDA] Living Area Adaptive Lighting
+    input_select:
+      {{ control_helper_slug }}_mode:
+        name: {{ control_mode_helper_name }}
+        options:
+          - auto
+          - day
+          - night
+          - off
+        initial: auto
+        icon: mdi:lightbulb-auto
+    input_boolean:
+      {{ control_helper_slug }}_hold:
+        name: {{ control_hold_helper_name }}
+        initial: false
+        icon: mdi:hand-back-right-off
   all_light_entities: "{{ color_light_entities + white_light_entities }}"
   has_color_lights: "{{ color_light_entities | count > 0 }}"
   has_white_lights: "{{ white_light_entities | count > 0 }}"
@@ -382,20 +480,10 @@ variables:
     }}
   has_covers: "{{ cover_entities | count > 0 }}"
   has_presence_persons: "{{ presence_person_entities | count > 0 }}"
-  has_manual_mode_helper: >
-    {{
-      manual_mode_helper is string
-      and manual_mode_helper | length > 0
-      and states(manual_mode_helper) not in ['unknown', 'unavailable', '']
-    }}
-  has_manual_hold_helper: >
-    {{
-      manual_hold_helper is string
-      and manual_hold_helper | length > 0
-      and states(manual_hold_helper) in ['on', 'off']
-    }}
+  has_manual_mode_helper: "{{ mode_helper_exists }}"
+  has_manual_hold_helper: "{{ hold_helper_exists }}"
   manual_hold_active: >
-    {{ has_manual_hold_helper and is_state(manual_hold_helper, 'on') }}
+    {{ has_manual_hold_helper and is_state(hold_helper_entity, 'on') }}
   is_home: >
     {{
       expand(presence_person_entities)
@@ -436,7 +524,7 @@ variables:
       false
     {% endif %}
   is_night: "{{ (not is_sun_up) or is_time_night }}"
-  cover_shade_factor: >
+  cover_open_factor: >
     {% if has_covers %}
       {% set positions = expand(cover_entities) | map(attribute='attributes.current_position') | reject('none') | list %}
       {% if positions | count > 0 %}
@@ -447,30 +535,35 @@ variables:
     {% else %}
       0
     {% endif %}
+  cover_closed_factor: >
+    {% if has_covers %}
+      {{ (100 - (cover_open_factor | float(0))) | round(1) }}
+    {% else %}
+      0
+    {% endif %}
   lux_needs_light: >
     {% if has_illuminance_sensor %}
       {{ current_lux < lux_dark }}
     {% else %}
       false
     {% endif %}
-  lux_too_bright: >
-    {% if has_illuminance_sensor %}
-      {{ current_lux > lux_bright }}
-    {% else %}
-      false
-    {% endif %}
   covers_need_light: >
-    {{ has_covers and (cover_shade_factor | float(0) >= cover_shade_threshold | float(0)) }}
+    {{ has_covers and (cover_closed_factor | float(0) >= cover_shade_threshold | float(0)) }}
   need_artificial_light: >
     {{
       is_night
       or lux_needs_light
-      or (covers_need_light and not lux_too_bright)
-      or (not has_illuminance_sensor and is_sun_up and covers_need_light)
+      or covers_need_light
+      or (
+        has_illuminance_sensor
+        and zone_occupied
+        and (current_lux | float(0) < lux_bright | float(0))
+        and (cover_closed_factor | float(0) >= (cover_shade_threshold | float(0) * 0.5))
+      )
     }}
   effective_mode: >
     {% if has_manual_mode_helper %}
-      {{ states(manual_mode_helper) }}
+      {{ states(mode_helper_entity) }}
     {% else %}
       auto
     {% endif %}
@@ -487,7 +580,7 @@ variables:
     {% set elev_clamped = [elev, 45] | min %}
     {% set ratio = elev_clamped / 45 %}
     {% set base = (day_kelvin_max - ((day_kelvin_max - day_kelvin_min) * (1 - ratio))) | int %}
-    {% set warm_shift = (cover_shade_factor | float(0) / 100) * (cover_kelvin_warm_shift | float(0)) %}
+    {% set warm_shift = (cover_closed_factor | float(0) / 100) * (cover_kelvin_warm_shift | float(0)) %}
     {{ [base - warm_shift, day_kelvin_min] | max | int }}
   day_brightness_pct: >
     {% if has_illuminance_sensor and lux_bright > 0 %}
@@ -496,10 +589,47 @@ variables:
     {% else %}
       {% set lux_brightness = (day_brightness_min + day_brightness_max) / 2 %}
     {% endif %}
-    {% set cover_boost = (cover_shade_factor | float(0) / 100) * (day_brightness_max - day_brightness_min) * 0.35 %}
+    {% set cover_boost = (cover_closed_factor | float(0) / 100) * (day_brightness_max - day_brightness_min) * 0.35 %}
     {{ [[lux_brightness + cover_boost, day_brightness_max] | min, day_brightness_min] | max | round(0) | int }}
 
 action:
+  - if:
+      - condition: template
+        value_template: >
+          {{
+            create_dashboard_helpers
+            and not helpers_ready
+            and trigger.platform == 'homeassistant'
+            and trigger.event.event_type == 'start'
+          }}
+    then:
+      - service: shell_command.cda_write_living_area_lighting_helper_package
+        data:
+          package_filename: "{{ helper_package_filename }}"
+          content_b64: "{{ helper_package_yaml | b64encode }}"
+        continue_on_error: true
+      - service: homeassistant.reload_core_config
+        continue_on_error: true
+      - delay:
+          seconds: 5
+      - if:
+          - condition: template
+            value_template: >
+              {{
+                mode_helper_entity | length == 0
+                or states(mode_helper_entity) in ['unknown', 'unavailable', '']
+                or states(hold_helper_entity) in ['unknown', 'unavailable', '']
+              }}
+        then:
+          - service: persistent_notification.create
+            data:
+              title: "[CDA] Living Area Lighting Helpers"
+              message: >
+                Could not create dashboard helpers automatically. Add
+                shell_command.cda_write_living_area_lighting_helper_package to
+                configuration.yaml (see docs/living-area-adaptive-lighting.md), import
+                the [CDA] Create Living Area Lighting Helpers script blueprint, or
+                create {{ mode_helper_entity }} and {{ hold_helper_entity }} manually.
   - if:
       - condition: template
         value_template: "{{ not manual_hold_active and has_any_lights }}"
@@ -614,9 +744,4 @@ action:
                         kelvin: "{{ day_kelvin | int }}"
                         brightness_pct: "{{ day_brightness_pct | int }}"
                         transition: "{{ transition_seconds }}"
-        default:
-          - service: light.turn_off
-            target:
-              entity_id: "{{ all_light_entities }}"
-            data:
-              transition: "{{ transition_seconds }}"
+        default: []

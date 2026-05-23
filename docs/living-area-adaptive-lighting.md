@@ -30,7 +30,8 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 - Recommended: illuminance sensor (`sensor` reporting lux)
 - Optional: `cover` entities in the same area (for shading factor)
 - Optional: `person` entities when using **Require Someone Home**
-- Optional helpers: `input_select` (manual mode), `input_boolean` (manual hold)
+- **Automatic dashboard helpers** (recommended): one-time `shell_command` in `configuration.yaml` (see below)
+- Optional: existing `input_select` / `input_boolean` overrides instead of auto-created helpers
 
 ## How It Works
 
@@ -59,9 +60,11 @@ Lighting runs only if the zone is occupied and at least one of:
 
 - Night (sun below horizon, or optional night time window)
 - Illuminance below **Lux Dark Threshold**
-- Average cover position at or above **Cover Shade Threshold** (and lux is not above **Lux Bright Threshold** — hysteresis)
+- Average **closed** amount at or above **Cover Shade Threshold** (mostly closed blinds), even if the lux sensor still reads bright near a window
 
-If the zone is occupied but none of the above apply (bright day, open covers), lights are turned off.
+If the zone is occupied but none of the above apply (bright day, open blinds), the automation does **not** force lights on and does **not** turn them off (leaves current state unchanged).
+
+If the zone is **not** occupied, lights are turned off after the delay.
 
 ## Configuration
 
@@ -100,7 +103,7 @@ Use **Lux Dark** lower than **Lux Bright** to avoid flicker when lux hovers near
 | Living Area Covers | Optional cover entities | `[]` |
 | Cover Shade Threshold | Average position % to trigger day lighting | `60` |
 
-Average uses `current_position` (0 = open, 100 = closed). If no covers are selected, shading factor is `0`.
+Average **closed** amount uses `100 - current_position` (Home Assistant: 0 = closed, 100 = open). Example: blinds 25% open → position `25` → **75% closed** toward the default threshold of `60`. If no covers are selected, closed factor is `0`.
 
 ### Night profile
 
@@ -122,30 +125,64 @@ Average uses `current_position` (0 = open, 100 = closed). If no covers are selec
 | Day Brightness Maximum | % | `100` |
 | Cover Kelvin Warm Shift | Kelvin subtracted at 100% closed average | `300` |
 
-### Manual control
+### Manual control (dashboard helpers)
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| Manual Mode Helper | `input_select`: `auto`, `day`, `night`, `off` | empty |
-| Manual Hold Helper | `input_boolean`: when `on`, automation skips all actions | empty |
+| Create Dashboard Control Helpers | Auto-create helpers on Home Assistant start | `true` |
+| Control Helper Slug | Base id slug (`input_select.{slug}_mode`, `input_boolean.{slug}_hold`) | `living_area_lighting` |
+| Mode Helper Display Name | Friendly name for mode dropdown | `Living Area Lighting Mode` |
+| Hold Helper Display Name | Friendly name for hold toggle | `Living Area Lighting Hold` |
+| Manual Mode Helper Override | Use an existing `input_select` instead of auto id | empty |
+| Manual Hold Helper Override | Use an existing `input_boolean` instead of auto id | empty |
 | Light Transition | Seconds | `3` |
 
-### Optional helpers (UI)
+With default settings, the automation expects:
 
-Create in **Settings → Helpers**:
+- `input_select.living_area_lighting_mode` — options: `auto`, `day`, `night`, `off`
+- `input_boolean.living_area_lighting_hold` — when `on`, the automation does not change lights
+
+### Automatic helper creation (recommended)
+
+Home Assistant cannot create UI helpers from a blueprint alone. This project uses a **package file** written under `/config/packages/` on startup, then reloads core configuration.
+
+#### One-time setup
+
+1. Ensure packages are loaded (common default):
 
 ```yaml
-# input_select.living_area_lighting_mode
-options:
-  - auto
-  - day
-  - night
-  - off
-
-# input_boolean.living_area_lighting_hold
+homeassistant:
+  packages: !include_dir_named packages
 ```
 
-Map them in the blueprint under **Manual Control**.
+2. Add this `shell_command` (see also [`templates/living-area-lighting-shell-command.yaml`](../templates/living-area-lighting-shell-command.yaml)):
+
+```yaml
+shell_command:
+  cda_write_living_area_lighting_helper_package: >
+    /bin/bash -c 'echo "{{ content_b64 }}" | base64 -d > "/config/packages/{{ package_filename }}"'
+```
+
+3. Reload **Shell commands** (or restart Home Assistant).
+
+4. Create the automation from this blueprint with **Create Dashboard Control Helpers** enabled (default).
+
+On the next **Home Assistant start**, the automation writes `cda_{slug}_living_area_lighting_helpers.yaml` and reloads configuration. The helpers then appear under **Settings → Helpers** and can be added to your dashboard.
+
+#### Manual setup script (alternative)
+
+Import the companion script blueprint:
+
+[Import Create Living Area Lighting Helpers](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fcreate-living-area-lighting-helpers.yaml)
+
+Create a script from it (same slug and names as the automation), then run it once from **Developer Tools → Actions** if automatic startup creation failed.
+
+#### Disable auto-creation
+
+Turn off **Create Dashboard Control Helpers** and either:
+
+- Leave overrides empty (mode stays `auto`, no hold), or
+- Map **Manual Mode Helper Override** / **Manual Hold Helper Override** to helpers you created yourself.
 
 ## Usage Example
 
@@ -186,7 +223,34 @@ One automation instance for an open living + dining area:
 
 - Covers must report `current_position`. Template or switch-only covers without position do not contribute to the average.
 
+### Lights turn off while I am in the room
+
+- Check **Developer Tools → States** for cover `current_position` (25% open = `25`, not `75`).
+- Lower **Cover Shade Threshold** if your blinds report unusual positions.
+- Lower **Lux Dark Threshold** if the room feels dark but lux stays between dark and bright thresholds.
+- Confirm **Manual Hold** is off and mode is not `off`.
+
+### Dashboard helpers not created
+
+- Confirm `shell_command.cda_write_living_area_lighting_helper_package` exists and **Shell commands** were reloaded.
+- Confirm `/config/packages/` exists and `homeassistant.packages` includes that folder.
+- Check **Settings → System → Logs** after restart for shell_command errors.
+- Run the **[CDA] Create Living Area Lighting Helpers** script manually with the same slug.
+- As a fallback, create helpers in the UI and set **Manual Mode Helper Override** / **Manual Hold Helper Override**.
+
 ## Changelog
+
+### 1.1.1
+
+- Fix cover position semantics (HA: 0 = closed, 100 = open); use closed factor `100 - position`.
+- Covers mostly closed now trigger lighting even when outdoor lux is high.
+- Occupied but bright/open room: no longer forces lights off (default branch idle).
+
+### 1.1.0
+
+- Automatic dashboard helper creation on Home Assistant start (package file + core reload).
+- Companion script blueprint for manual helper setup.
+- Helper slug and display names configurable; optional entity overrides retained.
 
 ### 1.0.0
 
