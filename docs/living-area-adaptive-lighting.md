@@ -144,7 +144,7 @@ With default settings, the automation expects:
 
 ### Automatic helper creation (recommended)
 
-Home Assistant cannot create UI helpers from a blueprint alone. This project uses a **package file** written under `/config/packages/` on startup, then reloads core configuration.
+Home Assistant cannot create UI helpers from an automation blueprint alone. Use the **companion script** once after importing the automation.
 
 #### One-time setup
 
@@ -165,17 +165,15 @@ shell_command:
 
 3. Reload **Shell commands** (or restart Home Assistant).
 
-4. Create the automation from this blueprint with **Create Dashboard Control Helpers** enabled (default).
+4. Create the lighting automation with **Create Dashboard Control Helpers** enabled (default).
 
-On the next **Home Assistant start**, the automation writes `cda_{slug}_living_area_lighting_helpers.yaml` and reloads configuration. The helpers then appear under **Settings → Helpers** and can be added to your dashboard.
-
-#### Manual setup script (alternative)
+5. Import and run the companion script blueprint (same slug and names as the automation):
 
 Import the companion script blueprint:
 
 [Import Create Living Area Lighting Helpers](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fcreate-living-area-lighting-helpers.yaml)
 
-Create a script from it (same slug and names as the automation), then run it once from **Developer Tools → Actions** if automatic startup creation failed.
+Create a script from it (same slug and names as the automation), then run it once from **Developer Tools → Actions** or from the script card in your dashboard.
 
 #### Disable auto-creation
 
@@ -239,6 +237,10 @@ One automation instance for an open living + dining area:
 - As a fallback, create helpers in the UI and set **Manual Mode Helper Override** / **Manual Hold Helper Override**.
 
 ## Changelog
+
+### 1.1.2
+
+- Remove helper package write from automation (fixes setup validation error); use companion script only.
 
 ### 1.1.1
 
