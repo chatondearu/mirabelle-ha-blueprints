@@ -1,0 +1,9 @@
+# One-time addition to configuration.yaml (or a package file) for automatic helper creation.
+# Requires homeassistant.packages to load files from /config/packages/ (default on many installs).
+#
+# shell_command:
+#   cda_write_living_area_lighting_helper_package: >
+#     /bin/bash -c 'echo "{{ content_b64 }}" | base64 -d > "/config/packages/{{ package_filename }}"'
+#
+# homeassistant:
+#   packages: !include_dir_named packages
