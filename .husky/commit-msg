@@ -1,0 +1,4 @@
+#!/usr/bin/env sh
+set -e
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+"$ROOT/node_modules/.bin/commitlint" --edit "$1"

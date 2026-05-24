@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+set -e
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+if [ "$SKIP_HA_TESTS" = "1" ]; then
+  echo "SKIP_HA_TESTS=1 — skipping pre-push tests."
+  exit 0
+fi
+
+"$ROOT/scripts/run_tests.sh"

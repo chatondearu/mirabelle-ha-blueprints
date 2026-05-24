@@ -34,6 +34,8 @@
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
     "validate": "pnpm -r validate",
+    "test:ha": "bash scripts/run_tests.sh",
+    "prepare": "husky",
     "up": "npx taze major -I -l -r"
   },
   "devDependencies": {
@@ -51,11 +53,6 @@
     "axios": "^1.13.2",
     "dotenv": "^17.2.3",
     "yaml": "^2.8.2"
-  },
-  "husky": {
-    "hooks": {
-      "commit-msg": "commitlint -E HUSKY_GIT_PARAMS"
-    }
   },
   "commitlint": {
     "extends": [

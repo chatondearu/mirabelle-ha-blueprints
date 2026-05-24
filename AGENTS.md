@@ -77,6 +77,7 @@ Use appropriate `selector` types: `entity`, `text`, `number`, `boolean`, `select
 
 ## Node / pnpm workspace
 
+- **Dev environment:** optional **Nix flake** + **direnv** ([`flake.nix`](../flake.nix), [`.envrc`](../.envrc), [docs/dev-environment.md](dev-environment.md)) — Node 22, pnpm 10.24, Python 3.12, yamllint; `.venv` created via `shellHook` for `requirements-test.txt`.
 - **Package manager:** `pnpm` (see `packageManager` in root `package.json`).
 - **Workspaces:** `packages/`* (`@mirabelle/cover-manager`, `@mirabelle/imeon-energy-api`, etc.).
 - **Root scripts (examples):**
@@ -99,7 +100,7 @@ Use appropriate `selector` types: `entity`, `text`, `number`, `boolean`, `select
 
 ## CI and validation (`.github/workflows`)
 
-- `**validate.yml`:** on PRs/pushes to `main` — installs `homeassistant`, runs `yamllint` on `blueprints/**/*.yaml`, `hass --script check_config`, and a **Python structural check** that every `blueprints/**/*.yaml` file loads as YAML (with `!input` / `!secret` stripped) and contains a `blueprint` section with `name` and `domain`.
+- `**validate.yml`:** on PRs/pushes to `main` — runs [`scripts/run_tests.sh`](scripts/run_tests.sh): `yamllint` on `blueprints/`, [`scripts/validate_blueprints.py`](scripts/validate_blueprints.py), and **pytest** (blueprints + `packages/*/tests`). See [`docs/testing.md`](docs/testing.md).
 - `**release.yml`:** on tags `v`* — creates a GitHub Release.
 - **Sync workflows:** e.g. `sync-cover-manager.yml`, `sync-imeon-energy-api.yml` — push selected `packages/<name>/`** to separate repos; require `RELEASE_TOKEN` secret where documented.
 
@@ -120,9 +121,10 @@ Agents should ensure new blueprints **pass** the structural validation script an
 
 ## Testing expectations
 
-- Blueprints: validate in a **clean HA** context when possible; exercise parameters and edge cases; align with the **declared minimum HA version**.
-- Integrations: follow each package’s patterns (`pytest`/HA guidelines as applicable).
-- Prefer running `**pnpm run validate`** locally before pushing when Node/pnpm is available.
+- **Before push:** run `pnpm run test:ha` (or `./scripts/run_tests.sh`) after `pip install -r requirements-test.txt` in a venv. Husky `pre-push` runs the same suite; use `SKIP_HA_TESTS=1` only in emergencies.
+- Blueprints: pytest smoke loads every blueprint via `use_blueprint`; behavior tests cover selected simple automations/scripts. Align with **HA 2025.5.3+** and pinned deps in `requirements-test.txt`.
+- Integrations: pytest under `packages/cover-manager/tests/` and `packages/imeon_energy_api/tests/`.
+- Full guide: [`docs/testing.md`](docs/testing.md).
 
 ---
 
