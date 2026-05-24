@@ -7,7 +7,11 @@ export interface NodePathResult {
 }
 
 function flowEdges(edges: FlowEdge[]): FlowEdge[] {
-  return edges.filter(e => e.edgeKind !== 'reference')
+  return edges.filter(
+    e =>
+      e.edgeKind === 'flow'
+      || e.edgeKind === undefined,
+  )
 }
 
 function buildAdjacency(edges: FlowEdge[]): Map<string, string[]> {

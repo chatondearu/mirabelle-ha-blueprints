@@ -1,7 +1,13 @@
-import type { TraceOverlay } from '@mirabelle/flow-shared'
+import type { SimulationCatalog, TraceOverlay } from '@mirabelle/flow-shared'
+import {
+  loadSimulationCatalog,
+  saveSimulationCatalog,
+} from '@mirabelle/flow-shared'
 import { flowDocumentSchema } from '@mirabelle/flow-shared'
 import {
+  getBindingHighlight,
   getFocusedPath,
+  getSimulationActiveNodeIds,
   getUpstreamPath,
   parseAutomationYaml,
   serializeDocument,
@@ -16,8 +22,9 @@ export type AppMode = 'local' | 'ha'
 export const useFlowStore = defineStore('flow', () => {
   const document = ref<MutableFlowDocument | null>(null)
   const selectedNodeId = ref<string | null>(null)
-  const previewMode = ref(false)
+  const previewMode = ref(true)
   const previewInputs = ref<Record<string, unknown>>({})
+  const simulationCatalog = ref<SimulationCatalog>(loadSimulationCatalog())
   const parseError = ref<string | null>(null)
   const appMode = ref<AppMode>('local')
   const traceOverlay = ref<TraceOverlay | null>(null)
@@ -25,6 +32,7 @@ export const useFlowStore = defineStore('flow', () => {
   const pathHighlightNodeIds = ref<Set<string>>(new Set())
   const pathHighlightEdgeIds = ref<Set<string>>(new Set())
   const pathFilterNodeId = ref<string | null>(null)
+  const simulationActiveNodeIds = ref<Set<string>>(new Set())
   const rawYamlPanel = ref('')
 
   const selectedNode = computed(() =>
@@ -59,6 +67,29 @@ export const useFlowStore = defineStore('flow', () => {
     pathHighlightEdgeIds.value = new Set()
   }
 
+  function updateSimulationActiveForTrigger(triggerId: string | null) {
+    if (
+      !document.value
+      || !previewMode.value
+      || !triggerId
+    ) {
+      simulationActiveNodeIds.value = new Set()
+      return
+    }
+    const trigger = document.value.nodes.find(
+      n => n.id === triggerId && n.kind === 'trigger',
+    )
+    if (!trigger) {
+      simulationActiveNodeIds.value = new Set()
+      return
+    }
+    simulationActiveNodeIds.value = getSimulationActiveNodeIds(
+      triggerId,
+      document.value.nodes,
+      document.value.edges,
+    )
+  }
+
   function loadYaml(text: string, source?: string) {
     parseError.value = null
     try {
@@ -66,10 +97,16 @@ export const useFlowStore = defineStore('flow', () => {
         source,
         preview: previewMode.value,
         previewInputs: previewInputs.value,
+        simulationCatalog: simulationCatalog.value,
       })
       document.value = doc
       rawYamlPanel.value = text
-      if (doc.blueprintMeta) {
+      const meta = doc.nodes.find(n => n.kind === 'blueprint_meta')
+      const sim = meta?.data.simulationValues as Record<string, unknown> | undefined
+      if (sim) {
+        previewInputs.value = { ...sim }
+      }
+      else if (doc.blueprintMeta) {
         const defaults: Record<string, unknown> = {}
         for (const input of doc.blueprintMeta.inputs) {
           if (input.default !== undefined) {
@@ -81,6 +118,9 @@ export const useFlowStore = defineStore('flow', () => {
       selectedNodeId.value = doc.nodes[0]?.id ?? null
       pathFilterNodeId.value = null
       clearPathHighlight()
+      updateSimulationActiveForTrigger(
+        selectedNode.value?.kind === 'trigger' ? selectedNodeId.value : null,
+      )
     }
     catch (e) {
       parseError.value = e instanceof Error ? e.message : String(e)
@@ -88,11 +128,60 @@ export const useFlowStore = defineStore('flow', () => {
     }
   }
 
+  function applySimulation() {
+    reloadWithPreview()
+  }
+
   function reloadWithPreview() {
     if (!document.value?.rawYaml) {
       return
     }
     loadYaml(document.value.rawYaml, document.value.source)
+  }
+
+  function setSimulationInput(key: string, value: unknown) {
+    previewInputs.value = { ...previewInputs.value, [key]: value }
+    const meta = document.value?.nodes.find(n => n.kind === 'blueprint_meta')
+    if (meta) {
+      const sim = {
+        ...(meta.data.simulationValues as Record<string, unknown> | undefined),
+        [key]: value,
+      }
+      meta.data.simulationValues = sim
+    }
+  }
+
+  function persistSimulationCatalog(catalog: SimulationCatalog) {
+    simulationCatalog.value = catalog
+    saveSimulationCatalog(catalog)
+  }
+
+  function highlightInputBindings(inputKey: string) {
+    if (!document.value) {
+      return
+    }
+    const { nodeIds, edgeIds } = getBindingHighlight(
+      'blueprint_meta',
+      inputKey,
+      document.value.nodes,
+      document.value.edges,
+    )
+    applyPathHighlight(nodeIds, edgeIds)
+    pathFilterNodeId.value = null
+  }
+
+  function highlightVariableBindings(variableNodeId: string) {
+    if (!document.value) {
+      return
+    }
+    const { nodeIds, edgeIds } = getBindingHighlight(
+      variableNodeId,
+      undefined,
+      document.value.nodes,
+      document.value.edges,
+    )
+    applyPathHighlight(nodeIds, edgeIds)
+    pathFilterNodeId.value = null
   }
 
   /** Single click: neon upstream path, show full graph. */
@@ -104,6 +193,9 @@ export const useFlowStore = defineStore('flow', () => {
     pathFilterNodeId.value = null
     const path = getUpstreamPath(id, document.value.nodes, document.value.edges)
     applyPathHighlight(path.nodeIds, path.edgeIds)
+    updateSimulationActiveForTrigger(
+      document.value.nodes.find(n => n.id === id)?.kind === 'trigger' ? id : null,
+    )
   }
 
   /** Double click: hide other nodes, show full parcours for this node. */
@@ -115,11 +207,15 @@ export const useFlowStore = defineStore('flow', () => {
     pathFilterNodeId.value = id
     const path = getFocusedPath(id, document.value.nodes, document.value.edges)
     applyPathHighlight(path.nodeIds, path.edgeIds)
+    updateSimulationActiveForTrigger(
+      document.value.nodes.find(n => n.id === id)?.kind === 'trigger' ? id : null,
+    )
   }
 
   function clearPathFocus() {
     pathFilterNodeId.value = null
     clearPathHighlight()
+    simulationActiveNodeIds.value = new Set()
   }
 
   function selectNode(id: string | null) {
@@ -197,6 +293,7 @@ export const useFlowStore = defineStore('flow', () => {
     selectedNode,
     previewMode,
     previewInputs,
+    simulationCatalog,
     parseError,
     appMode,
     traceOverlay,
@@ -206,10 +303,16 @@ export const useFlowStore = defineStore('flow', () => {
     pathFilterNodeId,
     pathFilterNode,
     pathFilterNodeIds,
+    simulationActiveNodeIds,
     rawYamlPanel,
     isDirty,
     loadYaml,
     reloadWithPreview,
+    applySimulation,
+    setSimulationInput,
+    saveSimulationCatalog: persistSimulationCatalog,
+    highlightInputBindings,
+    highlightVariableBindings,
     selectNode,
     highlightNodePath,
     focusNodePath,

@@ -11,6 +11,7 @@ export const flowNodeKindSchema = z.enum([
   'delay',
   'wait',
   'variables',
+  'variable',
   'blueprint_input',
   'blueprint_meta',
   'root',
@@ -18,7 +19,12 @@ export const flowNodeKindSchema = z.enum([
 
 export const flowNodeLayerSchema = z.enum(['blueprint', 'automation'])
 
-export const flowEdgeKindSchema = z.enum(['flow', 'reference'])
+export const flowEdgeKindSchema = z.enum([
+  'flow',
+  'reference',
+  'input_binding',
+  'variable_binding',
+])
 
 export const flowNodeSchema = z.object({
   id: z.string(),

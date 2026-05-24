@@ -91,6 +91,13 @@ function summarizeCondition(c: Record<string, unknown>): string {
   return cond ? `Condition: ${cond}` : 'Condition'
 }
 
+function summarizeVariable(name: string, value: unknown): string {
+  if (typeof value === 'string') {
+    return value.length > 40 ? `${name}: ${value.slice(0, 40)}…` : `${name}: ${value}`
+  }
+  return name
+}
+
 function summarizeAction(a: Record<string, unknown>): string {
   if (typeof a.service === 'string') {
     return a.service
@@ -166,6 +173,105 @@ function buildConditions(
   return leaves
 }
 
+function expandActionItem(
+  ctx: BuildContext,
+  a: Record<string, unknown>,
+  path: string,
+  parent: FlowNode,
+  prev: FlowNode | undefined,
+): FlowNode {
+  if (Array.isArray(a.sequence)) {
+    const seqNode = addNode(ctx, path, 'sequence', 'Sequence', { sequence: true }, parent.id)
+    if (prev) {
+      connect(ctx, prev, seqNode)
+    }
+    else {
+      connect(ctx, parent, seqNode)
+    }
+    const leaves = buildActions(ctx, a.sequence, seqNode, `${path}/sequence`)
+    return leaves[leaves.length - 1] ?? seqNode
+  }
+
+  if (a.repeat && typeof a.repeat === 'object') {
+    const repeatNode = addNode(ctx, path, 'repeat', 'Repeat', a, parent.id)
+    if (prev) {
+      connect(ctx, prev, repeatNode)
+    }
+    else {
+      connect(ctx, parent, repeatNode)
+    }
+    const body = (a.repeat as { sequence?: unknown[] }).sequence ?? []
+    if (body.length > 0) {
+      const leaves = buildActions(ctx, body, repeatNode, `${path}/repeat/sequence`)
+      return leaves[leaves.length - 1] ?? repeatNode
+    }
+    return repeatNode
+  }
+
+  if (Array.isArray(a.parallel)) {
+    const parNode = addNode(ctx, path, 'parallel', 'Parallel', { parallel: true }, parent.id)
+    if (prev) {
+      connect(ctx, prev, parNode)
+    }
+    else {
+      connect(ctx, parent, parNode)
+    }
+    let last: FlowNode = parNode
+    a.parallel.forEach((branch, bi) => {
+      if (branch && typeof branch === 'object') {
+        const leaves = buildActions(
+          ctx,
+          [branch],
+          parNode,
+          `${path}/parallel/${bi}`,
+        )
+        if (leaves.length > 0) {
+          last = leaves[leaves.length - 1]!
+        }
+      }
+    })
+    return last
+  }
+
+  if (a.delay !== undefined) {
+    const delayNode = addNode(
+      ctx,
+      path,
+      'delay',
+      summarizeAction(a),
+      a,
+      parent.id,
+    )
+    if (prev) {
+      connect(ctx, prev, delayNode)
+    }
+    else {
+      connect(ctx, parent, delayNode)
+    }
+    return delayNode
+  }
+
+  if (a.wait_template !== undefined || a.wait_for_trigger !== undefined) {
+    const waitNode = addNode(ctx, path, 'wait', summarizeAction(a), a, parent.id)
+    if (prev) {
+      connect(ctx, prev, waitNode)
+    }
+    else {
+      connect(ctx, parent, waitNode)
+    }
+    return waitNode
+  }
+
+  const node = addNode(ctx, path, 'action', summarizeAction(a), a, parent.id)
+  if (prev) {
+    connect(ctx, prev, node)
+  }
+  else {
+    connect(ctx, parent, node)
+  }
+  return node
+}
+
 function buildActions(
   ctx: BuildContext,
   actions: unknown[],
@@ -231,22 +337,8 @@ function buildActions(
       return
     }
 
-    const node = addNode(
-      ctx,
-      path,
-      'action',
-      summarizeAction(a),
-      a,
-      parent.id,
-    )
-    if (prev) {
-      connect(ctx, prev, node)
-    }
-    else {
-      connect(ctx, parent, node)
-    }
-    prev = node
-    leaves.push(node)
+    prev = expandActionItem(ctx, a, path, parent, prev)
+    leaves.push(prev)
   })
 
   return leaves
@@ -257,9 +349,21 @@ function buildVariables(
   variables: Record<string, unknown>,
   parent: FlowNode,
 ): FlowNode {
-  const node = addNode(ctx, 'variables', 'variables', 'Variables', variables, parent.id)
-  connect(ctx, parent, node)
-  return node
+  let last: FlowNode = parent
+  for (const [name, value] of Object.entries(variables)) {
+    const path = `variables/${name}`
+    const node = addNode(
+      ctx,
+      path,
+      'variable',
+      summarizeVariable(name, value),
+      { name, value },
+      parent.id,
+    )
+    connect(ctx, parent, node)
+    last = node
+  }
+  return last
 }
 
 function resolveTriggerNode(ctx: BuildContext, triggerId: string): FlowNode | undefined {
@@ -339,6 +443,11 @@ export function buildGraphFromConfig(
   return { nodes: ctx.nodes, edges: ctx.edges }
 }
 
+const STRUCTURAL_EDGE_KINDS = new Set<FlowEdgeKind | undefined>([
+  'flow',
+  undefined,
+])
+
 export function autoLayout(
   nodes: FlowNode[],
   edges: FlowEdge[],
@@ -347,7 +456,7 @@ export function autoLayout(
   const H_GAP = FLOW_LAYOUT.horizontalGap
   const V_GAP = FLOW_LAYOUT.verticalGap
 
-  const flowEdges = edges.filter(e => e.edgeKind !== 'reference')
+  const flowEdges = edges.filter(e => STRUCTURAL_EDGE_KINDS.has(e.edgeKind))
   const adjacency = new Map<string, string[]>()
   for (const e of flowEdges) {
     const list = adjacency.get(e.source) ?? []

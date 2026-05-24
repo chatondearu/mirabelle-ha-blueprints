@@ -10,6 +10,7 @@ const props = defineProps<NodeProps<{
   pathActive?: boolean
   pathDimmed?: boolean
   pathFocus?: boolean
+  simulationActive?: boolean
 }>>()
 
 /** Lucide icons via UnoCSS preset-icons (`i-lucide-*`). */
@@ -26,6 +27,7 @@ const KIND_ICON: Record<FlowNodeKind, string> = {
   variables: 'i-lucide-braces',
   blueprint_input: 'i-lucide-sliders-horizontal',
   blueprint_meta: 'i-lucide-file-code-2',
+  variable: 'i-lucide-variable',
   root: 'i-lucide-workflow',
 }
 
@@ -39,6 +41,7 @@ const colorClass = computed(() => {
     variables: 'border-cyan-500 bg-cyan-950',
     blueprint_meta: 'border-pink-500 bg-pink-950',
     blueprint_input: 'border-pink-400/80 bg-pink-950/60',
+    variable: 'border-teal-500 bg-teal-950',
     root: 'border-neutral-500 bg-neutral-900',
   }
   return map[kind] ?? 'border-neutral-600 bg-neutral-900'
@@ -64,6 +67,9 @@ const neonClass = computed(() => {
   if (kind === 'condition') {
     return 'flow-node-neon flow-node-neon-blue'
   }
+  if (kind === 'variable') {
+    return 'flow-node-neon flow-node-neon-teal'
+  }
   if (kind === 'blueprint_meta' || kind === 'blueprint_input') {
     return 'flow-node-neon flow-node-neon-pink'
   }
@@ -78,6 +84,7 @@ const neonClass = computed(() => {
       colorClass,
       neonClass,
       data.pathDimmed ? 'opacity-20 saturate-50' : '',
+      data.simulationActive ? 'ring-2 ring-emerald-300/80 ring-offset-2 ring-offset-neutral-950' : '',
       data.pathFocus ? 'ring-2 ring-white/50 ring-offset-2 ring-offset-neutral-950' : '',
       data.highlighted && !data.pathActive ? 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-neutral-950' : '',
     ]"
@@ -119,5 +126,9 @@ const neonClass = computed(() => {
 .flow-node-neon-pink {
   --neon-color: rgba(244, 114, 182, 0.9);
   --neon-glow: rgba(244, 114, 182, 0.45);
+}
+.flow-node-neon-teal {
+  --neon-color: rgba(45, 212, 191, 0.9);
+  --neon-glow: rgba(45, 212, 191, 0.45);
 }
 </style>

@@ -23,7 +23,8 @@ describe('parseAutomationYaml', () => {
     expect(doc.blueprintMeta?.inputs.length).toBeGreaterThanOrEqual(3)
     expect(doc.nodes.some(n => n.kind === 'trigger')).toBe(true)
     expect(doc.nodes.some(n => n.kind === 'choose')).toBe(true)
-    expect(doc.nodes.some(n => n.kind === 'blueprint_input')).toBe(true)
+    const meta = doc.nodes.find(n => n.kind === 'blueprint_meta')
+    expect(meta?.data.simulationValues).toBeDefined()
     expect(doc.nodes.length).toBeGreaterThan(3)
   })
 
@@ -55,7 +56,19 @@ describe('parseAutomationYaml', () => {
 
   it('round-trip preserves yaml when not dirty', () => {
     const yaml = loadBlueprint('blueprints/automations/presence_based_lighting.yaml')
-    const doc = parseAutomationYaml(yaml)
+    const doc = parseAutomationYaml(yaml, { preview: false })
     expect(serializeDocument(doc).trimEnd()).toBe(yaml.trimEnd())
+  })
+
+  it('enriches action labels in preview mode', () => {
+    const yaml = loadBlueprint('blueprints/automations/presence_based_lighting.yaml')
+    const doc = parseAutomationYaml(yaml, {
+      source: 'presence_based_lighting.yaml',
+      preview: true,
+    })
+    const action = doc.nodes.find(
+      n => n.kind === 'action' && n.label.includes('light.turn_on'),
+    )
+    expect(action?.label).toContain('→')
   })
 })

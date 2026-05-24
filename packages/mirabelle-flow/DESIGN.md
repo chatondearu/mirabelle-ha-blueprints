@@ -44,8 +44,18 @@ Active edges use custom `FlowNeonEdge` (glow, arrow marker, `animateMotion` part
 
 | `edgeKind` | Appearance | Meaning |
 |------------|------------|---------|
-| `flow` (default) | Solid gray (`#525252`); yellow when trace-highlighted | Structure from YAML (root → triggers → conditions → actions) |
-| `reference` | Dashed purple (`#a78bfa`) | Trigger id used by a condition (focus + visual hint) |
+| `flow` (default) | Solid gray (`#525252`); neon green when path-highlighted | Execution structure (root → triggers → …) |
+| `reference` | Dashed purple (`#a78bfa`) | Trigger `id` referenced by a condition |
+| `input_binding` | Dashed cyan (`#22d3ee`) | Blueprint `!input` used in a node |
+| `variable_binding` | Dashed teal (`#2dd4bf`) | Automation variable referenced in templates |
+
+### Blueprint meta and simulation
+
+- **Single `blueprint_meta` node** holds all inputs and `simulationValues` (no separate input nodes on canvas).
+- Edit inputs in **BlueprintMetaPanel** (inspector when meta is selected).
+- **Simulation catalog** (sidebar, localStorage): fallback entity ids when HA is not connected; HA entity list takes priority in pickers when connected.
+- **Simulation mode** (default on): substitutes inputs, expands nested actions, enriches labels (`service → entity`).
+- **Variable nodes** (`kind: variable`): one per YAML key under `variables:`; dashed `variable_binding` edges to consumers.
 
 
 | Region          | Width / height      | Role                                           |

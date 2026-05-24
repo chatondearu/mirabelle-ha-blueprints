@@ -1,5 +1,11 @@
-import type { DocumentKind, FlowDocument } from '@mirabelle/flow-shared'
-import { BLUEPRINT_INPUT_FIXTURES } from '@mirabelle/flow-shared'
+import type { BlueprintInputDef, DocumentKind, FlowDocument } from '@mirabelle/flow-shared'
+import {
+  BLUEPRINT_INPUT_FIXTURES,
+  buildSimulationValues,
+  type SimulationCatalog,
+} from '@mirabelle/flow-shared'
+import { analyzeBindings } from './binding-analyzer.js'
+import { enrichNodeLabels } from './enrich-labels.js'
 import {
   autoLayout,
   buildGraphFromConfig,
@@ -15,6 +21,7 @@ export interface ParseOptions {
   source?: string
   previewInputs?: Record<string, unknown>
   preview?: boolean
+  simulationCatalog?: SimulationCatalog
 }
 
 /** Unwrap nested `script:` / `automation:` blocks sometimes used in blueprint YAML. */
@@ -27,6 +34,30 @@ function normalizeConfigRoot(config: Record<string, unknown>): Record<string, un
     }
   }
   return config
+}
+
+export function resolveSimulationValues(
+  inputs: BlueprintInputDef[],
+  options: ParseOptions,
+): Record<string, unknown> {
+  const fileName = options.source?.split('/').pop() ?? ''
+  const fixture = BLUEPRINT_INPUT_FIXTURES[fileName] ?? {}
+  const catalog = options.simulationCatalog
+  if (catalog) {
+    return buildSimulationValues(inputs, catalog, {
+      ...fixture,
+      ...options.previewInputs,
+    })
+  }
+  const values: Record<string, unknown> = {}
+  for (const input of inputs) {
+    values[input.key] =
+      options.previewInputs?.[input.key]
+      ?? fixture[input.key]
+      ?? input.default
+      ?? ''
+  }
+  return values
 }
 
 export function parseAutomationYaml(
@@ -44,6 +75,7 @@ export function parseAutomationYaml(
   let configRoot: Record<string, unknown> = root
   let alias: string | undefined
   let mode: string | undefined
+  let simulationValues: Record<string, unknown> = {}
 
   const detected = detectDocumentKind(root)
 
@@ -54,6 +86,7 @@ export function parseAutomationYaml(
     const { blueprint, ...rest } = root
     configRoot = normalizeConfigRoot(rest)
     mode = typeof configRoot.mode === 'string' ? configRoot.mode : undefined
+    simulationValues = resolveSimulationValues(blueprintMeta.inputs, options)
   }
   else if (detected.kind === 'instance') {
     kind = 'instance'
@@ -75,10 +108,10 @@ export function parseAutomationYaml(
   let workingConfig = { ...configRoot }
 
   if (options.preview && blueprintMeta) {
-    const fileName = options.source?.split('/').pop() ?? ''
-    const fixture =
-      options.previewInputs ?? BLUEPRINT_INPUT_FIXTURES[fileName] ?? {}
-    workingConfig = substituteInputs(workingConfig, fixture) as Record<string, unknown>
+    workingConfig = substituteInputs(workingConfig, simulationValues) as Record<
+      string,
+      unknown
+    >
   }
 
   const { nodes, edges } = buildGraphFromConfig(workingConfig, {
@@ -92,27 +125,14 @@ export function parseAutomationYaml(
       kind: 'blueprint_meta' as const,
       label: blueprintMeta.name ?? 'Blueprint',
       path: 'blueprint',
-      data: { meta: blueprintMeta },
+      data: {
+        meta: blueprintMeta,
+        inputs: blueprintMeta.inputs,
+        simulationValues,
+      },
       layer: 'blueprint' as const,
     }
-    const inputNodes = blueprintMeta.inputs.map((input) => ({
-      id: `blueprint_input_${input.key}`,
-      kind: 'blueprint_input' as const,
-      label: input.name ?? input.key,
-      path: `blueprint/input/${input.key}`,
-      data: { input },
-      layer: 'blueprint' as const,
-      parentId: metaNode.id,
-    }))
-    nodes.unshift(metaNode, ...inputNodes)
-    for (const inputNode of inputNodes) {
-      edges.unshift({
-        id: `e-bp-${inputNode.id}`,
-        source: metaNode.id,
-        target: inputNode.id,
-        edgeKind: 'flow' as const,
-      })
-    }
+    nodes.unshift(metaNode)
     const rootNode = nodes.find(n => n.kind === 'root')
     if (rootNode) {
       edges.unshift({
@@ -123,6 +143,13 @@ export function parseAutomationYaml(
         edgeKind: 'flow' as const,
       })
     }
+  }
+
+  const bindingEdges = analyzeBindings(nodes)
+  edges.push(...bindingEdges)
+
+  if (options.preview) {
+    enrichNodeLabels({ nodes, edges } as FlowDocument)
   }
 
   const layout = autoLayout(nodes, edges)

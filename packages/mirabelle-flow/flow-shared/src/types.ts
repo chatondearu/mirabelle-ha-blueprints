@@ -1,8 +1,12 @@
 /** Visual / logical grouping for canvas layout and styling. */
 export type FlowNodeLayer = 'blueprint' | 'automation'
 
-/** Edge semantics: main execution path vs cross-reference (e.g. trigger id). */
-export type FlowEdgeKind = 'flow' | 'reference'
+/** Edge semantics: execution path vs semantic cross-links. */
+export type FlowEdgeKind =
+  | 'flow'
+  | 'reference'
+  | 'input_binding'
+  | 'variable_binding'
 
 /** Node kinds aligned with Home Assistant automation structure. */
 export type FlowNodeKind =
@@ -16,6 +20,7 @@ export type FlowNodeKind =
   | 'delay'
   | 'wait'
   | 'variables'
+  | 'variable'
   | 'blueprint_input'
   | 'blueprint_meta'
   | 'root'
@@ -62,6 +67,17 @@ export interface BlueprintMeta {
   domain?: string
   minVersion?: string
   inputs: BlueprintInputDef[]
+}
+
+/** Reusable entity ids for simulation (persisted in localStorage). */
+export interface SimulationCatalog {
+  lights: string[]
+  sensors: string[]
+  switches: string[]
+  media_players: string[]
+  alarm_control_panels: string[]
+  /** Generic defaults keyed by domain or custom label */
+  defaults: Record<string, string>
 }
 
 export interface FlowDocument {

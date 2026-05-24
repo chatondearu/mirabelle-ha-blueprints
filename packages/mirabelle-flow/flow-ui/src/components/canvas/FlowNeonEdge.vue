@@ -8,13 +8,27 @@ const path = computed(() => getBezierPath(props))
 
 const pathD = computed(() => path.value[0])
 
-const strokeColor = computed(() =>
-  props.data?.edgeKind === 'reference' ? '#c4b5fd' : '#34d399',
+const strokeColor = computed(() => {
+  switch (props.data?.edgeKind) {
+    case 'reference':
+      return '#c4b5fd'
+    case 'input_binding':
+      return '#22d3ee'
+    case 'variable_binding':
+      return '#2dd4bf'
+    default:
+      return '#34d399'
+  }
+})
+
+const isBinding = computed(() =>
+  props.data?.edgeKind === 'input_binding'
+  || props.data?.edgeKind === 'variable_binding',
 )
 
 const markerId = computed(() => {
-  const suffix = props.data?.edgeKind === 'reference' ? 'ref' : 'flow'
-  return `neon-arrow-${suffix}-${props.id}`
+  const kind = props.data?.edgeKind ?? 'flow'
+  return `neon-arrow-${kind}-${props.id}`
 })
 </script>
 
@@ -40,11 +54,12 @@ const markerId = computed(() => {
     <BaseEdge
       :id="id"
       :path="pathD"
-      :marker-end="`url(#${markerId})`"
+      :marker-end="isBinding ? undefined : `url(#${markerId})`"
       :style="{
         stroke: data?.active ? strokeColor : '#404040',
         strokeWidth: data?.active ? 2.5 : 1.5,
-        opacity: data?.active ? 1 : 0.3,
+        opacity: data?.active ? 1 : isBinding ? 0.45 : 0.3,
+        strokeDasharray: isBinding ? '6 4' : undefined,
       }"
     />
 
@@ -53,24 +68,16 @@ const markerId = computed(() => {
         :path="pathD"
         :style="{
           stroke: strokeColor,
-          strokeWidth: 5,
+          strokeWidth: isBinding ? 4 : 5,
           opacity: 0.35,
           filter: `drop-shadow(0 0 6px ${strokeColor})`,
         }"
       />
-      <circle r="3.5" :fill="strokeColor" opacity="0.95">
-        <animateMotion
-          dur="1.8s"
-          repeatCount="indefinite"
-          :path="pathD"
-        />
+      <circle v-if="!isBinding" r="3.5" :fill="strokeColor" opacity="0.95">
+        <animateMotion dur="1.8s" repeatCount="indefinite" :path="pathD" />
       </circle>
-      <circle r="1.5" fill="#ecfdf5" opacity="0.9">
-        <animateMotion
-          dur="1.8s"
-          repeatCount="indefinite"
-          :path="pathD"
-        />
+      <circle v-if="isBinding" r="2.5" :fill="strokeColor" opacity="0.9">
+        <animateMotion dur="2.2s" repeatCount="indefinite" :path="pathD" />
       </circle>
     </template>
   </g>

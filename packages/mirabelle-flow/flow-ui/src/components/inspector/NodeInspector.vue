@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { Label } from 'reka-ui'
 import { computed, ref, watch } from 'vue'
+import BlueprintMetaPanel from '@/components/inspector/BlueprintMetaPanel.vue'
+import VariableInspector from '@/components/inspector/VariableInspector.vue'
 import { useFlowStore } from '@/stores/flow'
 
 const store = useFlowStore()
@@ -52,15 +54,12 @@ function applyRaw() {
     // invalid JSON
   }
 }
-
-function setPreviewInput(key: string, value: string) {
-  store.previewInputs[key] = value
-  store.reloadWithPreview()
-}
 </script>
 
 <template>
-  <div v-if="!node" class="p-4 text-sm text-neutral-500">
+  <BlueprintMetaPanel v-if="node?.kind === 'blueprint_meta'" />
+  <VariableInspector v-else-if="node?.kind === 'variable'" />
+  <div v-else-if="!node" class="p-4 text-sm text-neutral-500">
     Select a node
   </div>
   <div v-else class="flex flex-col gap-4 overflow-y-auto p-4">
@@ -71,6 +70,18 @@ function setPreviewInput(key: string, value: string) {
       <h2 class="text-lg font-semibold">
         {{ node.label }}
       </h2>
+      <p
+        v-if="store.simulationActiveNodeIds.has(node.id)"
+        class="mt-1 text-xs text-emerald-400"
+      >
+        Active in simulation for selected trigger
+      </p>
+      <p
+        v-else-if="node.kind === 'condition' && store.previewMode"
+        class="mt-1 text-xs text-amber-500/80"
+      >
+        May match trigger (template — not verified)
+      </p>
     </div>
 
     <template v-if="node.kind === 'action'">
@@ -91,32 +102,6 @@ function setPreviewInput(key: string, value: string) {
         >
       </div>
     </template>
-
-    <div v-if="store.document?.blueprintMeta">
-      <h3 class="mb-2 text-sm font-medium">
-        Blueprint preview inputs
-      </h3>
-      <label class="mb-2 flex items-center gap-2 text-xs">
-        <input
-          v-model="store.previewMode"
-          type="checkbox"
-          @change="store.reloadWithPreview()"
-        >
-        Preview mode
-      </label>
-      <div
-        v-for="input in store.document.blueprintMeta.inputs"
-        :key="input.key"
-        class="mb-2"
-      >
-        <Label class="text-xs">{{ input.name ?? input.key }}</Label>
-        <input
-          :value="String(store.previewInputs[input.key] ?? input.default ?? '')"
-          class="mt-1 w-full rounded border border-neutral-700 bg-neutral-900 px-2 py-1 text-xs"
-          @change="(e) => setPreviewInput(input.key, (e.target as HTMLInputElement).value)"
-        >
-      </div>
-    </div>
 
     <div>
       <Label class="text-xs text-neutral-400">Raw node data (JSON)</Label>

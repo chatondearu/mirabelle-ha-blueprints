@@ -126,6 +126,9 @@ export function getTriggerPathNodeIds(
       if (node.kind === 'blueprint_meta' || node.kind === 'blueprint_input') {
         continue
       }
+      if (node.kind === 'variable') {
+        continue
+      }
       if (node.kind === 'trigger' && node.id !== triggerId) {
         continue
       }
@@ -147,6 +150,7 @@ export function getTriggerPathNodeIds(
     if (node.kind === 'blueprint_meta' || node.kind === 'blueprint_input') {
       active.delete(node.id)
     }
+    // variables stay visible when they feed the active branch
   }
 
   return active

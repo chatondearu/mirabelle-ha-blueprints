@@ -3,6 +3,7 @@ import { TabsContent, TabsList, TabsRoot, TabsTrigger } from 'reka-ui'
 import { onMounted, ref } from 'vue'
 import { useYamlIO } from '@/composables/useYamlIO'
 import { listRepoBlueprints, loadRepoBlueprint } from '@/data/repo-blueprints'
+import SimulationCatalogPanel from '@/components/inspector/SimulationCatalogPanel.vue'
 import { useFlowStore } from '@/stores/flow'
 
 const store = useFlowStore()
@@ -96,5 +97,6 @@ function applyPaste() {
         Load
       </button>
     </TabsContent>
+    <SimulationCatalogPanel />
   </TabsRoot>
 </template>

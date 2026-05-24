@@ -125,6 +125,14 @@ Follow [`DESIGN.md`](./DESIGN.md) for visuals. Code conventions:
 - Auto-detect HA panel via `window.location.pathname` or `window.hassUrl`.
 - Sidebar: `FileExplorer` (local) vs `HaEntityList` (HA).
 
+### Blueprint simulation
+
+- Inputs live on **`blueprint_meta.data`** (`inputs`, `simulationValues`) — no `blueprint_input` canvas nodes.
+- **`simulationCatalog`** in Pinia + `localStorage`; entity pickers are **HA-first** via `useEntityPicker` (fallback catalog).
+- **`previewMode`** defaults to on; `applySimulation()` reloads YAML through `parseAutomationYaml` with `substituteInputs`.
+- **Binding edges**: `input_binding`, `variable_binding` from `binding-analyzer.ts` (not layout edges).
+- **Variable** nodes: `kind: 'variable'`, path `variables/<name>`.
+
 ### Editing and export
 
 - `store.isDirty` drives UI indicators; export/download should reflect edited YAML when dirty.

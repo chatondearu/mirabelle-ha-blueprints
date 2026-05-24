@@ -71,6 +71,15 @@ function applyNodeUpdates(doc: FlowDocument, base: Record<string, unknown>): voi
     if (node.kind === 'variables' && node.path === 'variables') {
       base.variables = { ...node.data }
     }
+    if (node.kind === 'variable' && node.path.startsWith('variables/')) {
+      const name = node.path.replace(/^variables\//, '')
+      const vars =
+        base.variables && typeof base.variables === 'object'
+          ? { ...(base.variables as Record<string, unknown>) }
+          : {}
+      vars[name] = node.data.value ?? node.data
+      base.variables = vars
+    }
     if (node.kind === 'trigger') {
       const idx = Number(node.path.split('/')[1])
       const triggers = normalizeList(base.triggers ?? base.trigger)

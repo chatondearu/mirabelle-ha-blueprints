@@ -44,6 +44,7 @@ const nodes = computed<Node[]>(() => {
     .map((n: FlowNodeType) => {
       const pathActive = store.pathHighlightNodeIds.has(n.id)
       const pathDimmed = hasPathHighlight.value && !pathActive
+      const simulationActive = store.simulationActiveNodeIds.has(n.id)
       return {
         id: n.id,
         type: 'flow',
@@ -55,6 +56,7 @@ const nodes = computed<Node[]>(() => {
           pathActive,
           pathDimmed,
           pathFocus: store.selectedNodeId === n.id,
+          simulationActive,
         },
       }
     })
