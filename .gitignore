@@ -54,6 +54,7 @@ yarn-error.log*
 .venv
 venv/
 ENV/
+.direnv/
 
 # IDE
 .idea/
