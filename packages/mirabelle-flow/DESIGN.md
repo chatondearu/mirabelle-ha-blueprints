@@ -30,6 +30,23 @@ Visual and interaction guidelines for `@mirabelle/flow-ui`. Agents and contribut
 └──────────┴────────────────────────────────────┴─────────────┘
 ```
 
+### Path interaction (canvas)
+
+| Gesture | Behaviour |
+|---------|-----------|
+| **Single click** on a node | Highlight **upstream** path (predecessors + edges) with neon glow and animated particles on edges; other nodes dimmed |
+| **Double click** on a node | **Focus mode**: hide nodes outside the full parcours (upstream + downstream; triggers use branch-aware logic) |
+| **Click canvas** or **Show all** | Clear highlight and focus |
+
+Active edges use custom `FlowNeonEdge` (glow, arrow marker, `animateMotion` particle). Reference edges stay purple when active.
+
+### Edge styles
+
+| `edgeKind` | Appearance | Meaning |
+|------------|------------|---------|
+| `flow` (default) | Solid gray (`#525252`); yellow when trace-highlighted | Structure from YAML (root → triggers → conditions → actions) |
+| `reference` | Dashed purple (`#a78bfa`) | Trigger id used by a condition (focus + visual hint) |
+
 
 | Region          | Width / height      | Role                                           |
 | --------------- | ------------------- | ---------------------------------------------- |

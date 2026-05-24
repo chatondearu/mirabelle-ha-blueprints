@@ -1,4 +1,6 @@
-import type { FlowDocument, FlowEdge, FlowNode, FlowNodeKind } from '@mirabelle/flow-shared'
+import type { FlowDocument, FlowEdge, FlowEdgeKind, FlowNode, FlowNodeKind } from '@mirabelle/flow-shared'
+import { FLOW_LAYOUT, getNodeLayer } from '@mirabelle/flow-shared'
+import { extractTriggerIdsFromCondition } from './trigger-path.js'
 
 interface BuildContext {
   nodes: FlowNode[]
@@ -20,7 +22,15 @@ function addNode(
   parentId?: string,
 ): FlowNode {
   const id = path.replace(/\//g, '_') || 'root'
-  const node: FlowNode = { id, kind, label, path, data, parentId }
+  const node: FlowNode = {
+    id,
+    kind,
+    label,
+    path,
+    data,
+    parentId,
+    layer: getNodeLayer(kind),
+  }
   ctx.nodes.push(node)
   return node
 }
@@ -31,30 +41,46 @@ function connect(
   target: FlowNode,
   label?: string,
   branch?: string,
+  edgeKind: FlowEdgeKind = 'flow',
 ): void {
+  const exists = ctx.edges.some(
+    e =>
+      e.source === source.id
+      && e.target === target.id
+      && e.edgeKind === edgeKind
+      && e.label === label,
+  )
+  if (exists) {
+    return
+  }
   ctx.edges.push({
     id: nextEdgeId(ctx),
     source: source.id,
     target: target.id,
     label,
     branch,
+    edgeKind,
   })
 }
 
 function summarizeTrigger(t: Record<string, unknown>): string {
   const platform = (t.platform ?? t.trigger) as string | undefined
   const entity = t.entity_id as string | undefined
+  const id = typeof t.id === 'string' ? t.id : undefined
   if (platform && entity) {
-    return `Trigger: ${platform} (${entity})`
+    return id ? `Trigger: ${platform} (${entity}) [${id}]` : `Trigger: ${platform} (${entity})`
   }
   if (platform) {
-    return `Trigger: ${platform}`
+    return id ? `Trigger: ${platform} [${id}]` : `Trigger: ${platform}`
   }
-  return 'Trigger'
+  return id ? `Trigger [${id}]` : 'Trigger'
 }
 
 function summarizeCondition(c: Record<string, unknown>): string {
   const cond = c.condition as string | undefined
+  if (cond === 'trigger' && typeof c.id === 'string') {
+    return `Trigger: ${c.id}`
+  }
   if (cond === 'template' && typeof c.value_template === 'string') {
     const t = c.value_template
     return t.length > 40 ? `Template: ${t.slice(0, 40)}…` : `Template: ${t}`
@@ -95,7 +121,7 @@ function buildTriggers(
   triggers: unknown[],
   parent: FlowNode,
 ): FlowNode[] {
-  const leaves: FlowNode[] = []
+  const nodes: FlowNode[] = []
   triggers.forEach((t, i) => {
     if (!t || typeof t !== 'object') {
       return
@@ -110,9 +136,9 @@ function buildTriggers(
       parent.id,
     )
     connect(ctx, parent, node)
-    leaves.push(node)
+    nodes.push(node)
   })
-  return leaves
+  return nodes
 }
 
 function buildConditions(
@@ -236,6 +262,33 @@ function buildVariables(
   return node
 }
 
+function resolveTriggerNode(ctx: BuildContext, triggerId: string): FlowNode | undefined {
+  const byHaId = ctx.nodes.find(
+    n => n.kind === 'trigger' && typeof n.data.id === 'string' && n.data.id === triggerId,
+  )
+  if (byHaId) {
+    return byHaId
+  }
+  const indexMatch = triggerId.match(/^trigger_(\d+)$/)
+  if (indexMatch) {
+    return ctx.nodes.find(n => n.path === `trigger/${indexMatch[1]}`)
+  }
+  return undefined
+}
+
+function connectTriggerReferenceEdges(ctx: BuildContext): void {
+  const conditionNodes = ctx.nodes.filter(n => n.kind === 'condition')
+  for (const cond of conditionNodes) {
+    const refs = extractTriggerIdsFromCondition(cond.data)
+    for (const refId of refs) {
+      const trigger = resolveTriggerNode(ctx, refId)
+      if (trigger) {
+        connect(ctx, trigger, cond, refId, undefined, 'reference')
+      }
+    }
+  }
+}
+
 export function buildGraphFromConfig(
   config: Record<string, unknown>,
   options: { alias?: string; mode?: string } = {},
@@ -244,16 +297,18 @@ export function buildGraphFromConfig(
 
   const root = addNode(ctx, 'root', 'root', options.alias ?? 'Automation', {}, undefined)
 
+  let entryAnchor: FlowNode = root
   if (config.variables && typeof config.variables === 'object') {
-    buildVariables(ctx, config.variables as Record<string, unknown>, root)
+    entryAnchor = buildVariables(ctx, config.variables as Record<string, unknown>, root)
   }
 
   const triggers = (config.triggers ?? config.trigger) as unknown[] | undefined
-  let chainStart = root
   const triggerList = Array.isArray(triggers) ? triggers : triggers ? [triggers] : []
-  if (triggerList.length > 0) {
-    const triggerLeaves = buildTriggers(ctx, triggerList, root)
-    chainStart = triggerLeaves[0] ?? root
+  const triggerNodes =
+    triggerList.length > 0 ? buildTriggers(ctx, triggerList, root) : []
+  let chainStart = entryAnchor
+  if (triggerNodes.length > 0) {
+    chainStart = triggerNodes[0] ?? entryAnchor
   }
 
   const conditions = (config.conditions ?? config.condition) as unknown[] | undefined
@@ -277,6 +332,10 @@ export function buildGraphFromConfig(
     buildActions(ctx, actionList, afterConditions, prefix)
   }
 
+  if (triggerNodes.length > 0) {
+    connectTriggerReferenceEdges(ctx)
+  }
+
   return { nodes: ctx.nodes, edges: ctx.edges }
 }
 
@@ -285,27 +344,29 @@ export function autoLayout(
   edges: FlowEdge[],
 ): Record<string, { x: number; y: number }> {
   const layout: Record<string, { x: number; y: number }> = {}
-  const H_GAP = 280
-  const V_GAP = 100
+  const H_GAP = FLOW_LAYOUT.horizontalGap
+  const V_GAP = FLOW_LAYOUT.verticalGap
 
+  const flowEdges = edges.filter(e => e.edgeKind !== 'reference')
   const adjacency = new Map<string, string[]>()
-  for (const e of edges) {
+  for (const e of flowEdges) {
     const list = adjacency.get(e.source) ?? []
     list.push(e.target)
     adjacency.set(e.source, list)
   }
 
   const depth = new Map<string, number>()
-  const root = nodes.find(n => n.kind === 'root')
-  if (!root) {
+  const start =
+    nodes.find(n => n.kind === 'blueprint_meta') ?? nodes.find(n => n.kind === 'root')
+  if (!start) {
     nodes.forEach((n, i) => {
-      layout[n.id] = { x: 80, y: 80 + i * V_GAP }
+      layout[n.id] = { x: FLOW_LAYOUT.startX, y: FLOW_LAYOUT.startY + i * V_GAP }
     })
     return layout
   }
 
-  const queue: string[] = [root.id]
-  depth.set(root.id, 0)
+  const queue: string[] = [start.id]
+  depth.set(start.id, 0)
   while (queue.length > 0) {
     const id = queue.shift()!
     const d = depth.get(id) ?? 0
@@ -314,6 +375,12 @@ export function autoLayout(
         depth.set(child, d + 1)
         queue.push(child)
       }
+    }
+  }
+
+  for (const n of nodes) {
+    if (!depth.has(n.id)) {
+      depth.set(n.id, 0)
     }
   }
 
@@ -327,7 +394,10 @@ export function autoLayout(
 
   for (const [d, group] of byDepth) {
     group.forEach((n, i) => {
-      layout[n.id] = { x: 80 + d * H_GAP, y: 80 + i * V_GAP }
+      layout[n.id] = {
+        x: FLOW_LAYOUT.startX + d * H_GAP,
+        y: FLOW_LAYOUT.startY + i * V_GAP,
+      }
     })
   }
 

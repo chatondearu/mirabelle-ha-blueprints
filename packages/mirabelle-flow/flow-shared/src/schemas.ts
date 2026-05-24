@@ -16,6 +16,10 @@ export const flowNodeKindSchema = z.enum([
   'root',
 ])
 
+export const flowNodeLayerSchema = z.enum(['blueprint', 'automation'])
+
+export const flowEdgeKindSchema = z.enum(['flow', 'reference'])
+
 export const flowNodeSchema = z.object({
   id: z.string(),
   kind: flowNodeKindSchema,
@@ -23,6 +27,7 @@ export const flowNodeSchema = z.object({
   path: z.string(),
   data: z.record(z.unknown()),
   parentId: z.string().optional(),
+  layer: flowNodeLayerSchema.optional(),
 })
 
 export const flowEdgeSchema = z.object({
@@ -31,6 +36,7 @@ export const flowEdgeSchema = z.object({
   target: z.string(),
   label: z.string().optional(),
   branch: z.string().optional(),
+  edgeKind: flowEdgeKindSchema.optional(),
 })
 
 export const flowDocumentSchema = z.object({

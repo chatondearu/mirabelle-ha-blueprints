@@ -93,14 +93,34 @@ export function parseAutomationYaml(
       label: blueprintMeta.name ?? 'Blueprint',
       path: 'blueprint',
       data: { meta: blueprintMeta },
+      layer: 'blueprint' as const,
     }
-    nodes.unshift(metaNode)
+    const inputNodes = blueprintMeta.inputs.map((input) => ({
+      id: `blueprint_input_${input.key}`,
+      kind: 'blueprint_input' as const,
+      label: input.name ?? input.key,
+      path: `blueprint/input/${input.key}`,
+      data: { input },
+      layer: 'blueprint' as const,
+      parentId: metaNode.id,
+    }))
+    nodes.unshift(metaNode, ...inputNodes)
+    for (const inputNode of inputNodes) {
+      edges.unshift({
+        id: `e-bp-${inputNode.id}`,
+        source: metaNode.id,
+        target: inputNode.id,
+        edgeKind: 'flow' as const,
+      })
+    }
     const rootNode = nodes.find(n => n.kind === 'root')
     if (rootNode) {
       edges.unshift({
         id: 'e-blueprint',
         source: metaNode.id,
         target: rootNode.id,
+        label: 'automation',
+        edgeKind: 'flow' as const,
       })
     }
   }

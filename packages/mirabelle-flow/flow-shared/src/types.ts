@@ -1,3 +1,9 @@
+/** Visual / logical grouping for canvas layout and styling. */
+export type FlowNodeLayer = 'blueprint' | 'automation'
+
+/** Edge semantics: main execution path vs cross-reference (e.g. trigger id). */
+export type FlowEdgeKind = 'flow' | 'reference'
+
 /** Node kinds aligned with Home Assistant automation structure. */
 export type FlowNodeKind =
   | 'trigger'
@@ -28,6 +34,8 @@ export interface FlowNode {
   path: string
   data: Record<string, unknown>
   parentId?: string
+  /** Defaults from kind via `getNodeLayer()` when omitted. */
+  layer?: FlowNodeLayer
 }
 
 export interface FlowEdge {
@@ -36,6 +44,8 @@ export interface FlowEdge {
   target: string
   label?: string
   branch?: 'default' | 'true' | 'false' | string
+  /** `flow` = solid execution path; `reference` = dashed link (e.g. trigger → condition). */
+  edgeKind?: FlowEdgeKind
 }
 
 export interface BlueprintInputDef {

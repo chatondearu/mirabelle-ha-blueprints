@@ -1,6 +1,8 @@
 import type { TraceOverlay } from '@mirabelle/flow-shared'
 import { flowDocumentSchema } from '@mirabelle/flow-shared'
 import {
+  getFocusedPath,
+  getUpstreamPath,
   parseAutomationYaml,
   serializeDocument,
   updateNodeData,
@@ -20,6 +22,9 @@ export const useFlowStore = defineStore('flow', () => {
   const appMode = ref<AppMode>('local')
   const traceOverlay = ref<TraceOverlay | null>(null)
   const highlightedNodeIds = ref<Set<string>>(new Set())
+  const pathHighlightNodeIds = ref<Set<string>>(new Set())
+  const pathHighlightEdgeIds = ref<Set<string>>(new Set())
+  const pathFilterNodeId = ref<string | null>(null)
   const rawYamlPanel = ref('')
 
   const selectedNode = computed(() =>
@@ -27,6 +32,32 @@ export const useFlowStore = defineStore('flow', () => {
   )
 
   const isDirty = computed(() => document.value?._dirty ?? false)
+
+  const pathFilterNode = computed(() =>
+    document.value?.nodes.find(n => n.id === pathFilterNodeId.value) ?? null,
+  )
+
+  const pathFilterNodeIds = computed(() => {
+    if (!document.value || !pathFilterNodeId.value) {
+      return null
+    }
+    const { nodeIds } = getFocusedPath(
+      pathFilterNodeId.value,
+      document.value.nodes,
+      document.value.edges,
+    )
+    return nodeIds
+  })
+
+  function applyPathHighlight(nodeIds: Set<string>, edgeIds: Set<string>) {
+    pathHighlightNodeIds.value = nodeIds
+    pathHighlightEdgeIds.value = edgeIds
+  }
+
+  function clearPathHighlight() {
+    pathHighlightNodeIds.value = new Set()
+    pathHighlightEdgeIds.value = new Set()
+  }
 
   function loadYaml(text: string, source?: string) {
     parseError.value = null
@@ -48,6 +79,8 @@ export const useFlowStore = defineStore('flow', () => {
         previewInputs.value = { ...defaults, ...previewInputs.value }
       }
       selectedNodeId.value = doc.nodes[0]?.id ?? null
+      pathFilterNodeId.value = null
+      clearPathHighlight()
     }
     catch (e) {
       parseError.value = e instanceof Error ? e.message : String(e)
@@ -62,8 +95,40 @@ export const useFlowStore = defineStore('flow', () => {
     loadYaml(document.value.rawYaml, document.value.source)
   }
 
-  function selectNode(id: string | null) {
+  /** Single click: neon upstream path, show full graph. */
+  function highlightNodePath(id: string) {
+    if (!document.value) {
+      return
+    }
     selectedNodeId.value = id
+    pathFilterNodeId.value = null
+    const path = getUpstreamPath(id, document.value.nodes, document.value.edges)
+    applyPathHighlight(path.nodeIds, path.edgeIds)
+  }
+
+  /** Double click: hide other nodes, show full parcours for this node. */
+  function focusNodePath(id: string) {
+    if (!document.value) {
+      return
+    }
+    selectedNodeId.value = id
+    pathFilterNodeId.value = id
+    const path = getFocusedPath(id, document.value.nodes, document.value.edges)
+    applyPathHighlight(path.nodeIds, path.edgeIds)
+  }
+
+  function clearPathFocus() {
+    pathFilterNodeId.value = null
+    clearPathHighlight()
+  }
+
+  function selectNode(id: string | null) {
+    if (!id) {
+      selectedNodeId.value = null
+      clearPathFocus()
+      return
+    }
+    highlightNodePath(id)
   }
 
   function updateLayout(nodeId: string, x: number, y: number) {
@@ -136,11 +201,19 @@ export const useFlowStore = defineStore('flow', () => {
     appMode,
     traceOverlay,
     highlightedNodeIds,
+    pathHighlightNodeIds,
+    pathHighlightEdgeIds,
+    pathFilterNodeId,
+    pathFilterNode,
+    pathFilterNodeIds,
     rawYamlPanel,
     isDirty,
     loadYaml,
     reloadWithPreview,
     selectNode,
+    highlightNodePath,
+    focusNodePath,
+    clearPathFocus,
     updateLayout,
     updateSelectedNodeData,
     validateDocument,

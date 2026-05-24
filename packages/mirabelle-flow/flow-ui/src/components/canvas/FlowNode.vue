@@ -3,7 +3,14 @@ import type { FlowNodeKind } from '@mirabelle/flow-shared'
 import { Handle, Position, type NodeProps } from '@vue-flow/core'
 import { computed } from 'vue'
 
-const props = defineProps<NodeProps<{ label: string, kind: FlowNodeKind, highlighted?: boolean }>>()
+const props = defineProps<NodeProps<{
+  label: string
+  kind: FlowNodeKind
+  highlighted?: boolean
+  pathActive?: boolean
+  pathDimmed?: boolean
+  pathFocus?: boolean
+}>>()
 
 /** Lucide icons via UnoCSS preset-icons (`i-lucide-*`). */
 const KIND_ICON: Record<FlowNodeKind, string> = {
@@ -31,20 +38,48 @@ const colorClass = computed(() => {
     choose: 'border-purple-500 bg-purple-950',
     variables: 'border-cyan-500 bg-cyan-950',
     blueprint_meta: 'border-pink-500 bg-pink-950',
+    blueprint_input: 'border-pink-400/80 bg-pink-950/60',
     root: 'border-neutral-500 bg-neutral-900',
   }
   return map[kind] ?? 'border-neutral-600 bg-neutral-900'
 })
 
 const iconClass = computed(() => KIND_ICON[props.data.kind] ?? 'i-lucide-circle')
+
+const titleKind = computed(() => {
+  if (props.data.kind.startsWith('blueprint_')) {
+    return props.data.kind.replace('blueprint_', '')
+  }
+  return props.data.kind
+})
+
+const neonClass = computed(() => {
+  if (!props.data.pathActive) {
+    return ''
+  }
+  const kind = props.data.kind
+  if (kind === 'trigger') {
+    return 'flow-node-neon flow-node-neon-amber'
+  }
+  if (kind === 'condition') {
+    return 'flow-node-neon flow-node-neon-blue'
+  }
+  if (kind === 'blueprint_meta' || kind === 'blueprint_input') {
+    return 'flow-node-neon flow-node-neon-pink'
+  }
+  return 'flow-node-neon flow-node-neon-emerald'
+})
 </script>
 
 <template>
   <div
-    class="min-w-40 rounded-lg border-2 px-3 py-2 text-sm shadow-lg transition-all"
+    class="min-w-40 rounded-lg border-2 px-3 py-2 text-sm shadow-lg transition-all duration-200"
     :class="[
       colorClass,
-      data.highlighted ? 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-neutral-950' : '',
+      neonClass,
+      data.pathDimmed ? 'opacity-20 saturate-50' : '',
+      data.pathFocus ? 'ring-2 ring-white/50 ring-offset-2 ring-offset-neutral-950' : '',
+      data.highlighted && !data.pathActive ? 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-neutral-950' : '',
     ]"
   >
     <Handle type="target" :position="Position.Left" class="!bg-neutral-400" />
@@ -54,7 +89,7 @@ const iconClass = computed(() => KIND_ICON[props.data.kind] ?? 'i-lucide-circle'
         :class="iconClass"
         aria-hidden="true"
       />
-      <span>{{ data.kind }}</span>
+      <span>{{ titleKind }}</span>
     </div>
     <div class="mt-1 text-xs text-neutral-300">
       {{ data.label }}
@@ -62,3 +97,27 @@ const iconClass = computed(() => KIND_ICON[props.data.kind] ?? 'i-lucide-circle'
     <Handle type="source" :position="Position.Right" class="!bg-neutral-400" />
   </div>
 </template>
+
+<style scoped>
+.flow-node-neon {
+  box-shadow:
+    0 0 10px var(--neon-color, rgba(52, 211, 153, 0.7)),
+    0 0 22px var(--neon-glow, rgba(52, 211, 153, 0.35));
+}
+.flow-node-neon-emerald {
+  --neon-color: rgba(52, 211, 153, 0.85);
+  --neon-glow: rgba(52, 211, 153, 0.4);
+}
+.flow-node-neon-amber {
+  --neon-color: rgba(251, 191, 36, 0.9);
+  --neon-glow: rgba(251, 191, 36, 0.45);
+}
+.flow-node-neon-blue {
+  --neon-color: rgba(96, 165, 250, 0.9);
+  --neon-glow: rgba(96, 165, 250, 0.45);
+}
+.flow-node-neon-pink {
+  --neon-color: rgba(244, 114, 182, 0.9);
+  --neon-glow: rgba(244, 114, 182, 0.45);
+}
+</style>

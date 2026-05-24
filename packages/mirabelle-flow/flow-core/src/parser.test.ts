@@ -23,6 +23,7 @@ describe('parseAutomationYaml', () => {
     expect(doc.blueprintMeta?.inputs.length).toBeGreaterThanOrEqual(3)
     expect(doc.nodes.some(n => n.kind === 'trigger')).toBe(true)
     expect(doc.nodes.some(n => n.kind === 'choose')).toBe(true)
+    expect(doc.nodes.some(n => n.kind === 'blueprint_input')).toBe(true)
     expect(doc.nodes.length).toBeGreaterThan(3)
   })
 
