@@ -1,0 +1,70 @@
+const n=`blueprint:
+  homeassistant:
+    min_version: 2025.5.3
+  name: "[CDA] 🪟 Blind Cover Template"
+  description: "Helper automation to track the state of a blind controlled by a single switch. Note: You must create the input_text helpers manually first using the Cover Manager integration or by adding them to your configuration.yaml"
+  domain: automation
+  input:
+    cover_name:
+      name: "Cover Name"
+      description: "Name of the cover entity (e.g., Living Room Blind). Must match the name used when creating the helpers."
+      selector:
+        text:
+    switch_entity:
+      name: "Switch Entity"
+      description: "The switch entity that controls the blind"
+      selector:
+        entity:
+          domain: switch
+    position_helper:
+      name: "Position Helper"
+      description: "The input_text entity that stores the cover position (e.g., input_text.living_room_blind_position)"
+      selector:
+        entity:
+          domain: input_text
+    direction_helper:
+      name: "Direction Helper"
+      description: "The input_text entity that stores the cover direction (e.g., input_text.living_room_blind_direction)"
+      selector:
+        entity:
+          domain: input_text
+  source_url: https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_cover.yaml
+
+variables:
+  cover_id: !input cover_name | lower | replace(' ', '_')
+  position_helper: !input position_helper
+  direction_helper: !input direction_helper
+
+trigger:
+  - platform: state
+    entity_id: !input switch_entity
+
+action:
+  - choose:
+      - conditions:
+          - condition: state
+            entity_id: !input switch_entity
+            state: "on"
+        sequence:
+          - service: input_text.set_value
+            target:
+              entity_id: !input direction_helper
+            data:
+              value: >
+                {% set current_pos = states(position_helper) | int(0) %}
+                {% if current_pos == 0 %}
+                  opening
+                {% elif current_pos == 100 %}
+                  closing
+                {% else %}
+                  {{ states(direction_helper) | default('opening') }}
+                {% endif %}
+    default:
+      - service: input_text.set_value
+        target:
+          entity_id: !input direction_helper
+        data:
+          value: "stopped"
+
+mode: single `;export{n as default};
+//# sourceMappingURL=cover_cover-BV1XUEOn.js.map

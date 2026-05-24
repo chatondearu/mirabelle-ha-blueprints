@@ -1,0 +1,691 @@
+const n=`blueprint:
+  homeassistant:
+    min_version: 2025.5.3
+  name: "[CDA] 🛋️ Living Area Adaptive Lighting"
+  description: >
+    Adaptive day and night lighting for living areas using computed profiles.
+    Night mode applies per-lamp blue starlight variation on color lights and dim
+    white lights. Day mode warms color temperature over time and adjusts brightness
+    from illuminance and cover shading. Uses zone occupancy sensors with optional
+    person home constraints.
+  domain: automation
+  source_url: https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/living-area-adaptive-lighting.yaml
+  input:
+    lights_section:
+      name: Lights
+      icon: mdi:lightbulb-group
+      description: Select color-capable and white-only lights separately.
+      input:
+        color_lights:
+          name: Color Lights
+          description: >
+            Lights that support color (RGB/HS). Each lamp gets a stable night hue
+            variation derived from its entity id.
+          default: []
+          selector:
+            entity:
+              domain: light
+              multiple: true
+        white_lights:
+          name: White Lights
+          description: White-only or dimmable white lights (no forced color at night).
+          default: []
+          selector:
+            entity:
+              domain: light
+              multiple: true
+    presence_section:
+      name: Presence
+      icon: mdi:motion-sensor
+      description: Zone occupancy and optional home constraints.
+      input:
+        occupancy_sensors:
+          name: Occupancy Sensors
+          description: >
+            Binary sensors for the living area (motion, mmWave, room occupied,
+            or template helpers tied to a zone).
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: true
+        presence_persons:
+          name: Persons At Home
+          description: >
+            Optional person entities. Used when "Require Someone Home" is enabled.
+          default: []
+          selector:
+            entity:
+              domain: person
+              multiple: true
+        require_someone_home:
+          name: Require Someone Home
+          description: >
+            When enabled and at least one person is selected, lighting only runs
+            while someone is home.
+          default: false
+          selector:
+            boolean: {}
+        delay_off:
+          name: Delay Before Turning Off
+          description: >
+            Seconds to wait after all occupancy sensors are off before turning off lights.
+          default: 300
+          selector:
+            number:
+              min: 0
+              max: 3600
+              unit_of_measurement: seconds
+    ambient_section:
+      name: Ambient Light
+      icon: mdi:brightness-6
+      description: Illuminance sensor and thresholds (hysteresis supported).
+      input:
+        illuminance_sensor:
+          name: Illuminance Sensor
+          description: >
+            Optional lux sensor. When empty, day/night uses sun position and optional
+            time windows only.
+          default: ""
+          selector:
+            entity:
+              domain: sensor
+        lux_dark:
+          name: Lux Dark Threshold
+          description: Turn lights on when illuminance is below this value (lux).
+          default: 80
+          selector:
+            number:
+              min: 0
+              max: 2000
+              unit_of_measurement: lx
+        lux_bright:
+          name: Lux Bright Threshold
+          description: >
+            Hysteresis high threshold (lux). Above this value, artificial light is
+            usually not needed during the day unless covers are heavily closed.
+          default: 120
+          selector:
+            number:
+              min: 0
+              max: 2000
+              unit_of_measurement: lx
+        night_start:
+          name: Night Start (Fallback)
+          description: >
+            Optional time when night profile is allowed without lux sensor (HH:MM:SS).
+            Leave empty to rely on sun below horizon only.
+          default: ""
+          selector:
+            time: {}
+        day_start:
+          name: Day Start (Fallback)
+          description: >
+            Optional time when day profile is preferred without lux sensor (HH:MM:SS).
+            Leave empty to rely on sun above horizon only.
+          default: ""
+          selector:
+            time: {}
+    covers_section:
+      name: Covers
+      icon: mdi:window-shutter
+      description: Optional covers used to estimate shading in the living area.
+      input:
+        covers:
+          name: Living Area Covers
+          description: >
+            Optional cover entities. Uses Home Assistant cover positions (0 = closed,
+            100 = open). Mostly closed blinds increase artificial light need.
+          default: []
+          selector:
+            entity:
+              domain: cover
+              multiple: true
+        cover_shade_threshold:
+          name: Cover Shade Threshold
+          description: >
+            Average closed amount (%) above which covers alone trigger lighting.
+            Computed as 100 minus current_position (e.g. position 25 open = 75% closed).
+          default: 60
+          selector:
+            number:
+              min: 0
+              max: 100
+              unit_of_measurement: "%"
+    night_profile_section:
+      name: Night Profile
+      icon: mdi:weather-night
+      input:
+        night_hue_base:
+          name: Night Hue Base
+          description: Base hue for color lights (0-360). Blue night is around 235.
+          default: 235
+          selector:
+            number:
+              min: 0
+              max: 360
+        night_hue_spread:
+          name: Night Hue Spread
+          description: Per-lamp hue variation range (+/- spread) around the base hue.
+          default: 15
+          selector:
+            number:
+              min: 0
+              max: 60
+        night_saturation:
+          name: Night Saturation
+          description: Saturation for color lights at night (0-100).
+          default: 85
+          selector:
+            number:
+              min: 0
+              max: 100
+              unit_of_measurement: "%"
+        night_brightness_color:
+          name: Night Brightness (Color)
+          description: Brightness percent for color lights at night.
+          default: 40
+          selector:
+            number:
+              min: 1
+              max: 100
+              unit_of_measurement: "%"
+        night_brightness_white:
+          name: Night Brightness (White)
+          description: Brightness percent for white-only lights at night.
+          default: 15
+          selector:
+            number:
+              min: 1
+              max: 100
+              unit_of_measurement: "%"
+    day_profile_section:
+      name: Day Profile
+      icon: mdi:white-balance-sunny
+      input:
+        day_kelvin_min:
+          name: Day Kelvin Minimum
+          description: Warmest color temperature at low sun elevation (evening).
+          default: 2700
+          selector:
+            number:
+              min: 2000
+              max: 6500
+              unit_of_measurement: K
+        day_kelvin_max:
+          name: Day Kelvin Maximum
+          description: Coolest color temperature at high sun elevation (midday).
+          default: 4000
+          selector:
+            number:
+              min: 2000
+              max: 6500
+              unit_of_measurement: K
+        day_brightness_min:
+          name: Day Brightness Minimum
+          description: Minimum brightness percent during the day profile.
+          default: 35
+          selector:
+            number:
+              min: 1
+              max: 100
+              unit_of_measurement: "%"
+        day_brightness_max:
+          name: Day Brightness Maximum
+          description: Maximum brightness percent during the day profile.
+          default: 100
+          selector:
+            number:
+              min: 1
+              max: 100
+              unit_of_measurement: "%"
+        cover_kelvin_warm_shift:
+          name: Cover Kelvin Warm Shift
+          description: >
+            Kelvin subtracted at fully closed average cover position (warmer light).
+          default: 300
+          selector:
+            number:
+              min: 0
+              max: 1000
+              unit_of_measurement: K
+    control_section:
+      name: Manual Control
+      icon: mdi:tune
+      description: >
+        Dashboard helpers (input_select / input_boolean). When enabled, the
+        automation uses predictable entity ids from the slug below. Create helpers
+        once with the companion script blueprint (see documentation).
+      input:
+        create_dashboard_helpers:
+          name: Create Dashboard Control Helpers
+          description: >
+            When enabled, uses input_select.{slug}_mode and input_boolean.{slug}_hold.
+            Create them once via the [CDA] Create Living Area Lighting Helpers script.
+          default: true
+          selector:
+            boolean: {}
+        control_helper_slug:
+          name: Control Helper Slug
+          description: >
+            Base slug for auto-created helpers (letters, numbers, underscores).
+            Example slug living_area_lighting creates input_select.living_area_lighting_mode.
+          default: living_area_lighting
+          selector:
+            text: {}
+        control_mode_helper_name:
+          name: Mode Helper Display Name
+          description: Friendly name for the auto-created mode dropdown helper.
+          default: Living Area Lighting Mode
+          selector:
+            text: {}
+        control_hold_helper_name:
+          name: Hold Helper Display Name
+          description: Friendly name for the auto-created hold toggle helper.
+          default: Living Area Lighting Hold
+          selector:
+            text: {}
+        manual_mode_helper:
+          name: Manual Mode Helper Override
+          description: >
+            Optional existing input_select (options: auto, day, night, off). When set,
+            overrides auto-created mode helper entity id.
+          default: ""
+          selector:
+            entity:
+              domain: input_select
+        manual_hold_helper:
+          name: Manual Hold Helper Override
+          description: >
+            Optional existing input_boolean. When set, overrides auto-created hold helper.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+        transition_seconds:
+          name: Light Transition
+          description: Transition time in seconds for light changes.
+          default: 3
+          selector:
+            number:
+              min: 0
+              max: 30
+              unit_of_measurement: seconds
+
+mode: restart
+
+trigger_variables:
+  illuminance_sensor_input: !input illuminance_sensor
+  lux_dark_input: !input lux_dark
+  lux_bright_input: !input lux_bright
+  manual_mode_helper_input: !input manual_mode_helper
+  manual_hold_helper_input: !input manual_hold_helper
+  create_dashboard_helpers_input: !input create_dashboard_helpers
+  control_helper_slug_input: !input control_helper_slug
+  control_mode_helper_name_input: !input control_mode_helper_name
+  control_hold_helper_name_input: !input control_hold_helper_name
+  presence_persons_input: !input presence_persons
+  cover_entities_input: !input covers
+
+trigger:
+  - platform: state
+    entity_id: !input occupancy_sensors
+    to: "on"
+  - platform: state
+    entity_id: !input occupancy_sensors
+    from: "on"
+    to: "off"
+    for:
+      seconds: !input delay_off
+  - platform: template
+    value_template: >
+      {% if illuminance_sensor_input | length > 0 and has_value(illuminance_sensor_input) %}
+        {{ states(illuminance_sensor_input) | float(0) | round(1) }}
+      {% else %}
+        none
+      {% endif %}
+  - platform: template
+    value_template: >
+      {% if cover_entities_input | count > 0 %}
+        {{ expand(cover_entities_input) | map(attribute='attributes.current_position') | join('|') }}
+      {% else %}
+        none
+      {% endif %}
+  - platform: sun
+    event: sunrise
+  - platform: sun
+    event: sunset
+  - platform: state
+    entity_id: sun.sun
+  - platform: template
+    value_template: >
+      {% if presence_persons_input | count > 0 %}
+        {{ expand(presence_persons_input) | map(attribute='state') | join('|') }}
+      {% else %}
+        none
+      {% endif %}
+  - platform: time_pattern
+    minutes: "/15"
+  - platform: template
+    value_template: >
+      {% if manual_mode_helper_input | length > 0 %}
+        {{ states(manual_mode_helper_input) }}
+      {% elif create_dashboard_helpers_input %}
+        {{ states('input_select.' ~ (control_helper_slug_input | regex_replace('[^a-zA-Z0-9_]+', '_') | lower | regex_replace('^_+|_+$', '')) ~ '_mode') }}
+      {% else %}
+        none
+      {% endif %}
+  - platform: template
+    value_template: >
+      {% if manual_hold_helper_input | length > 0 %}
+        {{ states(manual_hold_helper_input) }}
+      {% elif create_dashboard_helpers_input %}
+        {{ states('input_boolean.' ~ (control_helper_slug_input | regex_replace('[^a-zA-Z0-9_]+', '_') | lower | regex_replace('^_+|_+$', '')) ~ '_hold') }}
+      {% else %}
+        none
+      {% endif %}
+
+variables:
+  color_light_entities: !input color_lights
+  white_light_entities: !input white_lights
+  occupancy_sensor_entities: !input occupancy_sensors
+  presence_person_entities: !input presence_persons
+  require_someone_home: !input require_someone_home
+  illuminance_sensor_entity: !input illuminance_sensor
+  lux_dark: !input lux_dark
+  lux_bright: !input lux_bright
+  night_start_input: !input night_start
+  day_start_input: !input day_start
+  cover_entities: !input covers
+  cover_shade_threshold: !input cover_shade_threshold
+  night_hue_base: !input night_hue_base
+  night_hue_spread: !input night_hue_spread
+  night_saturation: !input night_saturation
+  night_brightness_color: !input night_brightness_color
+  night_brightness_white: !input night_brightness_white
+  day_kelvin_min: !input day_kelvin_min
+  day_kelvin_max: !input day_kelvin_max
+  day_brightness_min: !input day_brightness_min
+  day_brightness_max: !input day_brightness_max
+  cover_kelvin_warm_shift: !input cover_kelvin_warm_shift
+  manual_mode_helper: !input manual_mode_helper
+  manual_hold_helper: !input manual_hold_helper
+  create_dashboard_helpers: !input create_dashboard_helpers
+  control_helper_slug_input: !input control_helper_slug
+  control_mode_helper_name: !input control_mode_helper_name
+  control_hold_helper_name: !input control_hold_helper_name
+  transition_seconds: !input transition_seconds
+  control_helper_slug: >
+    {{
+      control_helper_slug_input
+      | regex_replace('[^a-zA-Z0-9_]+', '_')
+      | lower
+      | regex_replace('^_+|_+$', '')
+    }}
+  mode_helper_entity: >
+    {% if manual_mode_helper is string and manual_mode_helper | length > 0 %}
+      {{ manual_mode_helper }}
+    {% elif create_dashboard_helpers %}
+      input_select.{{ control_helper_slug }}_mode
+    {% else %}
+    {% endif %}
+  hold_helper_entity: >
+    {% if manual_hold_helper is string and manual_hold_helper | length > 0 %}
+      {{ manual_hold_helper }}
+    {% elif create_dashboard_helpers %}
+      input_boolean.{{ control_helper_slug }}_hold
+    {% else %}
+    {% endif %}
+  mode_helper_exists: >
+    {{
+      mode_helper_entity is string
+      and mode_helper_entity | length > 0
+      and states(mode_helper_entity) not in ['unknown', 'unavailable', '']
+    }}
+  hold_helper_exists: >
+    {{
+      hold_helper_entity is string
+      and hold_helper_entity | length > 0
+      and states(hold_helper_entity) not in ['unknown', 'unavailable', '']
+    }}
+  all_light_entities: "{{ color_light_entities + white_light_entities }}"
+  has_color_lights: "{{ color_light_entities | count > 0 }}"
+  has_white_lights: "{{ white_light_entities | count > 0 }}"
+  has_any_lights: "{{ all_light_entities | count > 0 }}"
+  has_illuminance_sensor: >
+    {{
+      illuminance_sensor_entity is string
+      and illuminance_sensor_entity | length > 0
+      and has_value(illuminance_sensor_entity)
+    }}
+  has_covers: "{{ cover_entities | count > 0 }}"
+  has_presence_persons: "{{ presence_person_entities | count > 0 }}"
+  has_manual_mode_helper: "{{ mode_helper_exists }}"
+  has_manual_hold_helper: "{{ hold_helper_exists }}"
+  manual_hold_active: >
+    {{ has_manual_hold_helper and is_state(hold_helper_entity, 'on') }}
+  is_home: >
+    {{
+      expand(presence_person_entities)
+      | selectattr('state', 'eq', 'home')
+      | list
+      | count > 0
+    }}
+  home_required_blocked: >
+    {{
+      require_someone_home
+      and has_presence_persons
+      and not is_home
+    }}
+  zone_occupied: >
+    {{
+      expand(occupancy_sensor_entities)
+      | selectattr('state', 'eq', 'on')
+      | list
+      | count > 0
+    }}
+  current_lux: >
+    {% if has_illuminance_sensor %}
+      {{ states(illuminance_sensor_entity) | float(0) }}
+    {% else %}
+      0
+    {% endif %}
+  sun_elevation: "{{ state_attr('sun.sun', 'elevation') | float(0) }}"
+  is_sun_up: "{{ is_state('sun.sun', 'above_horizon') }}"
+  is_time_night: >
+    {% if night_start_input is string and night_start_input | length > 0 %}
+      {% set now_time = now().strftime('%H:%M:%S') %}
+      {% if day_start_input is string and day_start_input | length > 0 %}
+        {{ now_time >= night_start_input or now_time < day_start_input }}
+      {% else %}
+        {{ now_time >= night_start_input }}
+      {% endif %}
+    {% else %}
+      false
+    {% endif %}
+  is_night: "{{ (not is_sun_up) or is_time_night }}"
+  cover_open_factor: >
+    {% if has_covers %}
+      {% set positions = expand(cover_entities) | map(attribute='attributes.current_position') | reject('none') | list %}
+      {% if positions | count > 0 %}
+        {{ (positions | sum / positions | count) | round(1) }}
+      {% else %}
+        0
+      {% endif %}
+    {% else %}
+      0
+    {% endif %}
+  cover_closed_factor: >
+    {% if has_covers %}
+      {{ (100 - (cover_open_factor | float(0))) | round(1) }}
+    {% else %}
+      0
+    {% endif %}
+  lux_needs_light: >
+    {% if has_illuminance_sensor %}
+      {{ current_lux < lux_dark }}
+    {% else %}
+      false
+    {% endif %}
+  covers_need_light: >
+    {{ has_covers and (cover_closed_factor | float(0) >= cover_shade_threshold | float(0)) }}
+  need_artificial_light: >
+    {{
+      is_night
+      or lux_needs_light
+      or covers_need_light
+      or (
+        has_illuminance_sensor
+        and zone_occupied
+        and (current_lux | float(0) < lux_bright | float(0))
+        and (cover_closed_factor | float(0) >= (cover_shade_threshold | float(0) * 0.5))
+      )
+    }}
+  effective_mode: >
+    {% if has_manual_mode_helper %}
+      {{ states(mode_helper_entity) }}
+    {% else %}
+      auto
+    {% endif %}
+  use_night_profile: >
+    {% if effective_mode == 'night' %}
+      true
+    {% elif effective_mode == 'day' %}
+      false
+    {% else %}
+      {{ is_night }}
+    {% endif %}
+  day_kelvin: >
+    {% set elev = [sun_elevation | float(0), 0] | max %}
+    {% set elev_clamped = [elev, 45] | min %}
+    {% set ratio = elev_clamped / 45 %}
+    {% set base = (day_kelvin_max - ((day_kelvin_max - day_kelvin_min) * (1 - ratio))) | int %}
+    {% set warm_shift = (cover_closed_factor | float(0) / 100) * (cover_kelvin_warm_shift | float(0)) %}
+    {{ [base - warm_shift, day_kelvin_min] | max | int }}
+  day_brightness_pct: >
+    {% if has_illuminance_sensor and lux_bright > 0 %}
+      {% set lux_ratio = 1 - ([current_lux, lux_bright] | min / lux_bright) %}
+      {% set lux_brightness = day_brightness_min + ((day_brightness_max - day_brightness_min) * lux_ratio) %}
+    {% else %}
+      {% set lux_brightness = (day_brightness_min + day_brightness_max) / 2 %}
+    {% endif %}
+    {% set cover_boost = (cover_closed_factor | float(0) / 100) * (day_brightness_max - day_brightness_min) * 0.35 %}
+    {{ [[lux_brightness + cover_boost, day_brightness_max] | min, day_brightness_min] | max | round(0) | int }}
+
+action:
+  - if:
+      - condition: template
+        value_template: "{{ not manual_hold_active and has_any_lights }}"
+    then:
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: >
+                  {{
+                    effective_mode == 'off'
+                    or home_required_blocked
+                    or not zone_occupied
+                  }}
+            sequence:
+              - service: light.turn_off
+                target:
+                  entity_id: "{{ all_light_entities }}"
+                data:
+                  transition: "{{ transition_seconds }}"
+          - conditions:
+              - condition: template
+                value_template: >
+                  {{
+                    zone_occupied
+                    and not home_required_blocked
+                    and need_artificial_light
+                    and use_night_profile
+                  }}
+            sequence:
+              - repeat:
+                  for_each: "{{ color_light_entities }}"
+                  sequence:
+                    - variables:
+                        light_seed: "{{ repeat.item }}"
+                        seed_sum: >
+                          {% set ns = namespace(v=0) %}
+                          {% for ch in light_seed %}
+                            {% set ns.v = ns.v + ch | ord %}
+                          {% endfor %}
+                          {{ ns.v }}
+                        hue_offset: >
+                          {% set spread = night_hue_spread | int(0) %}
+                          {% if spread > 0 %}
+                            {{ (seed_sum | int(0)) % (spread * 2 + 1) - spread }}
+                          {% else %}
+                            0
+                          {% endif %}
+                        sat_offset: "{{ (seed_sum | int(0)) % 11 - 5 }}"
+                        brightness_offset: "{{ (seed_sum | int(0)) % 15 - 7 }}"
+                        lamp_hue: >
+                          {{ ((night_hue_base | int(0)) + (hue_offset | int(0)) + 360) % 360 }}
+                        lamp_sat: >
+                          {{ [[(night_saturation | int(0)) + (sat_offset | int(0)), 100] | min, 0] | max }}
+                        lamp_brightness_pct: >
+                          {{ [[(night_brightness_color | int(0)) + (brightness_offset | int(0)), 100] | min, 1] | max }}
+                    - service: light.turn_on
+                      target:
+                        entity_id: "{{ repeat.item }}"
+                      data:
+                        hs_color:
+                          - "{{ lamp_hue | int }}"
+                          - "{{ lamp_sat | int }}"
+                        brightness_pct: "{{ lamp_brightness_pct | int }}"
+                        transition: "{{ transition_seconds }}"
+              - repeat:
+                  for_each: "{{ white_light_entities }}"
+                  sequence:
+                    - variables:
+                        light_seed: "{{ repeat.item }}"
+                        seed_sum: >
+                          {% set ns = namespace(v=0) %}
+                          {% for ch in light_seed %}
+                            {% set ns.v = ns.v + ch | ord %}
+                          {% endfor %}
+                          {{ ns.v }}
+                        brightness_offset: "{{ (seed_sum | int(0)) % 9 - 4 }}"
+                        lamp_brightness_pct: >
+                          {{ [[(night_brightness_white | int(0)) + (brightness_offset | int(0)), 100] | min, 1] | max }}
+                    - service: light.turn_on
+                      target:
+                        entity_id: "{{ repeat.item }}"
+                      data:
+                        brightness_pct: "{{ lamp_brightness_pct | int }}"
+                        transition: "{{ transition_seconds }}"
+          - conditions:
+              - condition: template
+                value_template: >
+                  {{
+                    zone_occupied
+                    and not home_required_blocked
+                    and need_artificial_light
+                    and not use_night_profile
+                  }}
+            sequence:
+              - repeat:
+                  for_each: "{{ color_light_entities }}"
+                  sequence:
+                    - service: light.turn_on
+                      target:
+                        entity_id: "{{ repeat.item }}"
+                      data:
+                        kelvin: "{{ day_kelvin | int }}"
+                        brightness_pct: "{{ day_brightness_pct | int }}"
+                        transition: "{{ transition_seconds }}"
+              - repeat:
+                  for_each: "{{ white_light_entities }}"
+                  sequence:
+                    - service: light.turn_on
+                      target:
+                        entity_id: "{{ repeat.item }}"
+                      data:
+                        kelvin: "{{ day_kelvin | int }}"
+                        brightness_pct: "{{ day_brightness_pct | int }}"
+                        transition: "{{ transition_seconds }}"
+        default: []
+`;export{n as default};
+//# sourceMappingURL=living-area-adaptive-lighting-0lYKmJ6_.js.map

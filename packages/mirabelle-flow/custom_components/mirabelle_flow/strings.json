@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Mirabelle Flow",
+        "description": "Enable the visual automation editor panel in the Home Assistant sidebar."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Mirabelle Flow is already configured."
+    }
+  }
+}

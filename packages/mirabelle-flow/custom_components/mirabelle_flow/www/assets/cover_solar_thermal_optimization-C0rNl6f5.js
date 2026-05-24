@@ -1,0 +1,1190 @@
+const n=`blueprint:
+  homeassistant:
+    min_version: 2025.5.3
+  name: "[CDA] 🌞 Smart Cover Solar & Thermal Optimization"
+  description: >
+    Automatically open or close covers based on sun, outdoor temperature, and wind,
+    with seasonal behavior (summer/winter) to help optimize indoor temperature.
+    Actions run only when someone is home and awake.
+    Awake can be driven by an entity, a schedule, or fallback to daylight.
+    Uses key positions (0/25/50/75/100) instead of only full open/close.
+  domain: automation
+  input:
+    covers:
+      name: All Managed Covers
+      description: All covers that can be controlled by this automation.
+      selector:
+        entity:
+          domain: cover
+          multiple: true
+    north_covers:
+      name: North-Facing Covers
+      description: >
+        Optional. Covers on the north facade. Leave empty if not used.
+      default: []
+      selector:
+        entity:
+          domain: cover
+          multiple: true
+    east_covers:
+      name: East-Facing Covers
+      description: >
+        Optional. Covers on the east facade. Leave empty if not used.
+      default: []
+      selector:
+        entity:
+          domain: cover
+          multiple: true
+    south_covers:
+      name: South-Facing Covers
+      description: >
+        Optional. Covers on the south facade. Leave empty if not used.
+      default: []
+      selector:
+        entity:
+          domain: cover
+          multiple: true
+    west_covers:
+      name: West-Facing Covers
+      description: >
+        Optional. Covers on the west facade. Leave empty if not used.
+      default: []
+      selector:
+        entity:
+          domain: cover
+          multiple: true
+    presence_persons:
+      name: Persons At Home
+      description: >
+        Select one or more person entities.
+        The automation runs when at least one selected person is home.
+      default: []
+      selector:
+        entity:
+          domain: person
+          multiple: true
+    close_when_away:
+      name: Close Covers When Away
+      description: >
+        If enabled, all managed covers are closed when nobody is home.
+      default: true
+      selector:
+        boolean: {}
+    close_at_night:
+      name: Close Covers At Night
+      description: >
+        If enabled, all managed covers are closed when sun is below horizon.
+      default: true
+      selector:
+        boolean: {}
+    summer_shading_latch_helper:
+      name: Summer Shading Latch Helper (Optional)
+      description: >
+        Optional input_boolean helper used to keep summer shading state stable across
+        triggers. If empty, shading state is inferred from current cover positions.
+      default: ""
+      selector:
+        entity:
+          domain: input_boolean
+    action_priority_helper:
+      name: Action Priority Helper (Optional)
+      description: >
+        Optional input_number helper used to store the last applied action priority.
+        Higher priority actions can override lower ones; lower priority actions are blocked
+        to prevent unwanted reopen/close loops from periodic triggers.
+      default: ""
+      selector:
+        entity:
+          domain: input_number
+    control_strategy:
+      name: Control Strategy
+      description: >
+        Choose whether to prioritize thermal comfort or reduce motor wear.
+        Safety branches (away/night/wind) always stay high priority.
+      default: balanced
+      selector:
+        select:
+          options:
+            - label: Balanced
+              value: balanced
+            - label: Thermal Comfort Priority
+              value: thermal_comfort
+            - label: Motor Wear Priority
+              value: motor_wear
+    manual_override_minutes:
+      name: Manual Override Hold (Minutes)
+      description: >
+        If a cover is manually changed (external action), keep that cover out of
+        comfort/fallback actions for this duration before automation takes control again.
+        Safety branches (away/night/wind) can still override.
+      default: 60
+      selector:
+        number:
+          min: 0
+          max: 240
+          step: 5
+          unit_of_measurement: min
+    minimum_reposition_delta:
+      name: Minimum Position Delta
+      description: >
+        Minimum position difference (in %) required before comfort/fallback moves.
+        Final effective value also depends on selected Control Strategy.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
+          unit_of_measurement: "%"
+    minimum_action_interval_minutes:
+      name: Minimum Action Interval (Minutes)
+      description: >
+        Minimum delay between two comfort/fallback actions for the same cover.
+        Final effective value also depends on selected Control Strategy.
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 120
+          step: 5
+          unit_of_measurement: min
+    contact_sensors:
+      name: Contact Sensors (Optional)
+      description: >
+        Optional door/window contact sensors. When any is open, selected covers can move
+        to Contact Open Position.
+      default: []
+      selector:
+        entity:
+          domain: binary_sensor
+          multiple: true
+    contact_open_covers:
+      name: Covers For Contact Opening (Optional)
+      description: >
+        Covers opened when a contact sensor is open. If empty, all managed covers are used.
+      default: []
+      selector:
+        entity:
+          domain: cover
+          multiple: true
+    contact_open_position:
+      name: Contact Open Position
+      description: Position used when any configured contact sensor is open.
+      default: "100"
+      selector:
+        select:
+          options:
+            - "0"
+            - "25"
+            - "50"
+            - "75"
+            - "100"
+    awake_entity:
+      name: Awake Entity (Optional)
+      description: >
+        Optional entity that indicates someone is awake
+        (typically input_boolean or binary_sensor).
+        If empty and no schedule is set, daylight is used as awake fallback.
+      default: ""
+      selector:
+        entity:
+          domain:
+            - input_boolean
+            - binary_sensor
+    awake_schedule:
+      name: Awake Schedule (Optional)
+      description: >
+        Optional schedule helper to define awake hours.
+        Used only when Awake Entity is not set.
+        If both are empty, daylight is used as awake fallback.
+      default: ""
+      selector:
+        entity:
+          domain: schedule
+    outdoor_temperature:
+      name: Outdoor Temperature Sensor (Optional)
+      description: >
+        Optional outdoor temperature sensor in °C.
+        If empty, weather forecast/current weather temperature can be used.
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    weather_entity:
+      name: Weather Entity (Optional Fallback)
+      description: >
+        Optional weather entity used when Outdoor Temperature Sensor is empty.
+        The blueprint first tries forecast temperature, then weather temperature attribute.
+      default: ""
+      selector:
+        entity:
+          domain: weather
+    indoor_temperature:
+      name: Indoor Temperature Sensor (Optional)
+      description: Optional indoor temperature sensor in °C.
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+          device_class: temperature
+    wind_speed:
+      name: Wind Speed Sensor (Optional)
+      description: >
+        Optional wind speed sensor (same unit as threshold below).
+        If empty, wind protection is disabled.
+      default: ""
+      selector:
+        entity:
+          domain: sensor
+    season_mode:
+      name: Season Mode
+      description: >
+        Select Auto to infer season from configurable summer dates,
+        or force Summer/Winter mode.
+      default: auto
+      selector:
+        select:
+          options:
+            - label: Auto
+              value: auto
+            - label: Summer
+              value: summer
+            - label: Winter
+              value: winter
+    summer_start_month:
+      name: Summer Start Month (Auto Mode)
+      description: Month when summer starts in auto mode.
+      default: 4
+      selector:
+        number:
+          min: 1
+          max: 12
+          step: 1
+    summer_start_day:
+      name: Summer Start Day (Auto Mode)
+      description: Day when summer starts in auto mode.
+      default: 1
+      selector:
+        number:
+          min: 1
+          max: 31
+          step: 1
+    summer_end_month:
+      name: Summer End Month (Auto Mode)
+      description: Month when summer ends in auto mode.
+      default: 9
+      selector:
+        number:
+          min: 1
+          max: 12
+          step: 1
+    summer_end_day:
+      name: Summer End Day (Auto Mode)
+      description: Day when summer ends in auto mode.
+      default: 30
+      selector:
+        number:
+          min: 1
+          max: 31
+          step: 1
+    summer_close_temp:
+      name: Summer Close Temperature
+      description: Close covers in summer when daylight and temperature is above this value.
+      default: 24
+      selector:
+        number:
+          min: 10
+          max: 40
+          step: 0.5
+          unit_of_measurement: °C
+    winter_open_temp_below:
+      name: Winter Open Temperature Below
+      description: Open covers in winter daylight when temperature is below this value.
+      default: 17
+      selector:
+        number:
+          min: -10
+          max: 25
+          step: 0.5
+          unit_of_measurement: °C
+    max_wind_speed:
+      name: Max Wind Speed
+      description: Covers stay/return closed when wind is above this threshold.
+      default: 35
+      selector:
+        number:
+          min: 0
+          max: 150
+          step: 1
+    indoor_hot_temp:
+      name: Indoor Hot Temperature
+      description: In summer/daylight, shading is activated above this indoor temperature.
+      default: 24
+      selector:
+        number:
+          min: 15
+          max: 35
+          step: 0.5
+          unit_of_measurement: °C
+    temperature_hysteresis:
+      name: Temperature Hysteresis Buffer
+      description: >
+        Buffer in °C applied around temperature thresholds to reduce oscillations.
+      default: 0.5
+      selector:
+        number:
+          min: 0
+          max: 5
+          step: 0.1
+          unit_of_measurement: °C
+    sensor_stability_minutes:
+      name: Sensor Stability Window (Minutes)
+      description: >
+        Minimum time (in minutes) a sensor value must stay unchanged before being used.
+        Helps prevent rapid reactions to noisy sensor updates.
+      default: 5
+      selector:
+        select:
+          options:
+            - label: "0 (disabled)"
+              value: "0"
+            - label: "5"
+              value: "5"
+            - label: "10"
+              value: "10"
+            - label: "15"
+              value: "15"
+    winter_indoor_cold_temp:
+      name: Winter Indoor Cold Temperature
+      description: In winter/daylight, allow solar gains when indoor temp is below this value.
+      default: 19
+      selector:
+        number:
+          min: 10
+          max: 25
+          step: 0.5
+          unit_of_measurement: °C
+    wind_position:
+      name: Position With High Wind
+      description: Cover position when wind is above threshold.
+      default: "0"
+      selector:
+        select:
+          options:
+            - "0"
+            - "25"
+            - "50"
+            - "75"
+            - "100"
+    winter_night_position:
+      name: Winter Night Position
+      description: Cover position at night in winter.
+      default: "0"
+      selector:
+        select:
+          options:
+            - "0"
+            - "25"
+            - "50"
+            - "75"
+            - "100"
+    summer_non_sun_position:
+      name: Summer Position (Non Sun-Facing)
+      description: Base position for facades not directly exposed to the sun.
+      default: "75"
+      selector:
+        select:
+          options:
+            - "0"
+            - "25"
+            - "50"
+            - "75"
+            - "100"
+    summer_sun_facing_position:
+      name: Summer Position (Sun-Facing Facade)
+      description: Shading position for the currently sun-exposed facade.
+      default: "25"
+      selector:
+        select:
+          options:
+            - "0"
+            - "25"
+            - "50"
+            - "75"
+            - "100"
+    winter_day_gain_position:
+      name: Winter Day Position (Solar Gains)
+      description: Position used in winter daylight when heat gains are needed.
+      default: "100"
+      selector:
+        select:
+          options:
+            - "0"
+            - "25"
+            - "50"
+            - "75"
+            - "100"
+    winter_day_hold_position:
+      name: Winter Day Position (No Solar Gains Needed)
+      description: Position used in winter daylight when gains are not needed.
+      default: "50"
+      selector:
+        select:
+          options:
+            - "0"
+            - "25"
+            - "50"
+            - "75"
+            - "100"
+    neutral_position:
+      name: Neutral Position
+      description: Position used when no strong summer/winter condition applies.
+      default: "100"
+      selector:
+        select:
+          options:
+            - "0"
+            - "25"
+            - "50"
+            - "75"
+            - "100"
+
+  source_url: https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_solar_thermal_optimization.yaml
+
+mode: single
+
+trigger_variables:
+  awake_entity_input: !input awake_entity
+  awake_schedule_input: !input awake_schedule
+  outdoor_temperature_input: !input outdoor_temperature
+  indoor_temperature_input: !input indoor_temperature
+  wind_speed_input: !input wind_speed
+  weather_entity_input: !input weather_entity
+  contact_sensors_input: !input contact_sensors
+
+trigger:
+  - platform: state
+    entity_id: !input presence_persons
+  - platform: state
+    entity_id: !input covers
+  - platform: template
+    value_template: >
+      {% if awake_entity_input | length > 0 %}
+        {{ states(awake_entity_input) }}
+      {% elif awake_schedule_input | length > 0 %}
+        {{ states(awake_schedule_input) }}
+      {% else %}
+        {{ is_state('sun.sun', 'above_horizon') }}
+      {% endif %}
+  - platform: template
+    value_template: >
+      {% set outdoor = states(outdoor_temperature_input) if outdoor_temperature_input | length > 0 else '' %}
+      {% set indoor = states(indoor_temperature_input) if indoor_temperature_input | length > 0 else '' %}
+      {% set wind = states(wind_speed_input) if wind_speed_input | length > 0 else '' %}
+      {% set weather_temp = state_attr(weather_entity_input, 'temperature') if weather_entity_input | length > 0 else '' %}
+      {% set forecast = state_attr(weather_entity_input, 'forecast') if weather_entity_input | length > 0 else none %}
+      {% set forecast_temp = forecast[0].temperature if forecast is iterable and forecast is not string and forecast | count > 0 and forecast[0].temperature is defined else '' %}
+      {{ outdoor ~ '|' ~ indoor ~ '|' ~ wind ~ '|' ~ weather_temp ~ '|' ~ forecast_temp }}
+  - platform: state
+    entity_id: sun.sun
+  - platform: state
+    entity_id: !input contact_sensors
+  - platform: time_pattern
+    minutes: "/10"
+
+variables:
+  cover_entities: !input covers
+  north_cover_entities: !input north_covers
+  east_cover_entities: !input east_covers
+  south_cover_entities: !input south_covers
+  west_cover_entities: !input west_covers
+  contact_sensor_entities: !input contact_sensors
+  contact_open_cover_entities: !input contact_open_covers
+  presence_person_entities: !input presence_persons
+  close_when_away: !input close_when_away
+  close_at_night: !input close_at_night
+  summer_shading_latch_helper: !input summer_shading_latch_helper
+  action_priority_helper: !input action_priority_helper
+  control_strategy: !input control_strategy
+  manual_override_minutes_input: !input manual_override_minutes
+  minimum_reposition_delta_input: !input minimum_reposition_delta
+  minimum_action_interval_minutes_input: !input minimum_action_interval_minutes
+  awake_entity_input: !input awake_entity
+  awake_schedule_input: !input awake_schedule
+  outdoor_temperature_entity: !input outdoor_temperature
+  weather_entity: !input weather_entity
+  indoor_temperature_entity: !input indoor_temperature
+  wind_speed_entity: !input wind_speed
+  season_mode: !input season_mode
+  summer_start_month: !input summer_start_month
+  summer_start_day: !input summer_start_day
+  summer_end_month: !input summer_end_month
+  summer_end_day: !input summer_end_day
+  summer_close_temp: !input summer_close_temp
+  winter_open_temp_below: !input winter_open_temp_below
+  max_wind_speed: !input max_wind_speed
+  indoor_hot_temp: !input indoor_hot_temp
+  temperature_hysteresis: !input temperature_hysteresis
+  sensor_stability_minutes_input: !input sensor_stability_minutes
+  winter_indoor_cold_temp: !input winter_indoor_cold_temp
+  wind_position_input: !input wind_position
+  winter_night_position_input: !input winter_night_position
+  summer_non_sun_position_input: !input summer_non_sun_position
+  summer_sun_facing_position_input: !input summer_sun_facing_position
+  winter_day_gain_position_input: !input winter_day_gain_position
+  winter_day_hold_position_input: !input winter_day_hold_position
+  neutral_position_input: !input neutral_position
+  contact_open_position_input: !input contact_open_position
+  wind_position: "{{ wind_position_input | int(0) }}"
+  winter_night_position: "{{ winter_night_position_input | int(0) }}"
+  summer_non_sun_position: "{{ summer_non_sun_position_input | int(75) }}"
+  summer_sun_facing_position: "{{ summer_sun_facing_position_input | int(25) }}"
+  winter_day_gain_position: "{{ winter_day_gain_position_input | int(100) }}"
+  winter_day_hold_position: "{{ winter_day_hold_position_input | int(50) }}"
+  neutral_position: "{{ neutral_position_input | int(100) }}"
+  contact_open_position: "{{ contact_open_position_input | int(100) }}"
+  sensor_stability_minutes: "{{ sensor_stability_minutes_input | int(5) }}"
+  manual_override_minutes: "{{ manual_override_minutes_input | int(60) }}"
+  minimum_reposition_delta: "{{ minimum_reposition_delta_input | int(0) }}"
+  minimum_action_interval_minutes: "{{ minimum_action_interval_minutes_input | int(0) }}"
+  is_home: >
+    {{
+      expand(presence_person_entities)
+      | selectattr('state', 'eq', 'home')
+      | list
+      | count > 0
+    }}
+  is_daylight: "{{ is_state('sun.sun', 'above_horizon') }}"
+  is_thermal_priority_mode: "{{ control_strategy == 'thermal_comfort' }}"
+  is_motor_wear_mode: "{{ control_strategy == 'motor_wear' }}"
+  profile_min_reposition_delta: >
+    {% if is_motor_wear_mode %}
+      20
+    {% elif is_thermal_priority_mode %}
+      0
+    {% else %}
+      10
+    {% endif %}
+  profile_min_action_interval_minutes: >
+    {% if is_motor_wear_mode %}
+      15
+    {% elif is_thermal_priority_mode %}
+      0
+    {% else %}
+      5
+    {% endif %}
+  effective_min_reposition_delta: "{{ [minimum_reposition_delta | int(0), profile_min_reposition_delta | int(0)] | max }}"
+  effective_min_action_interval_minutes: "{{ [minimum_action_interval_minutes | int(0), profile_min_action_interval_minutes | int(0)] | max }}"
+  has_awake_entity: "{{ awake_entity_input is string and awake_entity_input | length > 0 }}"
+  has_awake_schedule: "{{ awake_schedule_input is string and awake_schedule_input | length > 0 }}"
+  has_outdoor_temperature: "{{ outdoor_temperature_entity is string and outdoor_temperature_entity | length > 0 and has_value(outdoor_temperature_entity) }}"
+  has_weather_entity: "{{ weather_entity is string and weather_entity | length > 0 and states(weather_entity) not in ['unknown', 'unavailable', ''] }}"
+  has_indoor_temperature: "{{ indoor_temperature_entity is string and indoor_temperature_entity | length > 0 and has_value(indoor_temperature_entity) }}"
+  has_wind_sensor: "{{ wind_speed_entity is string and wind_speed_entity | length > 0 and has_value(wind_speed_entity) }}"
+  has_summer_latch_helper: "{{ summer_shading_latch_helper is string and summer_shading_latch_helper | length > 0 and states(summer_shading_latch_helper) in ['on', 'off'] }}"
+  has_action_priority_helper: "{{ action_priority_helper is string and action_priority_helper | length > 0 and has_value(action_priority_helper) }}"
+  has_contact_sensors: "{{ contact_sensor_entities | count > 0 }}"
+  current_action_priority: "{{ states(action_priority_helper) | float(0) if has_action_priority_helper else 0 }}"
+  priority_away: 100
+  priority_night: 95
+  priority_weather_guard: 90
+  priority_contact_open: 85
+  priority_summer_hot: >
+    {% if is_thermal_priority_mode %}
+      80
+    {% elif is_motor_wear_mode %}
+      65
+    {% else %}
+      70
+    {% endif %}
+  priority_winter_gain: >
+    {% if is_thermal_priority_mode %}
+      75
+    {% elif is_motor_wear_mode %}
+      55
+    {% else %}
+      60
+    {% endif %}
+  priority_fallback: >
+    {% if is_thermal_priority_mode %}
+      40
+    {% elif is_motor_wear_mode %}
+      5
+    {% else %}
+      10
+    {% endif %}
+  can_apply_night: "{{ (not has_action_priority_helper) or (priority_night >= current_action_priority) }}"
+  can_apply_weather_guard: "{{ (not has_action_priority_helper) or (priority_weather_guard >= current_action_priority) }}"
+  can_apply_contact_open: "{{ (not has_action_priority_helper) or (priority_contact_open >= current_action_priority) }}"
+  can_apply_summer_hot: "{{ (not has_action_priority_helper) or (priority_summer_hot | float(0) >= current_action_priority) }}"
+  can_apply_winter_gain: "{{ (not has_action_priority_helper) or (priority_winter_gain | float(0) >= current_action_priority) }}"
+  can_apply_fallback: "{{ (not has_action_priority_helper) or (priority_fallback | float(0) >= current_action_priority) }}"
+  outdoor_stable: >
+    {{
+      (not has_outdoor_temperature)
+      or sensor_stability_minutes == 0
+      or (as_timestamp(now()) - as_timestamp(states[outdoor_temperature_entity].last_updated)) >= (sensor_stability_minutes * 60)
+    }}
+  indoor_stable: >
+    {{
+      (not has_indoor_temperature)
+      or sensor_stability_minutes == 0
+      or (as_timestamp(now()) - as_timestamp(states[indoor_temperature_entity].last_updated)) >= (sensor_stability_minutes * 60)
+    }}
+  wind_stable: >
+    {{
+      (not has_wind_sensor)
+      or sensor_stability_minutes == 0
+      or (as_timestamp(now()) - as_timestamp(states[wind_speed_entity].last_updated)) >= (sensor_stability_minutes * 60)
+    }}
+  weather_stable: >
+    {{
+      (not has_weather_entity)
+      or sensor_stability_minutes == 0
+      or (as_timestamp(now()) - as_timestamp(states[weather_entity].last_updated)) >= (sensor_stability_minutes * 60)
+    }}
+  is_awake: >
+    {% if has_awake_entity %}
+      {{ states(awake_entity_input) in ['on', 'home'] }}
+    {% elif has_awake_schedule %}
+      {{ is_state(awake_schedule_input, 'on') }}
+    {% else %}
+      {{ is_daylight }}
+    {% endif %}
+  sun_azimuth: "{{ state_attr('sun.sun', 'azimuth') | float(0) }}"
+  has_oriented_groups: >
+    {{
+      (north_cover_entities | count > 0)
+      or (east_cover_entities | count > 0)
+      or (south_cover_entities | count > 0)
+      or (west_cover_entities | count > 0)
+    }}
+  temp_value: >
+    {% if has_outdoor_temperature %}
+      {{ states(outdoor_temperature_entity) | float(0) }}
+    {% elif has_weather_entity %}
+      {% set forecast = state_attr(weather_entity, 'forecast') %}
+      {% if forecast is iterable and forecast is not string and forecast | count > 0 and forecast[0].temperature is defined %}
+        {{ forecast[0].temperature | float(state_attr(weather_entity, 'temperature') | float(0)) }}
+      {% else %}
+        {{ state_attr(weather_entity, 'temperature') | float(0) }}
+      {% endif %}
+    {% else %}
+      0
+    {% endif %}
+  indoor_temp_value: >
+    {% if has_indoor_temperature %}
+      {{ states(indoor_temperature_entity) | float(0) }}
+    {% else %}
+      0
+    {% endif %}
+  wind_value: >
+    {% if has_wind_sensor %}
+      {{ states(wind_speed_entity) | float(0) }}
+    {% else %}
+      0
+    {% endif %}
+  any_contact_open: >
+    {{
+      has_contact_sensors
+      and (
+        expand(contact_sensor_entities)
+        | selectattr('state', 'eq', 'on')
+        | list
+        | count > 0
+      )
+    }}
+  contact_open_target_cover_entities: >
+    {% if contact_open_cover_entities | count > 0 %}
+      {{ contact_open_cover_entities }}
+    {% else %}
+      {{ cover_entities }}
+    {% endif %}
+  manual_override_cover_ids: >
+    {% if manual_override_minutes | int(0) <= 0 %}
+      []
+    {% else %}
+      {% set ns = namespace(ids=[]) %}
+      {% for cover in expand(cover_entities) %}
+        {% set changed_recently = (as_timestamp(now()) - as_timestamp(cover.last_changed)) < (manual_override_minutes | int(0) * 60) %}
+        {% if cover.attributes.current_position is defined and changed_recently and (cover.context is not none) and (cover.context.parent_id is none) %}
+          {% set ns.ids = ns.ids + [cover.entity_id] %}
+        {% endif %}
+      {% endfor %}
+      {{ ns.ids }}
+    {% endif %}
+  wear_lock_cover_ids: >
+    {% if effective_min_action_interval_minutes | int(0) <= 0 %}
+      []
+    {% else %}
+      {% set ns = namespace(ids=[]) %}
+      {% for cover in expand(cover_entities) %}
+        {% set changed_recently = (as_timestamp(now()) - as_timestamp(cover.last_changed)) < (effective_min_action_interval_minutes | int(0) * 60) %}
+        {% if cover.attributes.current_position is defined and changed_recently %}
+          {% set ns.ids = ns.ids + [cover.entity_id] %}
+        {% endif %}
+      {% endfor %}
+      {{ ns.ids }}
+    {% endif %}
+  comfort_locked_cover_ids: >
+    {{ (manual_override_cover_ids + wear_lock_cover_ids) | unique | list }}
+  comfort_eligible_cover_entity_ids: >
+    {{
+      expand(cover_entities)
+      | rejectattr('entity_id', 'in', comfort_locked_cover_ids)
+      | map(attribute='entity_id')
+      | list
+    }}
+  has_comfort_eligible_covers: "{{ comfort_eligible_cover_entity_ids | count > 0 }}"
+  is_summer: >
+    {% if season_mode == 'summer' %}
+      true
+    {% elif season_mode == 'winter' %}
+      false
+    {% else %}
+      {% set now_md = now().month * 100 + now().day %}
+      {% set start_md = summer_start_month * 100 + summer_start_day %}
+      {% set end_md = summer_end_month * 100 + summer_end_day %}
+      {% if start_md <= end_md %}
+        {{ now_md >= start_md and now_md <= end_md }}
+      {% else %}
+        {{ now_md >= start_md or now_md <= end_md }}
+      {% endif %}
+    {% endif %}
+  wind_high: "{{ has_wind_sensor and wind_stable and (wind_value > max_wind_speed) }}"
+  is_night: "{{ not is_daylight }}"
+  winter_night: "{{ (not is_summer) and (not is_daylight) }}"
+  summer_hot: >
+    {{
+      is_summer
+      and is_daylight
+      and (
+        (
+          ((has_outdoor_temperature and outdoor_stable) or (has_weather_entity and weather_stable))
+          and temp_value >= (summer_close_temp + temperature_hysteresis)
+        )
+        or
+        (has_indoor_temperature and indoor_stable and indoor_temp_value >= (indoor_hot_temp + temperature_hysteresis))
+      )
+    }}
+  summer_cool_enough: >
+    {{
+      is_summer
+      and is_daylight
+      and (
+        (
+          (not has_outdoor_temperature and not has_weather_entity)
+          or temp_value <= (summer_close_temp - temperature_hysteresis)
+        )
+        and
+        (
+          (not has_indoor_temperature)
+          or indoor_temp_value <= (indoor_hot_temp - temperature_hysteresis)
+        )
+      )
+    }}
+  needs_contact_open_action: >
+    {% set delta_threshold = effective_min_reposition_delta | int(0) %}
+    {% set ns = namespace(needs=false) %}
+    {% for cover in expand(contact_open_target_cover_entities) %}
+      {% if cover.attributes.current_position is defined %}
+        {% set delta = (cover.attributes.current_position | int - contact_open_position | int) | abs %}
+        {% if cover.attributes.current_position | int != contact_open_position | int and delta >= delta_threshold %}
+          {% set ns.needs = true %}
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+    {{ ns.needs }}
+  sun_facing_cover_entity_list: >
+    {% if not has_oriented_groups %}
+      {{ comfort_eligible_cover_entity_ids }}
+    {% elif sun_azimuth >= 45 and sun_azimuth < 135 %}
+      {{ east_cover_entities }}
+    {% elif sun_azimuth >= 135 and sun_azimuth < 225 %}
+      {{ south_cover_entities }}
+    {% elif sun_azimuth >= 225 and sun_azimuth < 315 %}
+      {{ west_cover_entities }}
+    {% else %}
+      {{ north_cover_entities }}
+    {% endif %}
+  active_sun_facing_cover_ids: >
+    {% set base_ids = expand(sun_facing_cover_entity_list) | map(attribute='entity_id') | list %}
+    {% set selected = expand(comfort_eligible_cover_entity_ids) | selectattr('entity_id', 'in', base_ids) | map(attribute='entity_id') | list %}
+    {% if has_oriented_groups and (selected | count == 0) %}
+      {{ comfort_eligible_cover_entity_ids }}
+    {% else %}
+      {{ selected }}
+    {% endif %}
+  non_sun_cover_entity_ids: >
+    {{
+      expand(comfort_eligible_cover_entity_ids)
+      | rejectattr('entity_id', 'in', active_sun_facing_cover_ids)
+      | map(attribute='entity_id')
+      | list
+    }}
+  needs_summer_shading_action: >
+    {% set delta_threshold = effective_min_reposition_delta | int(0) %}
+    {% set ns = namespace(needs=false) %}
+    {% for cover in expand(comfort_eligible_cover_entity_ids) %}
+      {% if cover.attributes.current_position is defined %}
+        {% if not has_oriented_groups or cover.entity_id in active_sun_facing_cover_ids %}
+          {% set target_position = summer_sun_facing_position | int %}
+        {% else %}
+          {% set target_position = summer_non_sun_position | int %}
+        {% endif %}
+        {% set delta = (cover.attributes.current_position | int - target_position) | abs %}
+        {% if cover.attributes.current_position | int != target_position and delta >= delta_threshold %}
+          {% set ns.needs = true %}
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+    {{ ns.needs }}
+  needs_non_sun_position_update: >
+    {% set delta_threshold = effective_min_reposition_delta | int(0) %}
+    {% set ns = namespace(needs=false) %}
+    {% for cover in expand(non_sun_cover_entity_ids) %}
+      {% if cover.attributes.current_position is defined %}
+        {% set delta = (cover.attributes.current_position | int - summer_non_sun_position | int) | abs %}
+        {% if cover.attributes.current_position | int != summer_non_sun_position | int and delta >= delta_threshold %}
+          {% set ns.needs = true %}
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+    {{ ns.needs }}
+  needs_sun_facing_position_update: >
+    {% set delta_threshold = effective_min_reposition_delta | int(0) %}
+    {% set ns = namespace(needs=false) %}
+    {% for cover in expand(active_sun_facing_cover_ids) %}
+      {% if cover.attributes.current_position is defined %}
+        {% set delta = (cover.attributes.current_position | int - summer_sun_facing_position | int) | abs %}
+        {% if cover.attributes.current_position | int != summer_sun_facing_position | int and delta >= delta_threshold %}
+          {% set ns.needs = true %}
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+    {{ ns.needs }}
+  summer_shading_active: >
+    {% if has_summer_latch_helper %}
+      {% if summer_hot %}
+        true
+      {% elif summer_cool_enough %}
+        false
+      {% else %}
+        {{ is_state(summer_shading_latch_helper, 'on') }}
+      {% endif %}
+    {% else %}
+      {% if summer_hot %}
+        true
+      {% elif summer_cool_enough %}
+        false
+      {% else %}
+        true
+      {% endif %}
+    {% endif %}
+  winter_need_solar_gain: >
+    {{
+      (not is_summer)
+      and is_daylight
+      and (
+        (has_indoor_temperature and indoor_stable and indoor_temp_value <= (winter_indoor_cold_temp - temperature_hysteresis))
+        or
+        (
+          ((has_outdoor_temperature and outdoor_stable) or (has_weather_entity and weather_stable))
+          and temp_value <= (winter_open_temp_below - temperature_hysteresis)
+        )
+      )
+    }}
+  needs_winter_gain_update: >
+    {% set delta_threshold = effective_min_reposition_delta | int(0) %}
+    {% set ns = namespace(needs=false) %}
+    {% for cover in expand(comfort_eligible_cover_entity_ids) %}
+      {% if cover.attributes.current_position is defined %}
+        {% set delta = (cover.attributes.current_position | int - winter_day_gain_position | int) | abs %}
+        {% if cover.attributes.current_position | int != winter_day_gain_position | int and delta >= delta_threshold %}
+          {% set ns.needs = true %}
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+    {{ ns.needs }}
+  fallback_position: "{{ winter_day_hold_position | int if is_daylight and (not is_summer) else neutral_position | int }}"
+  needs_fallback_update: >
+    {% set delta_threshold = effective_min_reposition_delta | int(0) %}
+    {% set ns = namespace(needs=false) %}
+    {% for cover in expand(comfort_eligible_cover_entity_ids) %}
+      {% if cover.attributes.current_position is defined %}
+        {% set delta = (cover.attributes.current_position | int - fallback_position | int) | abs %}
+        {% if cover.attributes.current_position | int != fallback_position and delta >= delta_threshold %}
+          {% set ns.needs = true %}
+        {% endif %}
+      {% endif %}
+    {% endfor %}
+    {{ ns.needs }}
+
+action:
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: >
+              {{
+                has_action_priority_helper
+                and (
+                  (is_home and current_action_priority >= priority_away)
+                  or (is_daylight and current_action_priority >= priority_night)
+                )
+              }}
+        sequence:
+          - service: input_number.set_value
+            target:
+              entity_id: "{{ action_priority_helper }}"
+            data:
+              value: 0
+      - conditions:
+          - condition: template
+            value_template: >
+              {{
+                has_action_priority_helper
+                and current_action_priority >= priority_contact_open
+                and (not wind_high)
+                and (not winter_night)
+                and (not any_contact_open)
+              }}
+        sequence:
+          - service: input_number.set_value
+            target:
+              entity_id: "{{ action_priority_helper }}"
+            data:
+              value: 0
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ (not is_home) and close_when_away }}"
+        sequence:
+          - condition: template
+            value_template: "{{ expand(cover_entities) | selectattr('state', 'ne', 'closed') | list | count > 0 }}"
+          - service: cover.close_cover
+            target:
+              entity_id: !input covers
+          - if:
+              - condition: template
+                value_template: "{{ has_action_priority_helper }}"
+            then:
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ action_priority_helper }}"
+                data:
+                  value: "{{ priority_away }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ not is_home }}"
+        sequence: []
+      - conditions:
+          - condition: template
+            value_template: "{{ is_night and close_at_night and can_apply_night }}"
+        sequence:
+          - condition: template
+            value_template: "{{ expand(cover_entities) | selectattr('state', 'ne', 'closed') | list | count > 0 }}"
+          - service: cover.close_cover
+            target:
+              entity_id: !input covers
+          - if:
+              - condition: template
+                value_template: "{{ has_action_priority_helper }}"
+            then:
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ action_priority_helper }}"
+                data:
+                  value: "{{ priority_night }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ not is_awake }}"
+        sequence: []
+      - conditions:
+          - condition: template
+            value_template: "{{ has_summer_latch_helper and summer_hot and is_state(summer_shading_latch_helper, 'off') }}"
+        sequence:
+          - service: input_boolean.turn_on
+            target:
+              entity_id: "{{ summer_shading_latch_helper }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ has_summer_latch_helper and summer_cool_enough and is_state(summer_shading_latch_helper, 'on') }}"
+        sequence:
+          - service: input_boolean.turn_off
+            target:
+              entity_id: "{{ summer_shading_latch_helper }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ (wind_high or winter_night) and can_apply_weather_guard }}"
+        sequence:
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ wind_high }}"
+                sequence:
+                  - condition: template
+                    value_template: >
+                      {{
+                        expand(cover_entities)
+                        | selectattr('attributes.current_position', 'defined')
+                        | selectattr('attributes.current_position', 'ne', wind_position | int)
+                        | list
+                        | count > 0
+                      }}
+                  - service: cover.set_cover_position
+                    target:
+                      entity_id: !input covers
+                    data:
+                      position: "{{ wind_position }}"
+                  - if:
+                      - condition: template
+                        value_template: "{{ has_action_priority_helper }}"
+                    then:
+                      - service: input_number.set_value
+                        target:
+                          entity_id: "{{ action_priority_helper }}"
+                        data:
+                          value: "{{ priority_weather_guard }}"
+            default:
+              - condition: template
+                value_template: >
+                  {{
+                    expand(cover_entities)
+                    | selectattr('attributes.current_position', 'defined')
+                    | selectattr('attributes.current_position', 'ne', winter_night_position | int)
+                    | list
+                    | count > 0
+                  }}
+              - service: cover.set_cover_position
+                target:
+                  entity_id: !input covers
+                data:
+                  position: "{{ winter_night_position }}"
+              - if:
+                  - condition: template
+                    value_template: "{{ has_action_priority_helper }}"
+                then:
+                  - service: input_number.set_value
+                    target:
+                      entity_id: "{{ action_priority_helper }}"
+                    data:
+                      value: "{{ priority_weather_guard }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ any_contact_open and can_apply_contact_open }}"
+        sequence:
+          - condition: template
+            value_template: "{{ needs_contact_open_action }}"
+          - service: cover.set_cover_position
+            target:
+              entity_id: "{{ contact_open_target_cover_entities }}"
+            data:
+              position: "{{ contact_open_position }}"
+          - if:
+              - condition: template
+                value_template: "{{ has_action_priority_helper }}"
+            then:
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ action_priority_helper }}"
+                data:
+                  value: "{{ priority_contact_open }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ summer_shading_active and can_apply_summer_hot }}"
+        sequence:
+          - condition: template
+            value_template: "{{ has_comfort_eligible_covers }}"
+          - condition: template
+            value_template: "{{ needs_summer_shading_action }}"
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ has_oriented_groups }}"
+                sequence:
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ needs_non_sun_position_update }}"
+                        sequence:
+                          - service: cover.set_cover_position
+                            target:
+                              entity_id: "{{ non_sun_cover_entity_ids }}"
+                            data:
+                              position: "{{ summer_non_sun_position }}"
+                  - choose:
+                      - conditions:
+                          - condition: template
+                            value_template: "{{ needs_sun_facing_position_update }}"
+                        sequence:
+                          - service: cover.set_cover_position
+                            target:
+                              entity_id: "{{ active_sun_facing_cover_ids }}"
+                            data:
+                              position: "{{ summer_sun_facing_position }}"
+              - conditions:
+                  - condition: template
+                    value_template: "{{ not has_oriented_groups }}"
+                sequence:
+                  - condition: template
+                    value_template: "{{ needs_sun_facing_position_update }}"
+                  - service: cover.set_cover_position
+                    target:
+                      entity_id: "{{ comfort_eligible_cover_entity_ids }}"
+                    data:
+                      position: "{{ summer_sun_facing_position }}"
+          - if:
+              - condition: template
+                value_template: "{{ has_action_priority_helper }}"
+            then:
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ action_priority_helper }}"
+                data:
+                  value: "{{ priority_summer_hot | float(0) }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ winter_need_solar_gain and can_apply_winter_gain }}"
+        sequence:
+          - condition: template
+            value_template: "{{ has_comfort_eligible_covers }}"
+          - condition: template
+            value_template: "{{ needs_winter_gain_update }}"
+          - service: cover.set_cover_position
+            target:
+              entity_id: "{{ comfort_eligible_cover_entity_ids }}"
+            data:
+              position: "{{ winter_day_gain_position }}"
+          - if:
+              - condition: template
+                value_template: "{{ has_action_priority_helper }}"
+            then:
+              - service: input_number.set_value
+                target:
+                  entity_id: "{{ action_priority_helper }}"
+                data:
+                  value: "{{ priority_winter_gain | float(0) }}"
+    default:
+      - condition: template
+        value_template: "{{ can_apply_fallback }}"
+      - condition: template
+        value_template: "{{ has_comfort_eligible_covers }}"
+      - condition: template
+        value_template: "{{ needs_fallback_update }}"
+      - service: cover.set_cover_position
+        target:
+          entity_id: "{{ comfort_eligible_cover_entity_ids }}"
+        data:
+          position: "{{ fallback_position }}"
+      - if:
+          - condition: template
+            value_template: "{{ has_action_priority_helper }}"
+        then:
+          - service: input_number.set_value
+            target:
+              entity_id: "{{ action_priority_helper }}"
+            data:
+              value: "{{ priority_fallback | float(0) }}"
+`;export{n as default};
+//# sourceMappingURL=cover_solar_thermal_optimization-C0rNl6f5.js.map

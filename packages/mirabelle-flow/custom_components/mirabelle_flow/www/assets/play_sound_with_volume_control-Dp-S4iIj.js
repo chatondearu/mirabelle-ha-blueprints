@@ -1,0 +1,136 @@
+const e=`blueprint:
+  homeassistant:
+    min_version: 2025.5.3
+  name: "[CDA] 🔊 Play Sound with Volume Control"
+  description: Play a sound with volume control and restoration
+  domain: script
+  source_url: https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/play_sound_with_volume_control.yaml
+  input:
+    player_input:
+      name: Media Player
+      description: The media player to play the sound
+      default: all
+      selector:
+        entity:
+          filter:
+            domain: media_player
+    sound_file_input:
+      name: Sound File
+      description: The sound file to play (from media source)
+      default: media-source://media_source/local/section9/sounds/japan_school_bell.mp3
+      selector:
+        text: {}
+    volume_announce_input:
+      name: Announce Volume Level
+      description: The volume level to use for the announcement (0-1)
+      default: 0.5
+      selector:
+        number:
+          min: 0.0
+          max: 1.0
+          step: 0.1
+          mode: slider
+    volume_reduction_input:
+      name: Volume Reduction
+      description: How much to reduce the volume for the announcement (0-1)
+      default: 0
+      selector:
+        number:
+          min: 0.0
+          max: 1.0
+          step: 0.1
+          mode: slider
+    wait_time_input:
+      name: Wait Time
+      description: How long to wait after playing before restoring volume (seconds)
+      default: 20
+      selector:
+        number:
+          min: 1.0
+          max: 300.0
+          step: 1.0
+          mode: slider
+
+fields:
+  player_field:
+    name: Media Player (override)
+    description: Override the default media player
+    required: false
+    selector:
+      entity:
+        filter:
+          domain: media_player
+  sound_file_field:
+    name: Sound File (override)
+    description: Override the default sound file
+    required: false
+    selector:
+      text: {}
+
+# Determine which values to use (fields take priority over inputs)
+variables:
+  player_input: !input player_input
+  final_player: >
+    {% if player_field and player_field != '' %}
+      {{ player_field }}
+    {% else %}
+      {{ player_input }}
+    {% endif %}
+  sound_file_input: !input sound_file_input
+  final_sound: >
+    {% if sound_file_field and player_field != '' %}
+      {{ sound_file_field }}
+    {% else %}
+      {{ sound_file_input }}
+    {% endif %}
+  volume_announce: !input volume_announce_input
+  volume_reduction: !input volume_reduction_input
+  wait_time: !input wait_time_input
+
+sequence:
+  # Turn on the media player
+  - service: media_player.turn_on
+    target:
+      entity_id: "{{ final_player }}"
+    continue_on_error: true
+
+  # Store current volume and set new volume
+  - variables:
+      volume_level_before: "{{ state_attr(final_player, 'volume_level') | float }}"
+      adjusted_volume: "{{ [volume_announce - volume_reduction, 0] | max }}"
+  
+  # Play the media
+  - service: media_player.play_media
+    target:
+      entity_id: "{{ final_player }}"
+    data:
+      media_content_id: "{{ final_sound }}"
+      media_content_type: music
+      announce: true
+
+  - delay:
+      hours: 0
+      minutes: 0
+      seconds: 0
+      milliseconds: 250
+  - service: media_player.volume_set
+    target:
+      entity_id: "{{ final_player }}"
+    data:
+      volume_level: "{{ adjusted_volume }}"
+  
+  # Wait for playback to finish
+  - wait_template: "{{ states(final_player) != 'playing' }}"
+    timeout:
+      seconds: "{{ wait_time }}"
+  
+  # Restore original volume
+  - service: media_player.volume_set
+    target:
+      entity_id: "{{ final_player }}"
+    data:
+      volume_level: "{{ volume_level_before }}"
+
+mode: queued
+icon: mdi:speaker-wireless`;export{e as default};
+//# sourceMappingURL=play_sound_with_volume_control-Dp-S4iIj.js.map

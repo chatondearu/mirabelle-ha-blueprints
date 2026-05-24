@@ -1,0 +1,34 @@
+const e=`blueprint:
+  homeassistant:
+    min_version: 2025.5.3
+  name: "[CDA] 📅 Create Schedule"
+  description: Create a schedule for playing sounds
+  domain: script
+  input:
+    schedule_name:
+      name: Schedule Name
+      description: Name of the schedule
+      selector:
+        text: {}
+    times:
+      name: Times
+      description: List of times in 24-hour format (HH:MM:SS)
+      default:
+      - 08:00:00
+      - '12:00:00'
+      - '18:00:00'
+      selector:
+        text:
+          multiple: true
+          multiline: false
+  source_url: https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/create_schedule.yaml
+script:
+  alias: !input schedule_name
+  sequence:
+  - service: input_datetime.set_datetime
+    data:
+      entity_id: !input schedule_name
+      time: !input times
+  mode: single
+`;export{e as default};
+//# sourceMappingURL=create_schedule-D-wXd53T.js.map

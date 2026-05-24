@@ -1,0 +1,13 @@
+{
+  "name": "@mirabelle/mirabelle-flow",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Mirabelle Flow — visual Home Assistant automation editor",
+  "scripts": {
+    "build": "pnpm -r build",
+    "dev": "pnpm --filter @mirabelle/flow-ui dev",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "build:ha": "pnpm --filter @mirabelle/flow-ui build:ha"
+  }
+}

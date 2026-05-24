@@ -1,0 +1,5 @@
+"""Constants for Mirabelle Flow integration."""
+DOMAIN = "mirabelle_flow"
+STORAGE_KEY = f"{DOMAIN}.layouts"
+PANEL_TITLE = "Mirabelle Flow"
+PANEL_ICON = "mdi:graph"

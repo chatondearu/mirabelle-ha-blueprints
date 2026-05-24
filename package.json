@@ -34,6 +34,10 @@
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
     "validate": "pnpm -r validate",
+    "dev:flow": "pnpm --filter @mirabelle/flow-ui dev",
+    "build:flow": "pnpm --filter @mirabelle/flow-shared build && pnpm --filter @mirabelle/flow-core build && pnpm --filter @mirabelle/flow-ui build",
+    "build:flow:ha": "pnpm --filter @mirabelle/flow-ui build:ha",
+    "test:flow": "pnpm --filter @mirabelle/flow-shared build && pnpm --filter @mirabelle/flow-core test",
     "up": "npx taze major -I -l -r"
   },
   "devDependencies": {
@@ -64,6 +68,7 @@
   },
   "packageManager": "pnpm@10.24.0",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "packages/mirabelle-flow/*"
   ]
 }

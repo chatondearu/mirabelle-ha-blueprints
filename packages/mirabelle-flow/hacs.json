@@ -1,0 +1,7 @@
+{
+  "name": "Mirabelle Flow",
+  "content_in_root": false,
+  "filename": "mirabelle_flow",
+  "render_readme": true,
+  "homeassistant": "2025.5.3"
+}

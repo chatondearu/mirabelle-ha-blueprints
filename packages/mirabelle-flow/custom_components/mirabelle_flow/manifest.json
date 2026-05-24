@@ -1,0 +1,13 @@
+{
+  "domain": "mirabelle_flow",
+  "name": "Mirabelle Flow",
+  "codeowners": ["@chatondearu"],
+  "config_flow": true,
+  "dependencies": ["http", "frontend", "automation", "script"],
+  "documentation": "https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/docs/mirabelle-flow.md",
+  "integration_type": "service",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/chatondearu/mirabelle-ha-blueprints/issues",
+  "requirements": [],
+  "version": "0.1.0"
+}

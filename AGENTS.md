@@ -32,6 +32,7 @@ mirabelle-ha-blueprints/
 ├── packages/
 │   ├── cover-manager/        ← HACS integration (synced to sub-repo)
 │   ├── imeon_energy_api/    ← HACS integration (synced to sub-repo)
+│   ├── mirabelle-flow/      ← visual automation editor (Vue + custom_component mirabelle_flow)
 │   └── cast-bridge/         ← auxiliary / experimental tooling (not a pnpm workspace member)
 ├── .github/workflows/       ← CI, release, monorepo → HACS sync
 └── .cursor/rules/           ← legacy Cursor rule files (kept for editor; AGENTS.md is canonical for agents)
@@ -83,6 +84,9 @@ Use appropriate `selector` types: `entity`, `text`, `number`, `boolean`, `select
   - `pnpm run install-blueprints` — generates/uses HA API to install blueprints (requires `.env`).
   - `pnpm run update-automations` — updates automations on HA that match repo blueprints.
   - `pnpm run test-connection` — verifies HA connectivity.
+  - `pnpm run dev:flow` — Mirabelle Flow local UI (`packages/mirabelle-flow/flow-ui`).
+  - `pnpm run build:flow:ha` — build frontend into `custom_components/mirabelle_flow/www`.
+  - `pnpm run test:flow` — Vitest for `@mirabelle/flow-core`.
 - **Environment:** copy `.env.example` to `.env`; set `HA_URL`, `HA_TOKEN` (long-lived access token). Scripts default `HA_URL` to `http://supervisor/core` where applicable.
 - **Scope of automation scripts:** typically only entities/blueprints whose names start with `[CDA]` — keep that contract when extending scripts.
 
@@ -123,6 +127,7 @@ Agents should ensure new blueprints **pass** the structural validation script an
 - Blueprints: validate in a **clean HA** context when possible; exercise parameters and edge cases; align with the **declared minimum HA version**.
 - Integrations: follow each package’s patterns (`pytest`/HA guidelines as applicable).
 - Prefer running `**pnpm run validate`** locally before pushing when Node/pnpm is available.
+- Mirabelle Flow: [`docs/mirabelle-flow.md`](docs/mirabelle-flow.md); run `pnpm run test:flow` and `pnpm run build:flow` before pushing flow changes.
 
 ---
 
