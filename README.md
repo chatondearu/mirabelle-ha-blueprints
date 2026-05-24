@@ -212,16 +212,28 @@ mirabelle-ha-blueprints/
 
 ### Prerequisites
 
-- Node.js 18+ (for version management and scripts)
+- Node.js 22+ and pnpm 10 (or use the [Nix + direnv](docs/dev-environment.md) dev shell)
+- Python 3.12+ for tests
 - Git
 
 ### Setup
+
+**Optional (recommended):** [Nix + direnv](docs/dev-environment.md) — `direnv allow`, then `pnpm install`.
 
 1. Clone the repository
 2. Install dependencies:
   ```bash
    pnpm i
   ```
+3. Install Python test dependencies and run the suite (also runs on `git push` via Husky):
+  ```bash
+  python3 -m venv .venv
+  source .venv/bin/activate
+  pip install -r requirements-test.txt
+  pnpm run test:ha
+  ```
+
+See [docs/testing.md](docs/testing.md) for details.
 
 ### Version Management
 

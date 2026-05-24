@@ -1,4 +1,6 @@
 blueprint:
+  homeassistant:
+    min_version: 2025.5.3
   name: Keypad Frient (KEPZB-110) for Alarmo by Darktoinon (FR/EN)
   description: |
     Manage multiple PIN codes to arm and disarm an alarm using the Frient Keypad, synchronizing the state with an Alarmo central or other systems. (English/French)

@@ -1,0 +1,5 @@
+# Test dependencies — bump pytest-homeassistant-custom-component only (pulls matching homeassistant).
+# See https://pypi.org/project/pytest-homeassistant-custom-component/
+pytest-homeassistant-custom-component==0.13.205
+yamllint>=1.35.0
+PyYAML>=6.0

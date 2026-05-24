@@ -19,7 +19,8 @@ blueprint:
           domain: switch
 
 variables:
-  cover_id: !input cover_name | lower | replace(' ', '_')
+  cover_name_input: !input cover_name
+  cover_id: "{{ cover_name_input | lower | replace(' ', '_') }}"
   position_helper: "input_text.{{ cover_id }}_position"
   direction_helper: "input_text.{{ cover_id }}_direction"
 
