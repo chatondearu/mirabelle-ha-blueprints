@@ -111,7 +111,7 @@ Executed nodes during trace playback:
 ## Typography
 
 - **Base:** system UI stack via Uno preset (Tailwind-compatible).
-- **Node title:** `text-sm font-medium capitalize` (kind name).
+- **Node title:** `text-sm font-medium capitalize` (kind name), prefixed by a Lucide icon (`i-lucide-*`, 16px) mapped per `FlowNodeKind` in `FlowNode.vue`.
 - **Node label:** `text-xs text-neutral-300` (truncation acceptable; full text in inspector).
 - **Sidebar / tabs:** `text-xs` for density.
 - **Inspector:** `text-sm` for labels and fields.
