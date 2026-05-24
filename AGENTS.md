@@ -127,7 +127,7 @@ Agents should ensure new blueprints **pass** the structural validation script an
 - Blueprints: validate in a **clean HA** context when possible; exercise parameters and edge cases; align with the **declared minimum HA version**.
 - Integrations: follow each package’s patterns (`pytest`/HA guidelines as applicable).
 - Prefer running `**pnpm run validate`** locally before pushing when Node/pnpm is available.
-- Mirabelle Flow: [`docs/mirabelle-flow.md`](docs/mirabelle-flow.md); run `pnpm run test:flow` and `pnpm run build:flow` before pushing flow changes.
+- Mirabelle Flow: [`packages/mirabelle-flow/AGENTS.md`](packages/mirabelle-flow/AGENTS.md) (canonical for flow work), [`packages/mirabelle-flow/DESIGN.md`](packages/mirabelle-flow/DESIGN.md), user guide [`docs/mirabelle-flow.md`](docs/mirabelle-flow.md); run `pnpm run test:flow` and `pnpm run build:flow` before pushing flow changes.
 
 ---
 

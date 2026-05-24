@@ -26,3 +26,5 @@ Copy `custom_components/mirabelle_flow` into your HA `config/custom_components/`
 - `@mirabelle/flow-ui` — Vue 3 + Vite frontend
 
 See [docs/mirabelle-flow.md](../../docs/mirabelle-flow.md) for full documentation.
+
+**Contributing / agents:** [AGENTS.md](./AGENTS.md) · **UI design:** [DESIGN.md](./DESIGN.md)
