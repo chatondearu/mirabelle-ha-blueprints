@@ -14,10 +14,10 @@ import { Controls } from '@vue-flow/controls'
 import { computed, watch } from 'vue'
 import { useFlowStore } from '@/stores/flow'
 import FlowNeonEdge from './FlowNeonEdge.vue'
-import FlowNodeComponent from './FlowNode.vue'
+import { FLOW_NODE_RENDERER_MAP } from './flow-node-renderer-map'
 
 const store = useFlowStore()
-const nodeTypes = { flow: FlowNodeComponent } as NodeTypesObject
+const nodeTypes = FLOW_NODE_RENDERER_MAP as NodeTypesObject
 const edgeTypes = { neon: FlowNeonEdge } as EdgeTypesObject
 
 const { onNodeClick, onNodeDoubleClick, onPaneClick, onNodesChange, fitView } = useVueFlow()
@@ -47,11 +47,14 @@ const nodes = computed<Node[]>(() => {
       const simulationActive = store.simulationActiveNodeIds.has(n.id)
       return {
         id: n.id,
-        type: 'flow',
+        type: n.kind,
         position: doc.layout[n.id] ?? { x: 0, y: 0 },
         data: {
+          nodeId: n.id,
           label: n.label,
           kind: n.kind,
+          rawData: n.data,
+          highlightedItems: store.highlightedItemsByNode[n.id] ?? [],
           highlighted: store.highlightedNodeIds.has(n.id),
           pathActive,
           pathDimmed,
@@ -77,6 +80,8 @@ const edges = computed<Edge[]>(() => {
         type: 'neon',
         source: e.source,
         target: e.target,
+        sourceHandle: e.sourceHandle,
+        targetHandle: e.targetHandle,
         label: e.label,
         labelStyle: pathActive
           ? { fill: '#6ee7b7', fontSize: 10, fontWeight: 600 }
@@ -178,5 +183,18 @@ watch(
 <style>
 .mirabelle-flow-canvas {
   background: #0a0a0a;
+}
+
+/* Vue Flow theme paints a white card on .vue-flow__node — hide it so .flow-node-card colors show */
+.mirabelle-flow-canvas .vue-flow__node,
+.mirabelle-flow-canvas .vue-flow__node-default,
+.mirabelle-flow-canvas .vue-flow__node.selectable,
+.mirabelle-flow-canvas .vue-flow__node.selected {
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  width: auto !important;
+  min-width: 0 !important;
 }
 </style>

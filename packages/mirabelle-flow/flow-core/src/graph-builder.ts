@@ -1,5 +1,14 @@
-import type { FlowDocument, FlowEdge, FlowEdgeKind, FlowNode, FlowNodeKind } from '@mirabelle/flow-shared'
+import type {
+  FlowDocument,
+  FlowEdge,
+  FlowEdgeKind,
+  FlowListItem,
+  FlowNode,
+  FlowNodeKind,
+  FlowViewMode,
+} from '@mirabelle/flow-shared'
 import { FLOW_LAYOUT, getNodeLayer } from '@mirabelle/flow-shared'
+import { getHaBlockDescriptor } from './ha-block-registry.js'
 import { extractTriggerIdsFromCondition } from './trigger-path.js'
 
 interface BuildContext {
@@ -39,16 +48,24 @@ function connect(
   ctx: BuildContext,
   source: FlowNode,
   target: FlowNode,
-  label?: string,
-  branch?: string,
-  edgeKind: FlowEdgeKind = 'flow',
+  options: {
+    label?: string
+    branch?: string
+    edgeKind?: FlowEdgeKind
+    sourceHandle?: string
+    targetHandle?: string
+    itemKey?: string
+  } = {},
 ): void {
+  const edgeKind = options.edgeKind ?? 'flow'
   const exists = ctx.edges.some(
     e =>
       e.source === source.id
       && e.target === target.id
       && e.edgeKind === edgeKind
-      && e.label === label,
+      && e.label === options.label
+      && e.sourceHandle === options.sourceHandle
+      && e.targetHandle === options.targetHandle,
   )
   if (exists) {
     return
@@ -57,9 +74,12 @@ function connect(
     id: nextEdgeId(ctx),
     source: source.id,
     target: target.id,
-    label,
-    branch,
+    label: options.label,
+    branch: options.branch,
     edgeKind,
+    sourceHandle: options.sourceHandle,
+    targetHandle: options.targetHandle,
+    itemKey: options.itemKey,
   })
 }
 
@@ -91,14 +111,8 @@ function summarizeCondition(c: Record<string, unknown>): string {
   return cond ? `Condition: ${cond}` : 'Condition'
 }
 
-function summarizeVariable(name: string, value: unknown): string {
-  if (typeof value === 'string') {
-    return value.length > 40 ? `${name}: ${value.slice(0, 40)}…` : `${name}: ${value}`
-  }
-  return name
-}
-
 function summarizeAction(a: Record<string, unknown>): string {
+  const descriptor = getHaBlockDescriptor(a)
   if (typeof a.service === 'string') {
     return a.service
   }
@@ -120,7 +134,7 @@ function summarizeAction(a: Record<string, unknown>): string {
   if (a.sequence) {
     return 'Sequence'
   }
-  return 'Action'
+  return descriptor.summary(a)
 }
 
 function buildTriggers(
@@ -173,12 +187,69 @@ function buildConditions(
   return leaves
 }
 
+function valueType(value: unknown): string {
+  if (Array.isArray(value)) {
+    return 'array'
+  }
+  if (value === null) {
+    return 'null'
+  }
+  return typeof value
+}
+
+function buildVariablesNode(
+  ctx: BuildContext,
+  variables: Record<string, unknown>,
+  parent: FlowNode,
+  viewMode: FlowViewMode,
+): { node: FlowNode; items: FlowListItem[] } | null {
+  const entries = Object.entries(variables)
+  if (entries.length === 0) {
+    return null
+  }
+  const items: FlowListItem[] = entries.map(([name, value]) => ({
+    key: name,
+    label: name,
+    value,
+    valueType: valueType(value),
+    group:
+      value && typeof value === 'object' && '__input' in (value as Record<string, unknown>)
+        ? 'input_alias'
+        : 'variable',
+  }))
+  if (viewMode === 'combined' && parent.kind === 'inputs_variables') {
+    const existing = Array.isArray(parent.data.items)
+      ? (parent.data.items as FlowListItem[])
+      : []
+    parent.data.items = [...existing, ...items]
+    return { node: parent, items }
+  }
+  const nodeKind: FlowNodeKind = 'variables'
+  const node = addNode(
+    ctx,
+    'variables',
+    nodeKind,
+    viewMode === 'combined' ? 'Inputs & Variables' : 'Variables',
+    { items, viewMode },
+    parent.id,
+  )
+  connect(ctx, parent, node)
+  return { node, items }
+}
+
 function expandActionItem(
   ctx: BuildContext,
   a: Record<string, unknown>,
   path: string,
   parent: FlowNode,
   prev: FlowNode | undefined,
+  firstEdge?: {
+    sourceHandle?: string
+    targetHandle?: string
+    label?: string
+    branch?: string
+    itemKey?: string
+  },
 ): FlowNode {
   if (Array.isArray(a.sequence)) {
     const seqNode = addNode(ctx, path, 'sequence', 'Sequence', { sequence: true }, parent.id)
@@ -186,7 +257,7 @@ function expandActionItem(
       connect(ctx, prev, seqNode)
     }
     else {
-      connect(ctx, parent, seqNode)
+      connect(ctx, parent, seqNode, firstEdge)
     }
     const leaves = buildActions(ctx, a.sequence, seqNode, `${path}/sequence`)
     return leaves[leaves.length - 1] ?? seqNode
@@ -198,7 +269,7 @@ function expandActionItem(
       connect(ctx, prev, repeatNode)
     }
     else {
-      connect(ctx, parent, repeatNode)
+      connect(ctx, parent, repeatNode, firstEdge)
     }
     const body = (a.repeat as { sequence?: unknown[] }).sequence ?? []
     if (body.length > 0) {
@@ -214,7 +285,7 @@ function expandActionItem(
       connect(ctx, prev, parNode)
     }
     else {
-      connect(ctx, parent, parNode)
+      connect(ctx, parent, parNode, firstEdge)
     }
     let last: FlowNode = parNode
     a.parallel.forEach((branch, bi) => {
@@ -246,7 +317,7 @@ function expandActionItem(
       connect(ctx, prev, delayNode)
     }
     else {
-      connect(ctx, parent, delayNode)
+      connect(ctx, parent, delayNode, firstEdge)
     }
     return delayNode
   }
@@ -257,7 +328,7 @@ function expandActionItem(
       connect(ctx, prev, waitNode)
     }
     else {
-      connect(ctx, parent, waitNode)
+      connect(ctx, parent, waitNode, firstEdge)
     }
     return waitNode
   }
@@ -267,7 +338,7 @@ function expandActionItem(
     connect(ctx, prev, node)
   }
   else {
-    connect(ctx, parent, node)
+    connect(ctx, parent, node, firstEdge)
   }
   return node
 }
@@ -277,6 +348,13 @@ function buildActions(
   actions: unknown[],
   parent: FlowNode,
   pathPrefix: string,
+  firstEdge?: {
+    sourceHandle?: string
+    targetHandle?: string
+    label?: string
+    branch?: string
+    itemKey?: string
+  },
 ): FlowNode[] {
   const leaves: FlowNode[] = []
   let prev: FlowNode | undefined
@@ -289,12 +367,31 @@ function buildActions(
     const path = `${pathPrefix}/${i}`
 
     if (a.choose) {
-      const chooseNode = addNode(ctx, path, 'choose', 'Choose', { choose: a.choose }, parent.id)
+      const options = (a.choose as Array<{ conditions?: unknown[]; sequence?: unknown[] }>).map(
+        (branch, bi) => ({
+          key: `opt-${bi}`,
+          label: `Option ${bi + 1}`,
+          conditions: branch.conditions ?? [],
+          hasSequence: (branch.sequence ?? []).length > 0,
+        }),
+      )
+      const chooseNode = addNode(
+        ctx,
+        path,
+        'choose',
+        'Choose',
+        {
+          options,
+          hasDefault: Array.isArray((a as { default?: unknown[] }).default)
+            && ((a as { default?: unknown[] }).default?.length ?? 0) > 0,
+        },
+        parent.id,
+      )
       if (prev) {
         connect(ctx, prev, chooseNode)
       }
       else {
-        connect(ctx, parent, chooseNode)
+        connect(ctx, parent, chooseNode, firstEdge)
       }
 
       const choose = a.choose as Array<{
@@ -307,28 +404,33 @@ function buildActions(
         const branchPath = `${path}/choose/${bi}`
         const conds = branch.conditions ?? []
         const seq = branch.sequence ?? []
-        let branchParent = chooseNode
-
-        if (conds.length > 0) {
-          const condNode = addNode(
-            ctx,
-            `${branchPath}/conditions`,
-            'condition',
-            `Branch ${bi + 1} conditions`,
-            { conditions: conds },
-            chooseNode.id,
-          )
-          connect(ctx, chooseNode, condNode, `Branch ${bi + 1}`, String(bi))
-          branchParent = condNode
+        const optionKey = `opt-${bi}`
+        const seqLeaves = buildActions(
+          ctx,
+          seq,
+          chooseNode,
+          `${branchPath}/sequence`,
+          {
+            sourceHandle: optionKey,
+            label: `Option ${bi + 1}`,
+            branch: String(bi),
+            itemKey: optionKey,
+          },
+        )
+        branchLeaves.push(...(seqLeaves.length ? seqLeaves : [chooseNode]))
+        if (conds.length === 0 && seq.length === 0) {
+          branchLeaves.push(chooseNode)
         }
-
-        const seqLeaves = buildActions(ctx, seq, branchParent, `${branchPath}/sequence`)
-        branchLeaves.push(...(seqLeaves.length ? seqLeaves : [branchParent]))
       })
 
       const defaultSeq = (a as { default?: unknown[] }).default ?? []
       if (defaultSeq.length > 0) {
-        const defLeaves = buildActions(ctx, defaultSeq, chooseNode, `${path}/default`)
+        const defLeaves = buildActions(ctx, defaultSeq, chooseNode, `${path}/default`, {
+          sourceHandle: 'opt-default',
+          label: 'Default',
+          branch: 'default',
+          itemKey: 'opt-default',
+        })
         branchLeaves.push(...defLeaves)
       }
 
@@ -337,33 +439,11 @@ function buildActions(
       return
     }
 
-    prev = expandActionItem(ctx, a, path, parent, prev)
+    prev = expandActionItem(ctx, a, path, parent, prev, firstEdge)
     leaves.push(prev)
   })
 
   return leaves
-}
-
-function buildVariables(
-  ctx: BuildContext,
-  variables: Record<string, unknown>,
-  parent: FlowNode,
-): FlowNode {
-  let last: FlowNode = parent
-  for (const [name, value] of Object.entries(variables)) {
-    const path = `variables/${name}`
-    const node = addNode(
-      ctx,
-      path,
-      'variable',
-      summarizeVariable(name, value),
-      { name, value },
-      parent.id,
-    )
-    connect(ctx, parent, node)
-    last = node
-  }
-  return last
 }
 
 function resolveTriggerNode(ctx: BuildContext, triggerId: string): FlowNode | undefined {
@@ -387,7 +467,31 @@ function connectTriggerReferenceEdges(ctx: BuildContext): void {
     for (const refId of refs) {
       const trigger = resolveTriggerNode(ctx, refId)
       if (trigger) {
-        connect(ctx, trigger, cond, refId, undefined, 'reference')
+        connect(ctx, trigger, cond, { label: refId, edgeKind: 'reference', itemKey: refId })
+      }
+    }
+  }
+
+  const chooseNodes = ctx.nodes.filter(n => n.kind === 'choose')
+  for (const chooseNode of chooseNodes) {
+    const options = (chooseNode.data.options as Array<{ key: string; conditions: unknown[] }> | undefined) ?? []
+    for (const opt of options) {
+      for (const raw of opt.conditions) {
+        if (!raw || typeof raw !== 'object') {
+          continue
+        }
+        const refs = extractTriggerIdsFromCondition(raw as Record<string, unknown>)
+        for (const refId of refs) {
+          const trigger = resolveTriggerNode(ctx, refId)
+          if (trigger) {
+            connect(ctx, trigger, chooseNode, {
+              label: refId,
+              edgeKind: 'reference',
+              targetHandle: `cond-${opt.key}`,
+              itemKey: opt.key,
+            })
+          }
+        }
       }
     }
   }
@@ -395,15 +499,44 @@ function connectTriggerReferenceEdges(ctx: BuildContext): void {
 
 export function buildGraphFromConfig(
   config: Record<string, unknown>,
-  options: { alias?: string; mode?: string } = {},
+  options: {
+    alias?: string
+    mode?: string
+    viewMode?: FlowViewMode
+    inputItems?: FlowListItem[]
+  } = {},
 ): Pick<FlowDocument, 'nodes' | 'edges'> {
   const ctx: BuildContext = { nodes: [], edges: [], edgeCounter: 0 }
+  const viewMode = options.viewMode ?? 'split'
 
   const root = addNode(ctx, 'root', 'root', options.alias ?? 'Automation', {}, undefined)
 
   let entryAnchor: FlowNode = root
+  if (options.inputItems?.length) {
+    const nodeKind: FlowNodeKind =
+      viewMode === 'combined' ? 'inputs_variables' : 'inputs'
+    const inputsNode = addNode(
+      ctx,
+      'inputs',
+      nodeKind,
+      viewMode === 'combined' ? 'Inputs & Variables' : 'Inputs',
+      { items: options.inputItems, viewMode },
+      root.id,
+    )
+    connect(ctx, root, inputsNode)
+    entryAnchor = inputsNode
+  }
+
   if (config.variables && typeof config.variables === 'object') {
-    entryAnchor = buildVariables(ctx, config.variables as Record<string, unknown>, root)
+    const variables = buildVariablesNode(
+      ctx,
+      config.variables as Record<string, unknown>,
+      entryAnchor,
+      viewMode,
+    )
+    if (variables) {
+      entryAnchor = variables.node
+    }
   }
 
   const triggers = (config.triggers ?? config.trigger) as unknown[] | undefined

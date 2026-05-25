@@ -68,6 +68,27 @@ async function saveToHa() {
           {{ store.document.blueprintMeta?.name ?? store.document.source ?? 'Untitled' }}
           <span v-if="store.isDirty" class="text-amber-400">•</span>
         </span>
+        <div
+          v-if="store.document?.kind === 'blueprint'"
+          class="flex items-center gap-1 rounded bg-neutral-900 p-0.5 text-xs"
+        >
+          <button
+            type="button"
+            class="rounded px-2 py-1"
+            :class="store.viewMode === 'split' ? 'bg-neutral-700' : ''"
+            @click="store.setViewMode('split')"
+          >
+            Inputs + Variables
+          </button>
+          <button
+            type="button"
+            class="rounded px-2 py-1"
+            :class="store.viewMode === 'combined' ? 'bg-neutral-700' : ''"
+            @click="store.setViewMode('combined')"
+          >
+            Combined
+          </button>
+        </div>
         <div class="ml-auto flex gap-2">
           <button
             type="button"

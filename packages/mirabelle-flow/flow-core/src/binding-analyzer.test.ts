@@ -12,7 +12,7 @@ function loadBlueprint(relPath: string): string {
 }
 
 describe('analyzeBindings', () => {
-  it('creates input_binding edges from meta to triggers and variables', () => {
+  it('creates input_binding edges from inputs node to consumers', () => {
     const yaml = loadBlueprint('blueprints/automations/frient_keypad_with_alarmo.yaml')
     const doc = parseAutomationYaml(yaml, {
       source: 'frient_keypad_with_alarmo.yaml',
@@ -22,7 +22,8 @@ describe('analyzeBindings', () => {
     expect(doc.nodes.some(n => n.kind === 'blueprint_input')).toBe(false)
     const inputBindings = doc.edges.filter(e => e.edgeKind === 'input_binding')
     expect(inputBindings.length).toBeGreaterThan(0)
-    expect(inputBindings.some(e => e.source === 'blueprint_meta')).toBe(true)
+    const inputsNode = doc.nodes.find(n => n.kind === 'inputs' || n.kind === 'inputs_variables')
+    expect(inputBindings.some(e => e.source === inputsNode?.id)).toBe(true)
   })
 
   it('creates variable_binding edges for template references', () => {
@@ -32,8 +33,8 @@ describe('analyzeBindings', () => {
       preview: false,
     })
 
-    const varNodes = doc.nodes.filter(n => n.kind === 'variable')
-    expect(varNodes.length).toBeGreaterThan(3)
+    const varsNode = doc.nodes.find(n => n.kind === 'variables' || n.kind === 'inputs_variables')
+    expect(varsNode).toBeDefined()
 
     const varBindings = doc.edges.filter(e => e.edgeKind === 'variable_binding')
     expect(varBindings.length).toBeGreaterThan(0)
@@ -44,11 +45,11 @@ describe('analyzeBindings unit', () => {
   it('links input refs in node data', () => {
     const nodes = [
       {
-        id: 'blueprint_meta',
-        kind: 'blueprint_meta' as const,
-        label: 'Meta',
-        path: 'blueprint',
-        data: {},
+        id: 'inputs',
+        kind: 'inputs' as const,
+        label: 'Inputs',
+        path: 'inputs',
+        data: { items: [{ key: 'sensor', label: 'sensor' }] },
       },
       {
         id: 'trigger_0',

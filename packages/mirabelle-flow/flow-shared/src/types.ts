@@ -20,6 +20,10 @@ export type FlowNodeKind =
   | 'delay'
   | 'wait'
   | 'variables'
+  | 'inputs'
+  | 'inputs_variables'
+  | 'choose_option'
+  | 'ha_block'
   | 'variable'
   | 'blueprint_input'
   | 'blueprint_meta'
@@ -51,6 +55,10 @@ export interface FlowEdge {
   branch?: 'default' | 'true' | 'false' | string
   /** `flow` = solid execution path; `reference` = dashed link (e.g. trigger → condition). */
   edgeKind?: FlowEdgeKind
+  sourceHandle?: string
+  targetHandle?: string
+  /** Optional sub-item key inside list-based nodes (inputs/variables/choose options). */
+  itemKey?: string
 }
 
 export interface BlueprintInputDef {
@@ -78,6 +86,17 @@ export interface SimulationCatalog {
   alarm_control_panels: string[]
   /** Generic defaults keyed by domain or custom label */
   defaults: Record<string, string>
+}
+
+export type FlowViewMode = 'split' | 'combined'
+
+export interface FlowListItem {
+  key: string
+  label: string
+  value?: unknown
+  valueType?: string
+  group?: string
+  meta?: Record<string, unknown>
 }
 
 export interface FlowDocument {

@@ -21,13 +21,15 @@ describe('graph structure', () => {
     expect(meta?.data.simulationValues).toBeDefined()
   })
 
-  it('creates one variable node per YAML variable', () => {
+  it('creates a variables list node with one item per YAML variable', () => {
     const yaml = loadBlueprint('blueprints/automations/frient_keypad_with_alarmo.yaml')
     const doc = parseAutomationYaml(yaml, { source: 'frient_keypad_with_alarmo.yaml' })
 
-    const vars = doc.nodes.filter(n => n.kind === 'variable')
-    expect(vars.length).toBeGreaterThan(5)
-    expect(vars.some(v => v.path === 'variables/language')).toBe(true)
+    const varsNode = doc.nodes.find(n => n.kind === 'variables')
+    expect(varsNode).toBeDefined()
+    const items = varsNode?.data.items as Array<{ key: string }> | undefined
+    expect(items?.length).toBeGreaterThan(5)
+    expect(items?.some(item => item.key === 'language')).toBe(true)
   })
 
   it('expands choose branches into action nodes', () => {
@@ -62,5 +64,17 @@ describe('graph structure', () => {
 
     const refs = doc.edges.filter(e => e.edgeKind === 'reference')
     expect(refs.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('creates choose option handles and no synthetic condition subnodes', () => {
+    const yaml = loadBlueprint('blueprints/automations/presence_based_lighting.yaml')
+    const doc = parseAutomationYaml(yaml, { source: 'presence_based_lighting.yaml' })
+    const chooseNode = doc.nodes.find(n => n.kind === 'choose')
+    expect(chooseNode).toBeDefined()
+    const options = chooseNode?.data.options as Array<{ key: string }> | undefined
+    expect(options?.length).toBeGreaterThanOrEqual(1)
+    expect(
+      doc.edges.some(e => e.source === chooseNode?.id && e.sourceHandle?.startsWith('opt-')),
+    ).toBe(true)
   })
 })

@@ -1,4 +1,10 @@
-import type { BlueprintInputDef, DocumentKind, FlowDocument } from '@mirabelle/flow-shared'
+import type {
+  BlueprintInputDef,
+  DocumentKind,
+  FlowDocument,
+  FlowListItem,
+  FlowViewMode,
+} from '@mirabelle/flow-shared'
 import {
   BLUEPRINT_INPUT_FIXTURES,
   buildSimulationValues,
@@ -22,6 +28,7 @@ export interface ParseOptions {
   previewInputs?: Record<string, unknown>
   preview?: boolean
   simulationCatalog?: SimulationCatalog
+  viewMode?: FlowViewMode
 }
 
 /** Unwrap nested `script:` / `automation:` blocks sometimes used in blueprint YAML. */
@@ -76,6 +83,8 @@ export function parseAutomationYaml(
   let alias: string | undefined
   let mode: string | undefined
   let simulationValues: Record<string, unknown> = {}
+  let inputItems: FlowListItem[] = []
+  const viewMode = options.viewMode ?? 'split'
 
   const detected = detectDocumentKind(root)
 
@@ -87,6 +96,14 @@ export function parseAutomationYaml(
     configRoot = normalizeConfigRoot(rest)
     mode = typeof configRoot.mode === 'string' ? configRoot.mode : undefined
     simulationValues = resolveSimulationValues(blueprintMeta.inputs, options)
+    inputItems = blueprintMeta.inputs.map(input => ({
+      key: input.key,
+      label: input.name ?? input.key,
+      value: simulationValues[input.key],
+      valueType: typeof simulationValues[input.key],
+      group: 'input',
+      meta: { selector: input.selector, description: input.description },
+    }))
   }
   else if (detected.kind === 'instance') {
     kind = 'instance'
@@ -117,6 +134,8 @@ export function parseAutomationYaml(
   const { nodes, edges } = buildGraphFromConfig(workingConfig, {
     alias: alias ?? blueprintMeta?.name ?? 'Flow',
     mode,
+    viewMode,
+    inputItems,
   })
 
   if (blueprintMeta) {

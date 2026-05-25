@@ -33,6 +33,21 @@ export function getSimulationActiveNodeIds(
     }
   }
 
+  for (const edge of edges) {
+    if (
+      edge.edgeKind === 'reference'
+      && edge.source === triggerId
+      && edge.target
+    ) {
+      active.add(edge.target)
+      const targetNode = nodes.find(n => n.id === edge.target)
+      if (targetNode) {
+        addAncestors(targetNode, nodes, active)
+      }
+      walkDownstream(edge.target, edges, active, nodes)
+    }
+  }
+
   return active
 }
 

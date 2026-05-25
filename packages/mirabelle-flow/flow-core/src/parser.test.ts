@@ -23,6 +23,7 @@ describe('parseAutomationYaml', () => {
     expect(doc.blueprintMeta?.inputs.length).toBeGreaterThanOrEqual(3)
     expect(doc.nodes.some(n => n.kind === 'trigger')).toBe(true)
     expect(doc.nodes.some(n => n.kind === 'choose')).toBe(true)
+    expect(doc.nodes.some(n => n.kind === 'inputs')).toBe(true)
     const meta = doc.nodes.find(n => n.kind === 'blueprint_meta')
     expect(meta?.data.simulationValues).toBeDefined()
     expect(doc.nodes.length).toBeGreaterThan(3)
@@ -70,5 +71,14 @@ describe('parseAutomationYaml', () => {
       n => n.kind === 'action' && n.label.includes('light.turn_on'),
     )
     expect(action?.label).toContain('→')
+  })
+
+  it('supports combined inputs/variables view mode', () => {
+    const yaml = loadBlueprint('blueprints/automations/presence_based_lighting.yaml')
+    const doc = parseAutomationYaml(yaml, {
+      source: 'presence_based_lighting.yaml',
+      viewMode: 'combined',
+    })
+    expect(doc.nodes.some(n => n.kind === 'inputs_variables')).toBe(true)
   })
 })

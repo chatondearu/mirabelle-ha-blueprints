@@ -49,13 +49,13 @@ Active edges use custom `FlowNeonEdge` (glow, arrow marker, `animateMotion` part
 | `input_binding` | Dashed cyan (`#22d3ee`) | Blueprint `!input` used in a node |
 | `variable_binding` | Dashed teal (`#2dd4bf`) | Automation variable referenced in templates |
 
-### Blueprint meta and simulation
+### Blueprint simulation nodes
 
-- **Single `blueprint_meta` node** holds all inputs and `simulationValues` (no separate input nodes on canvas).
-- Edit inputs in **BlueprintMetaPanel** (inspector when meta is selected).
+- Inputs are visible inside the flow as **`inputs`** (split mode) or **`inputs_variables`** (combined mode).
+- **Inline editing** happens directly inside the node list (selector-aware; HA-first).
 - **Simulation catalog** (sidebar, localStorage): fallback entity ids when HA is not connected; HA entity list takes priority in pickers when connected.
 - **Simulation mode** (default on): substitutes inputs, expands nested actions, enriches labels (`service → entity`).
-- **Variable nodes** (`kind: variable`): one per YAML key under `variables:`; dashed `variable_binding` edges to consumers.
+- **Variables node** (`kind: variables`): list of variables with one output handle per row (`var-<name>`); dashed `variable_binding` edges to consumers.
 
 
 | Region          | Width / height      | Role                                           |
@@ -120,6 +120,8 @@ Defined in `FlowNode.vue` — keep in sync when adding `FlowNodeKind` values:
 | `condition`      | `border-blue-500`    | `bg-blue-950`    |
 | `action`         | `border-emerald-500` | `bg-emerald-950` |
 | `choose`         | `border-purple-500`  | `bg-purple-950`  |
+| `inputs`         | `border-cyan-500`    | `bg-cyan-950`    |
+| `inputs_variables`| `border-cyan-400`   | `bg-cyan-950/80` |
 | `variables`      | `border-cyan-500`    | `bg-cyan-950`    |
 | `blueprint_meta` | `border-pink-500`    | `bg-pink-950`    |
 | `root`           | `border-neutral-500` | `bg-neutral-900` |

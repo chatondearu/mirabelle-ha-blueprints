@@ -11,6 +11,10 @@ export const flowNodeKindSchema = z.enum([
   'delay',
   'wait',
   'variables',
+  'inputs',
+  'inputs_variables',
+  'choose_option',
+  'ha_block',
   'variable',
   'blueprint_input',
   'blueprint_meta',
@@ -43,6 +47,9 @@ export const flowEdgeSchema = z.object({
   label: z.string().optional(),
   branch: z.string().optional(),
   edgeKind: flowEdgeKindSchema.optional(),
+  sourceHandle: z.string().optional(),
+  targetHandle: z.string().optional(),
+  itemKey: z.string().optional(),
 })
 
 export const flowDocumentSchema = z.object({

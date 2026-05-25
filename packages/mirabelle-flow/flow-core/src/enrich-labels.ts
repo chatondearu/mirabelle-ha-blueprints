@@ -16,6 +16,11 @@ function formatValue(value: unknown): string {
 }
 
 export function enrichNodeLabels(doc: FlowDocument): void {
+  const simulationValues =
+    (doc.nodes.find(n => n.kind === 'blueprint_meta')?.data.simulationValues as
+      | Record<string, unknown>
+      | undefined)
+    ?? {}
   for (const node of doc.nodes) {
     if (node.kind === 'action' && typeof node.data.service === 'string') {
       const target = node.data.target as { entity_id?: string } | undefined
@@ -51,18 +56,26 @@ export function enrichNodeLabels(doc: FlowDocument): void {
       }
     }
 
-    if (node.kind === 'variable') {
-      const name = node.path.replace(/^variables\//, '')
-      const raw = node.data.value ?? node.data
-      if (isInputRef(raw)) {
-        node.label = `${name} ← !input ${raw.__input}`
-      }
-      else if (typeof raw === 'string') {
-        node.label = truncate(`${name} = ${raw}`, 56)
-      }
-      else {
-        node.label = name
-      }
+    if (node.kind === 'variables' || node.kind === 'inputs_variables') {
+      const items = Array.isArray(node.data.items) ? (node.data.items as Array<Record<string, unknown>>) : []
+      node.data.items = items.map((item) => {
+        const value = item.value
+        if (isInputRef(value)) {
+          return {
+            ...item,
+            value: simulationValues[value.__input] ?? value,
+          }
+        }
+        return item
+      })
+    }
+
+    if (node.kind === 'choose' && Array.isArray(node.data.options)) {
+      const options = node.data.options as Array<Record<string, unknown>>
+      node.data.options = options.map((option, idx) => ({
+        ...option,
+        label: option.label ?? `Option ${idx + 1}`,
+      }))
     }
   }
 }

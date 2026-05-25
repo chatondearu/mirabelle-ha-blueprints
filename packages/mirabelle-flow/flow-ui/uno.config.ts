@@ -1,6 +1,8 @@
 import { defineConfig, presetIcons, presetUno } from 'unocss'
+import { NODE_ICON_SAFELIST } from './src/components/canvas/node-theme'
 
 export default defineConfig({
+  safelist: NODE_ICON_SAFELIST,
   presets: [
     presetUno(),
     presetIcons({

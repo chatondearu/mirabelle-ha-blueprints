@@ -127,11 +127,11 @@ Follow [`DESIGN.md`](./DESIGN.md) for visuals. Code conventions:
 
 ### Blueprint simulation
 
-- Inputs live on **`blueprint_meta.data`** (`inputs`, `simulationValues`) — no `blueprint_input` canvas nodes.
+- Inputs live in flow nodes (`inputs` or `inputs_variables`) with mirrored metadata in `blueprint_meta.data`.
 - **`simulationCatalog`** in Pinia + `localStorage`; entity pickers are **HA-first** via `useEntityPicker` (fallback catalog).
 - **`previewMode`** defaults to on; `applySimulation()` reloads YAML through `parseAutomationYaml` with `substituteInputs`.
 - **Binding edges**: `input_binding`, `variable_binding` from `binding-analyzer.ts` (not layout edges).
-- **Variable** nodes: `kind: 'variable'`, path `variables/<name>`.
+- **Variables list node**: `kind: 'variables'` with row-level handles (`var-<name>`) and item highlights.
 
 ### Editing and export
 

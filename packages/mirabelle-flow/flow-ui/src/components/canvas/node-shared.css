@@ -1,0 +1,156 @@
+/* Node shell — colors via data-kind (not Uno utilities) so split components always render correctly */
+
+.flow-node-card {
+  min-width: 10rem;
+  border-radius: 0.5rem;
+  border-width: 2px;
+  border-style: solid;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.25);
+  transition: all 200ms ease;
+  border-color: #525252;
+  background-color: #171717;
+}
+
+.flow-node-card[data-kind='trigger'] {
+  border-color: #f59e0b;
+  background-color: #451a03;
+}
+
+.flow-node-card[data-kind='condition'] {
+  border-color: #3b82f6;
+  background-color: #172554;
+}
+
+.flow-node-card[data-kind='action'] {
+  border-color: #10b981;
+  background-color: #022c22;
+}
+
+.flow-node-card[data-kind='choose'] {
+  border-color: #a855f7;
+  background-color: #3b0764;
+}
+
+.flow-node-card[data-kind='sequence'] {
+  border-color: #6366f1;
+  background-color: #1e1b4b;
+}
+
+.flow-node-card[data-kind='parallel'] {
+  border-color: #8b5cf6;
+  background-color: #2e1065;
+}
+
+.flow-node-card[data-kind='repeat'] {
+  border-color: #d946ef;
+  background-color: #4a044e;
+}
+
+.flow-node-card[data-kind='delay'] {
+  border-color: #f97316;
+  background-color: #431407;
+}
+
+.flow-node-card[data-kind='wait'] {
+  border-color: #fb923c;
+  background-color: rgb(67 20 7 / 0.8);
+}
+
+.flow-node-card[data-kind='variables'],
+.flow-node-card[data-kind='inputs'] {
+  border-color: #06b6d4;
+  background-color: #083344;
+}
+
+.flow-node-card[data-kind='inputs_variables'] {
+  border-color: #22d3ee;
+  background-color: rgb(8 51 68 / 0.8);
+}
+
+.flow-node-card[data-kind='choose_option'] {
+  border-color: #c084fc;
+  background-color: rgb(59 7 100 / 0.8);
+}
+
+.flow-node-card[data-kind='variable'] {
+  border-color: #14b8a6;
+  background-color: #042f2e;
+}
+
+.flow-node-card[data-kind='blueprint_meta'] {
+  border-color: #ec4899;
+  background-color: #500724;
+}
+
+.flow-node-card[data-kind='blueprint_input'] {
+  border-color: rgb(244 114 182 / 0.8);
+  background-color: rgb(80 7 36 / 0.6);
+}
+
+.flow-node-card[data-kind='root'],
+.flow-node-card[data-kind='ha_block'] {
+  border-color: #737373;
+  background-color: #171717;
+}
+
+.flow-node-card.is-path-dimmed {
+  opacity: 0.2;
+  filter: saturate(0.5);
+}
+
+.flow-node-card.is-simulation-active {
+  outline: 2px solid rgb(110 231 183 / 0.8);
+  outline-offset: 2px;
+}
+
+.flow-node-card.is-path-focus {
+  outline: 2px solid rgb(255 255 255 / 0.5);
+  outline-offset: 2px;
+}
+
+.flow-node-card.is-highlighted {
+  outline: 2px solid #facc15;
+  outline-offset: 2px;
+}
+
+.flow-node-card__icon {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.flow-node-neon {
+  box-shadow:
+    0 0 10px var(--neon-color, rgba(52, 211, 153, 0.7)),
+    0 0 22px var(--neon-glow, rgba(52, 211, 153, 0.35));
+}
+
+.flow-node-neon-emerald {
+  --neon-color: rgba(52, 211, 153, 0.85);
+  --neon-glow: rgba(52, 211, 153, 0.4);
+}
+
+.flow-node-neon-amber {
+  --neon-color: rgba(251, 191, 36, 0.9);
+  --neon-glow: rgba(251, 191, 36, 0.45);
+}
+
+.flow-node-neon-blue {
+  --neon-color: rgba(96, 165, 250, 0.9);
+  --neon-glow: rgba(96, 165, 250, 0.45);
+}
+
+.flow-node-neon-pink {
+  --neon-color: rgba(244, 114, 182, 0.9);
+  --neon-glow: rgba(244, 114, 182, 0.45);
+}
+
+.flow-node-neon-teal {
+  --neon-color: rgba(45, 212, 191, 0.9);
+  --neon-glow: rgba(45, 212, 191, 0.45);
+}

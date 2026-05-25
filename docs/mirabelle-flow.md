@@ -23,20 +23,20 @@ Open the Vite dev server URL (default `http://localhost:5173`).
 - **Repo blueprints** — load any file under `blueprints/` from the sidebar
 - **Local files** — open YAML via file picker or paste
 - **Graph view** — triggers, conditions, actions, `choose` branches
-- **Blueprint simulation** — edit all inputs on the meta node; HA-first entity picker + local catalog
+- **Blueprint simulation** — edit inputs directly in the flow (`inputs` / `inputs_variables` node); HA-first entity picker + local catalog
 - **Binding edges** — dashed links from inputs and variables to the nodes that use them
-- **Variable nodes** — one node per `variables:` key with usage links
+- **Variables node** — list view with one output handle per variable and usage links
 - **Export YAML** — download (unchanged file when not edited)
 - **Trace import** — paste exported trace JSON to highlight executed paths
 
 ### Simulation workflow
 
 1. Load a blueprint from the repo sidebar.
-2. Select the **blueprint_meta** node (first node) or use the inspector.
+2. Select the **inputs** (or `inputs_variables`) node in the canvas.
 3. Toggle **Simulation mode** and edit input values (entity dropdown uses HA entities when connected, else the **Simulation catalog** in the sidebar).
 4. Click **Apply simulation** — the graph reloads with substituted values and richer action labels.
 5. Click **Show usages on graph** on an input to highlight `input_binding` edges.
-6. Select a **variable** node to see consumers and highlight `variable_binding` edges.
+6. Select the **variables** node (or `inputs_variables`) to inspect aliases and `variable_binding` links.
 7. With simulation on, select a **trigger** to see branches that statically reference that trigger (green ring).
 
 ### Limitations

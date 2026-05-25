@@ -69,15 +69,13 @@ function comparePaths(a: string, b: string): number {
 function applyNodeUpdates(doc: FlowDocument, base: Record<string, unknown>): void {
   for (const node of doc.nodes) {
     if (node.kind === 'variables' && node.path === 'variables') {
-      base.variables = { ...node.data }
-    }
-    if (node.kind === 'variable' && node.path.startsWith('variables/')) {
-      const name = node.path.replace(/^variables\//, '')
-      const vars =
-        base.variables && typeof base.variables === 'object'
-          ? { ...(base.variables as Record<string, unknown>) }
-          : {}
-      vars[name] = node.data.value ?? node.data
+      const items = Array.isArray(node.data.items)
+        ? (node.data.items as Array<{ key: string; value: unknown }>)
+        : []
+      const vars: Record<string, unknown> = {}
+      for (const item of items) {
+        vars[item.key] = item.value
+      }
       base.variables = vars
     }
     if (node.kind === 'trigger') {
