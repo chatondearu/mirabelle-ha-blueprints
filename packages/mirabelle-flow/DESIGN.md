@@ -170,7 +170,7 @@ Style Reka parts with UnoCSS + `data-[state=active]:` attributes; do not fight R
 
 - Use default theme CSS imports in `main.ts`.
 - Custom node type: `FlowNode` only for M0.
-- Handles: `!bg-neutral-400`, left target / right source.
+- Handles are **conditional** (`computeNodeHandleVisibility` in flow-ui): parent groups (`blueprint`, `variables`, HA containers) have **no** handles; child nodes show a **target** only for `input_binding`, `variable_binding`, or `reference` edges, and a **source** when they emit flow or binding edges. Structural flow connects child-to-child in the IR (`flow-endpoints.ts`), not via parent branch handles.
 - Background grid: `@vue-flow/background` (subtle; do not overpower nodes).
 - Controls: `@vue-flow/controls` bottom-right if present.
 

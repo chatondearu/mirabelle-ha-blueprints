@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { Handle, Position } from '@vue-flow/core'
 import { useEntityPicker } from '@/composables/useEntityPicker'
 import { useFlowStore } from '@/stores/flow'
 import { itemDisplayValue } from './composables/useListNodeHelpers'
 import { useNodeVisuals } from './composables/useNodeVisuals'
+import FlowNodeHandles from './FlowNodeHandles.vue'
 import type { FlowCanvasNodeProps } from './node-types'
 
 const props = defineProps<FlowCanvasNodeProps>()
 const store = useFlowStore()
 const picker = useEntityPicker()
-const visuals = useNodeVisuals(props.data)
+const { stateClasses } = useNodeVisuals(() => props.data)
 
 const key = computed(() => String(props.data.rawData?.key ?? ''))
 const selector = computed(
@@ -37,8 +37,13 @@ function updateInput(value: string): void {
   <div
     class="flow-node-card flow-node-card--child min-w-36"
     :data-kind="data.kind"
-    :class="visuals.stateClasses"
+    :class="stateClasses"
   >
+    <FlowNodeHandles
+      :handles="data.handles"
+      :source-id="`inp-${key}`"
+      source-class="!bg-neutral-300"
+    />
     <div class="text-[11px] font-medium text-pink-200">
       {{ data.label }}
     </div>
@@ -66,11 +71,5 @@ function updateInput(value: string): void {
       :value="displayValue"
       @change="updateInput(($event.target as HTMLInputElement).value)"
     >
-    <Handle
-      type="source"
-      :position="Position.Right"
-      :id="`inp-${key}`"
-      class="!bg-neutral-300"
-    />
   </div>
 </template>

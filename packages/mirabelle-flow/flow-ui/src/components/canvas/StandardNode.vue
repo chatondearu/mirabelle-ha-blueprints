@@ -1,35 +1,29 @@
 <script setup lang="ts">
-import { Handle, Position } from '@vue-flow/core'
 import { useNodeVisuals } from './composables/useNodeVisuals'
+import FlowNodeHandles from './FlowNodeHandles.vue'
 import type { FlowCanvasNodeProps } from './node-types'
 
 const props = defineProps<FlowCanvasNodeProps>()
-const visuals = useNodeVisuals(props.data)
+const { iconClass, stateClasses, titleKind } = useNodeVisuals(() => props.data)
 </script>
 
 <template>
   <div
     class="flow-node-card"
     :data-kind="data.kind"
-    :class="visuals.stateClasses"
+    :class="stateClasses"
   >
-    <Handle type="target" :position="Position.Left" class="!bg-neutral-400" />
+    <FlowNodeHandles :handles="data.handles" />
     <div class="flex items-center gap-1.5 font-medium capitalize">
       <span
         class="flow-node-card__icon"
-        :class="visuals.iconClass"
+        :class="iconClass"
         aria-hidden="true"
       />
-      <span>{{ visuals.titleKind }}</span>
+      <span>{{ titleKind }}</span>
     </div>
     <div class="mt-1 text-xs text-neutral-300">
       {{ data.label }}
     </div>
-    <Handle
-      type="source"
-      :position="Position.Right"
-      class="!bg-neutral-400"
-    />
   </div>
 </template>
-

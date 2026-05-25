@@ -24,6 +24,7 @@ import {
   summarizeServiceAction,
   type ActionBuildContext,
 } from './action-expander.js'
+import { findBranchExitNode, resolveFlowSource } from './flow-endpoints.js'
 import { getHaBlockDescriptor } from './ha-block-registry.js'
 import { extractTriggerIdsFromCondition } from './trigger-path.js'
 
@@ -71,12 +72,19 @@ function connect(
     sourceHandle?: string
     targetHandle?: string
     itemKey?: string
+    /** When false, keep source as-is (e.g. branch anchor already resolved to a child). */
+    resolveSource?: boolean
   } = {},
 ): void {
   const edgeKind = options.edgeKind ?? 'flow'
+  const isFlow = edgeKind === 'flow' || edgeKind === undefined
+  const resolvedSource =
+    isFlow && options.resolveSource !== false
+      ? resolveFlowSource(ctx.nodes, ctx.edges, source)
+      : source
   const exists = ctx.edges.some(
     e =>
-      e.source === source.id
+      e.source === resolvedSource.id
       && e.target === target.id
       && e.edgeKind === edgeKind
       && e.label === options.label
@@ -88,7 +96,7 @@ function connect(
   }
   ctx.edges.push({
     id: nextEdgeId(ctx),
-    source: source.id,
+    source: resolvedSource.id,
     target: target.id,
     label: options.label,
     branch: options.branch,
@@ -149,12 +157,13 @@ function buildBranchSequenceOutside(
     const path = `${pathPrefix}/${i}`
     if (!prev) {
       const node = expandActionItemRoot(ctx, a, path)
-      connect(ctx, anchor, node, {
-        sourceHandle: branchKey,
-        targetHandle: 'flow',
+      const branchSource =
+        findBranchExitNode(ctx.nodes, anchor, branchKey) ?? anchor
+      connect(ctx, branchSource, node, {
         itemKey: branchKey,
         branch: branchKey,
         label: branchKey,
+        resolveSource: false,
       })
       prev = node
     }
@@ -195,14 +204,20 @@ function expandServiceAtFlowLevel(
     { isContainer: true, serviceWrap: true, layoutHeaderHeight: 40 },
     undefined,
   )
+  const main = expandServiceActionInContainer(
+    asActionContext(ctx),
+    a,
+    `${path}/svc`,
+    wrap,
+    undefined,
+  )
   if (prev) {
-    connect(ctx, prev, wrap)
+    connect(ctx, prev, main)
   }
   else {
-    connect(ctx, parent, wrap, firstEdge)
+    connect(ctx, parent, main, firstEdge)
   }
-  expandServiceActionInContainer(asActionContext(ctx), a, `${path}/svc`, wrap, undefined)
-  return wrap
+  return main
 }
 
 function buildTriggers(

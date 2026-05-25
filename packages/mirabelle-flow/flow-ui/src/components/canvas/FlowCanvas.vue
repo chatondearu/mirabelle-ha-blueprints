@@ -15,6 +15,7 @@ import { Controls } from '@vue-flow/controls'
 import { reconcileGroupLayouts } from '@mirabelle/flow-core'
 import { computed, watch } from 'vue'
 import { useFlowStore } from '@/stores/flow'
+import { computeNodeHandleVisibility } from './composables/node-handle-visibility'
 import CanvasVariablesToolbar from './CanvasVariablesToolbar.vue'
 import FlowNeonEdge from './FlowNeonEdge.vue'
 import { FLOW_NODE_RENDERER_MAP } from './flow-node-renderer-map'
@@ -69,6 +70,7 @@ const nodes = computed<Node[]>(() => {
         groupSizes[n.id]
         ?? (n.data.groupSize as { width: number, height: number } | undefined)
       const isChild = Boolean(n.parentId)
+      const isContainer = n.data.isContainer === true || n.data.isGroup === true
       return {
         id: n.id,
         type: n.kind,
@@ -91,6 +93,13 @@ const nodes = computed<Node[]>(() => {
           pathDimmed,
           pathFocus: store.selectedNodeId === n.id,
           simulationActive,
+          handles: computeNodeHandleVisibility(
+            n.id,
+            n.kind,
+            n.parentId,
+            isContainer,
+            doc.edges,
+          ),
         },
       }
     })

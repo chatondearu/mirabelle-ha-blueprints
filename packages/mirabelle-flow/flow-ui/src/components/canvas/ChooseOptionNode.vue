@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useNodeVisuals } from './composables/useNodeVisuals'
+import FlowNodeHandles from './FlowNodeHandles.vue'
 import type { FlowCanvasNodeProps } from './node-types'
 
 const props = defineProps<FlowCanvasNodeProps>()
-const visuals = useNodeVisuals(props.data)
+const { stateClasses } = useNodeVisuals(() => props.data)
 
 const isDefault = computed(() => props.data.rawData?.isDefault === true)
 </script>
@@ -13,8 +14,9 @@ const isDefault = computed(() => props.data.rawData?.isDefault === true)
   <div
     class="flow-node-card flow-node-card--child min-w-32"
     :data-kind="data.kind"
-    :class="visuals.stateClasses"
+    :class="stateClasses"
   >
+    <FlowNodeHandles :handles="data.handles" />
     <div
       class="text-[11px] font-medium"
       :class="isDefault ? 'text-purple-200' : 'text-neutral-400'"

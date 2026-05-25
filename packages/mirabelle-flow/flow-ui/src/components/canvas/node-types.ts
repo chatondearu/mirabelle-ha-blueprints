@@ -1,5 +1,6 @@
 import type { FlowNodeKind } from '@mirabelle/flow-shared'
 import type { NodeProps } from '@vue-flow/core'
+import type { NodeHandleVisibility } from './composables/node-handle-visibility'
 
 export interface FlowCanvasNodeData {
   nodeId: string
@@ -12,6 +13,7 @@ export interface FlowCanvasNodeData {
   pathDimmed?: boolean
   pathFocus?: boolean
   simulationActive?: boolean
+  handles: NodeHandleVisibility
 }
 
 export type FlowCanvasNodeProps = NodeProps<FlowCanvasNodeData>

@@ -134,6 +134,7 @@
   height: 1rem;
   flex-shrink: 0;
   opacity: 0.9;
+  color: #d4d4d4;
 }
 
 .flow-node-neon {

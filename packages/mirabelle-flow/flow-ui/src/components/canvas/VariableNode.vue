@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { Handle, Position } from '@vue-flow/core'
 import { computed } from 'vue'
 import { useNodeVisuals } from './composables/useNodeVisuals'
+import FlowNodeHandles from './FlowNodeHandles.vue'
 import type { FlowCanvasNodeProps } from './node-types'
 
 const props = defineProps<FlowCanvasNodeProps>()
-const visuals = useNodeVisuals(props.data)
+const { stateClasses } = useNodeVisuals(() => props.data)
 
 const varName = computed(() => String(props.data.rawData?.name ?? props.data.label))
 </script>
@@ -14,19 +14,18 @@ const varName = computed(() => String(props.data.rawData?.name ?? props.data.lab
   <div
     class="flow-node-card flow-node-card--child min-w-32"
     :data-kind="data.kind"
-    :class="visuals.stateClasses"
+    :class="stateClasses"
   >
+    <FlowNodeHandles
+      :handles="data.handles"
+      :source-id="`var-${varName}`"
+      source-class="!bg-neutral-300"
+    />
     <div class="text-[11px] font-medium text-teal-200">
       {{ varName }}
     </div>
     <div class="mt-0.5 truncate text-[10px] text-neutral-400">
       {{ data.label }}
     </div>
-    <Handle
-      type="source"
-      :position="Position.Right"
-      :id="`var-${varName}`"
-      class="!bg-neutral-300"
-    />
   </div>
 </template>

@@ -119,8 +119,15 @@ describe('graph structure', () => {
     )
     expect(turnOn).toBeDefined()
     expect(turnOn?.parentId).not.toBe(chooseNode?.id)
+    const branchSources = doc.nodes.filter(
+      n =>
+        n.parentId === chooseNode?.id
+        && (n.kind === 'condition' || n.kind === 'choose_option'),
+    )
     const branchFlow = doc.edges.filter(
-      e => e.edgeKind === 'flow' && e.source === chooseNode?.id,
+      e =>
+        e.edgeKind === 'flow'
+        && branchSources.some(s => s.id === e.source),
     )
     expect(branchFlow.length).toBeGreaterThan(0)
     expect(
@@ -128,5 +135,10 @@ describe('graph structure', () => {
         e => e.target === turnOn?.id || e.target === turnOn?.parentId,
       ),
     ).toBe(true)
+    expect(
+      doc.edges.some(
+        e => e.edgeKind === 'flow' && e.source === chooseNode?.id,
+      ),
+    ).toBe(false)
   })
 })
