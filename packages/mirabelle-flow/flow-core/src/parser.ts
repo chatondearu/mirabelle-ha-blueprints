@@ -16,6 +16,7 @@ import {
   autoLayout,
   buildGraphFromConfig,
 } from './graph-builder.js'
+import { applyVariableVisibility } from './variable-visibility.js'
 import {
   detectDocumentKind,
   extractBlueprintMeta,
@@ -135,37 +136,19 @@ export function parseAutomationYaml(
     alias: alias ?? blueprintMeta?.name ?? 'Flow',
     mode,
     viewMode,
-    inputItems,
+    blueprint: blueprintMeta
+      ? {
+          meta: blueprintMeta,
+          inputItems,
+          simulationValues,
+        }
+      : undefined,
   })
-
-  if (blueprintMeta) {
-    const metaNode = {
-      id: 'blueprint_meta',
-      kind: 'blueprint_meta' as const,
-      label: blueprintMeta.name ?? 'Blueprint',
-      path: 'blueprint',
-      data: {
-        meta: blueprintMeta,
-        inputs: blueprintMeta.inputs,
-        simulationValues,
-      },
-      layer: 'blueprint' as const,
-    }
-    nodes.unshift(metaNode)
-    const rootNode = nodes.find(n => n.kind === 'root')
-    if (rootNode) {
-      edges.unshift({
-        id: 'e-blueprint',
-        source: metaNode.id,
-        target: rootNode.id,
-        label: 'automation',
-        edgeKind: 'flow' as const,
-      })
-    }
-  }
 
   const bindingEdges = analyzeBindings(nodes)
   edges.push(...bindingEdges)
+  applyVariableVisibility(nodes, edges)
+
 
   if (options.preview) {
     enrichNodeLabels({ nodes, edges } as FlowDocument)

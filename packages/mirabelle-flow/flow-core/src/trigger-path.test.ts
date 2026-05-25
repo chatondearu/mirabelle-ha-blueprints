@@ -23,7 +23,7 @@ describe('getTriggerPathNodeIds', () => {
 
     const visible = getTriggerPathNodeIds(keypad!.id, doc.nodes, doc.edges)!
     expect(visible.has(keypad!.id)).toBe(true)
-    expect(visible.has('blueprint_meta')).toBe(false)
+    expect(visible.has('blueprint')).toBe(true)
 
     const otherTrigger = doc.nodes.find(
       n => n.kind === 'trigger' && n.data.id === 'alarmo_state_change',

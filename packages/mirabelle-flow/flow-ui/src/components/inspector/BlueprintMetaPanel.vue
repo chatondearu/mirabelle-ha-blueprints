@@ -9,7 +9,7 @@ const store = useFlowStore()
 const picker = useEntityPicker()
 
 const metaNode = computed(() =>
-  store.document?.nodes.find(n => n.kind === 'blueprint_meta'),
+  store.document?.nodes.find(n => n.kind === 'blueprint'),
 )
 
 const inputs = computed(
@@ -51,7 +51,7 @@ function isEntityInput(input: BlueprintInputDef): boolean {
   <div v-if="metaNode" class="flex flex-col gap-4 overflow-y-auto p-4">
     <div>
       <div class="text-xs text-neutral-500">
-        blueprint_meta
+        blueprint
       </div>
       <h2 class="text-lg font-semibold text-pink-300">
         {{ metaNode.label }}

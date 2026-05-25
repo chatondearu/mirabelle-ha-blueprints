@@ -12,18 +12,19 @@ function loadBlueprint(relPath: string): string {
 }
 
 describe('analyzeBindings', () => {
-  it('creates input_binding edges from inputs node to consumers', () => {
+  it('creates input_binding edges from blueprint_input children to consumers', () => {
     const yaml = loadBlueprint('blueprints/automations/frient_keypad_with_alarmo.yaml')
     const doc = parseAutomationYaml(yaml, {
       source: 'frient_keypad_with_alarmo.yaml',
       preview: false,
     })
 
-    expect(doc.nodes.some(n => n.kind === 'blueprint_input')).toBe(false)
+    const inputNodes = doc.nodes.filter(n => n.kind === 'blueprint_input')
+    expect(inputNodes.length).toBeGreaterThan(0)
     const inputBindings = doc.edges.filter(e => e.edgeKind === 'input_binding')
     expect(inputBindings.length).toBeGreaterThan(0)
-    const inputsNode = doc.nodes.find(n => n.kind === 'inputs' || n.kind === 'inputs_variables')
-    expect(inputBindings.some(e => e.source === inputsNode?.id)).toBe(true)
+    const inputIds = new Set(inputNodes.map(n => n.id))
+    expect(inputBindings.some(e => inputIds.has(e.source))).toBe(true)
   })
 
   it('creates variable_binding edges for template references', () => {
@@ -33,7 +34,7 @@ describe('analyzeBindings', () => {
       preview: false,
     })
 
-    const varsNode = doc.nodes.find(n => n.kind === 'variables' || n.kind === 'inputs_variables')
+    const varsNode = doc.nodes.find(n => n.kind === 'variables')
     expect(varsNode).toBeDefined()
 
     const varBindings = doc.edges.filter(e => e.edgeKind === 'variable_binding')
@@ -45,11 +46,19 @@ describe('analyzeBindings unit', () => {
   it('links input refs in node data', () => {
     const nodes = [
       {
-        id: 'inputs',
-        kind: 'inputs' as const,
-        label: 'Inputs',
-        path: 'inputs',
-        data: { items: [{ key: 'sensor', label: 'sensor' }] },
+        id: 'blueprint',
+        kind: 'blueprint' as const,
+        label: 'Blueprint',
+        path: 'blueprint',
+        data: { isGroup: true },
+      },
+      {
+        id: 'blueprint_input_sensor',
+        kind: 'blueprint_input' as const,
+        label: 'sensor',
+        path: 'blueprint/input/sensor',
+        data: { key: 'sensor' },
+        parentId: 'blueprint',
       },
       {
         id: 'trigger_0',
@@ -60,8 +69,10 @@ describe('analyzeBindings unit', () => {
       },
     ]
     const edges = analyzeBindings(nodes)
-    expect(edges.some(e => e.edgeKind === 'input_binding' && e.label === 'sensor')).toBe(
-      true,
-    )
+    expect(
+      edges.some(
+        e => e.edgeKind === 'input_binding' && e.source === 'blueprint_input_sensor',
+      ),
+    ).toBe(true)
   })
 })

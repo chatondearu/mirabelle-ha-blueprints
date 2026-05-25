@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { FlowNode as FlowNodeType } from '@mirabelle/flow-shared'
+import { isConfigLayerNode } from '@mirabelle/flow-shared'
 import {
   VueFlow,
   useVueFlow,
@@ -41,14 +42,24 @@ const nodes = computed<Node[]>(() => {
   }
   return doc.nodes
     .filter(n => isNodeVisible(n.id))
+    .filter(n => n.data.hidden !== true)
     .map((n: FlowNodeType) => {
       const pathActive = store.pathHighlightNodeIds.has(n.id)
-      const pathDimmed = hasPathHighlight.value && !pathActive
+      const pathDimmed =
+        hasPathHighlight.value
+        && !pathActive
+        && !isConfigLayerNode(n)
       const simulationActive = store.simulationActiveNodeIds.has(n.id)
+      const groupSize = n.data.groupSize as { width: number, height: number } | undefined
       return {
         id: n.id,
         type: n.kind,
         position: doc.layout[n.id] ?? { x: 0, y: 0 },
+        parentNode: n.parentId,
+        extent: n.parentId ? ('parent' as const) : undefined,
+        style: groupSize
+          ? { width: `${groupSize.width}px`, height: `${groupSize.height}px` }
+          : undefined,
         data: {
           nodeId: n.id,
           label: n.label,
@@ -70,8 +81,12 @@ const edges = computed<Edge[]>(() => {
   if (!doc) {
     return []
   }
+  const visibleIds = new Set(
+    doc.nodes.filter(n => n.data.hidden !== true).map(n => n.id),
+  )
   return doc.edges
     .filter(e => isNodeVisible(e.source) && isNodeVisible(e.target))
+    .filter(e => visibleIds.has(e.source) && visibleIds.has(e.target))
     .map((e) => {
       const pathActive = store.pathHighlightEdgeIds.has(e.id)
       const traceHighlight = store.highlightedNodeIds.has(e.target)

@@ -122,7 +122,7 @@ export const useFlowStore = defineStore('flow', () => {
       })
       document.value = doc
       rawYamlPanel.value = text
-      const meta = doc.nodes.find(n => n.kind === 'blueprint_meta')
+      const meta = doc.nodes.find(n => n.kind === 'blueprint')
       const sim = meta?.data.simulationValues as Record<string, unknown> | undefined
       if (sim) {
         previewInputs.value = { ...sim }
@@ -169,7 +169,7 @@ export const useFlowStore = defineStore('flow', () => {
 
   function setSimulationInput(key: string, value: unknown) {
     previewInputs.value = { ...previewInputs.value, [key]: value }
-    const meta = document.value?.nodes.find(n => n.kind === 'blueprint_meta')
+    const meta = document.value?.nodes.find(n => n.kind === 'blueprint')
     if (meta) {
       const sim = {
         ...(meta.data.simulationValues as Record<string, unknown> | undefined),
@@ -189,9 +189,11 @@ export const useFlowStore = defineStore('flow', () => {
       return
     }
     const source =
-      document.value.nodes.find(n => n.kind === 'inputs' || n.kind === 'inputs_variables')
-        ?.id
-      ?? 'blueprint_meta'
+      document.value.nodes.find(
+        n => n.kind === 'blueprint_input' && n.data.key === inputKey,
+      )?.id
+      ?? document.value.nodes.find(n => n.kind === 'blueprint')?.id
+      ?? 'blueprint'
     const { nodeIds, edgeIds } = getBindingHighlight(
       source,
       inputKey,
@@ -206,9 +208,11 @@ export const useFlowStore = defineStore('flow', () => {
     if (!document.value) {
       return
     }
+    const blueprintNode = document.value.nodes.find(n => n.kind === 'blueprint')
+    const variablesNode = document.value.nodes.find(n => n.kind === 'variables')
     const source =
-      document.value.nodes.find(n => n.kind === 'variables' || n.kind === 'inputs_variables')
-        ?.id
+      variablesNode?.id
+      ?? (blueprintNode?.data.viewMode === 'combined' ? blueprintNode.id : undefined)
       ?? variableNodeId
     const { nodeIds, edgeIds } = getBindingHighlight(
       source,

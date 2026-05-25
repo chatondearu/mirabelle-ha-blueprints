@@ -11,25 +11,29 @@ function loadBlueprint(relPath: string): string {
 }
 
 describe('graph structure', () => {
-  it('keeps blueprint inputs on meta node only', () => {
+  it('keeps blueprint inputs as child nodes under blueprint parent', () => {
     const yaml = loadBlueprint('blueprints/automations/presence_based_lighting.yaml')
     const doc = parseAutomationYaml(yaml, { source: 'presence_based_lighting.yaml' })
 
-    expect(doc.nodes.some(n => n.kind === 'blueprint_input')).toBe(false)
-    const meta = doc.nodes.find(n => n.kind === 'blueprint_meta')
-    expect(meta?.data.inputs).toBeDefined()
-    expect(meta?.data.simulationValues).toBeDefined()
+    expect(doc.nodes.some(n => n.kind === 'blueprint_input')).toBe(true)
+    expect(doc.nodes.some(n => (n.kind as string) === 'root')).toBe(false)
+    const blueprint = doc.nodes.find(n => n.kind === 'blueprint')
+    expect(blueprint?.data.isGroup).toBe(true)
+    const inputs = doc.nodes.filter(n => n.kind === 'blueprint_input')
+    expect(inputs.length).toBeGreaterThan(0)
+    expect(inputs.every(n => n.parentId === blueprint?.id)).toBe(true)
+    expect(doc.edges.some(e => e.edgeKind === 'flow' && e.source === blueprint?.id)).toBe(false)
   })
 
-  it('creates a variables list node with one item per YAML variable', () => {
+  it('creates variable child nodes under variables parent', () => {
     const yaml = loadBlueprint('blueprints/automations/frient_keypad_with_alarmo.yaml')
     const doc = parseAutomationYaml(yaml, { source: 'frient_keypad_with_alarmo.yaml' })
 
-    const varsNode = doc.nodes.find(n => n.kind === 'variables')
-    expect(varsNode).toBeDefined()
-    const items = varsNode?.data.items as Array<{ key: string }> | undefined
-    expect(items?.length).toBeGreaterThan(5)
-    expect(items?.some(item => item.key === 'language')).toBe(true)
+    const varsParent = doc.nodes.find(n => n.kind === 'variables')
+    expect(varsParent).toBeDefined()
+    const varChildren = doc.nodes.filter(n => n.kind === 'variable')
+    expect(varChildren.length).toBeGreaterThan(0)
+    expect(varChildren.every(n => n.parentId === varsParent?.id)).toBe(true)
   })
 
   it('expands choose branches into action nodes', () => {
@@ -42,39 +46,38 @@ describe('graph structure', () => {
     const services = doc.nodes.filter(
       n => n.kind === 'action' && typeof n.data.service === 'string',
     )
+    // actions may live inside HA container parents
     expect(services.length).toBeGreaterThan(2)
   })
 
-  it('connects root to each trigger and adds reference edges', () => {
+  it('does not connect config nodes to triggers with flow edges', () => {
     const yaml = loadBlueprint('blueprints/automations/frient_keypad_with_alarmo.yaml')
     const doc = parseAutomationYaml(yaml, { source: 'frient_keypad_with_alarmo.yaml' })
 
-    const root = doc.nodes.find(n => n.kind === 'root')
+    const blueprint = doc.nodes.find(n => n.kind === 'blueprint')
     const triggers = doc.nodes.filter(n => n.kind === 'trigger')
     for (const trigger of triggers) {
       expect(
         doc.edges.some(
           e =>
-            e.source === root?.id
+            (e.source === blueprint?.id || e.source === 'variables')
             && e.target === trigger.id
             && e.edgeKind === 'flow',
         ),
-      ).toBe(true)
+      ).toBe(false)
     }
 
     const refs = doc.edges.filter(e => e.edgeKind === 'reference')
     expect(refs.length).toBeGreaterThanOrEqual(2)
   })
 
-  it('creates choose option handles and no synthetic condition subnodes', () => {
+  it('creates choose as container with option child nodes', () => {
     const yaml = loadBlueprint('blueprints/automations/presence_based_lighting.yaml')
     const doc = parseAutomationYaml(yaml, { source: 'presence_based_lighting.yaml' })
     const chooseNode = doc.nodes.find(n => n.kind === 'choose')
-    expect(chooseNode).toBeDefined()
-    const options = chooseNode?.data.options as Array<{ key: string }> | undefined
-    expect(options?.length).toBeGreaterThanOrEqual(1)
-    expect(
-      doc.edges.some(e => e.source === chooseNode?.id && e.sourceHandle?.startsWith('opt-')),
-    ).toBe(true)
+    expect(chooseNode?.data.isContainer).toBe(true)
+    const options = doc.nodes.filter(n => n.kind === 'choose_option')
+    expect(options.length).toBeGreaterThan(0)
+    expect(options.every(n => n.parentId === chooseNode?.id)).toBe(true)
   })
 })

@@ -17,7 +17,7 @@ function formatValue(value: unknown): string {
 
 export function enrichNodeLabels(doc: FlowDocument): void {
   const simulationValues =
-    (doc.nodes.find(n => n.kind === 'blueprint_meta')?.data.simulationValues as
+    (doc.nodes.find(n => n.kind === 'blueprint')?.data.simulationValues as
       | Record<string, unknown>
       | undefined)
     ?? {}
@@ -56,18 +56,21 @@ export function enrichNodeLabels(doc: FlowDocument): void {
       }
     }
 
-    if (node.kind === 'variables' || node.kind === 'inputs_variables') {
-      const items = Array.isArray(node.data.items) ? (node.data.items as Array<Record<string, unknown>>) : []
-      node.data.items = items.map((item) => {
-        const value = item.value
-        if (isInputRef(value)) {
-          return {
-            ...item,
-            value: simulationValues[value.__input] ?? value,
-          }
+    if (node.kind === 'blueprint_input') {
+      const key = node.data.key as string
+      if (key && simulationValues[key] !== undefined) {
+        node.data.value = simulationValues[key]
+      }
+    }
+
+    if (node.kind === 'variable') {
+      const raw = node.data.value
+      if (isInputRef(raw)) {
+        const substituted = simulationValues[raw.__input]
+        if (substituted !== undefined) {
+          node.label = `${node.data.name}: ← ${formatValue(substituted)}`
         }
-        return item
-      })
+      }
     }
 
     if (node.kind === 'choose' && Array.isArray(node.data.options)) {

@@ -10,6 +10,9 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       '@': resolve(__dirname, 'src'),
+      // Dev: use package sources so dist rebuild is not required after flow-shared/flow-core edits
+      '@mirabelle/flow-shared': resolve(__dirname, '../flow-shared/src/index.ts'),
+      '@mirabelle/flow-core': resolve(__dirname, '../flow-core/src/index.ts'),
     },
   },
   base: mode === 'ha' ? '/mirabelle-flow/' : '/',

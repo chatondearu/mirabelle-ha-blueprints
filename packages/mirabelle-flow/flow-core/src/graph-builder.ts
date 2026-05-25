@@ -1,4 +1,5 @@
 import type {
+  BlueprintMeta,
   FlowDocument,
   FlowEdge,
   FlowEdgeKind,
@@ -7,7 +8,7 @@ import type {
   FlowNodeKind,
   FlowViewMode,
 } from '@mirabelle/flow-shared'
-import { FLOW_LAYOUT, getNodeLayer } from '@mirabelle/flow-shared'
+import { FLOW_LAYOUT, getNodeLayer, isConfigLayerNode } from '@mirabelle/flow-shared'
 import { getHaBlockDescriptor } from './ha-block-registry.js'
 import { extractTriggerIdsFromCondition } from './trigger-path.js'
 
@@ -30,7 +31,7 @@ function addNode(
   data: Record<string, unknown>,
   parentId?: string,
 ): FlowNode {
-  const id = path.replace(/\//g, '_') || 'root'
+  const id = path.replace(/\//g, '_') || 'node'
   const node: FlowNode = {
     id,
     kind,
@@ -140,7 +141,7 @@ function summarizeAction(a: Record<string, unknown>): string {
 function buildTriggers(
   ctx: BuildContext,
   triggers: unknown[],
-  parent: FlowNode,
+  parent?: FlowNode,
 ): FlowNode[] {
   const nodes: FlowNode[] = []
   triggers.forEach((t, i) => {
@@ -154,9 +155,11 @@ function buildTriggers(
       'trigger',
       summarizeTrigger(t as Record<string, unknown>),
       t as Record<string, unknown>,
-      parent.id,
+      parent?.id,
     )
-    connect(ctx, parent, node)
+    if (parent) {
+      connect(ctx, parent, node)
+    }
     nodes.push(node)
   })
   return nodes
@@ -179,7 +182,7 @@ function buildConditions(
       'condition',
       summarizeCondition(c as Record<string, unknown>),
       c as Record<string, unknown>,
-      parent.id,
+      undefined,
     )
     connect(ctx, parent, node)
     leaves.push(node)
@@ -197,44 +200,71 @@ function valueType(value: unknown): string {
   return typeof value
 }
 
-function buildVariablesNode(
+function buildBlueprintGroup(
+  ctx: BuildContext,
+  meta: BlueprintMeta,
+  inputItems: FlowListItem[],
+  simulationValues: Record<string, unknown>,
+): FlowNode {
+  const parent = addNode(
+    ctx,
+    'blueprint',
+    'blueprint',
+    meta.name ?? 'Blueprint',
+    {
+      meta,
+      inputs: meta.inputs,
+      simulationValues,
+      isGroup: true,
+    },
+    undefined,
+  )
+  for (const item of inputItems) {
+    addNode(
+      ctx,
+      `blueprint/input/${item.key}`,
+      'blueprint_input',
+      item.label,
+      {
+        key: item.key,
+        value: item.value,
+        valueType: item.valueType,
+        meta: item.meta,
+        selector: item.meta?.selector,
+      },
+      parent.id,
+    )
+  }
+  return parent
+}
+
+function buildVariablesGroup(
   ctx: BuildContext,
   variables: Record<string, unknown>,
-  parent: FlowNode,
-  viewMode: FlowViewMode,
-): { node: FlowNode; items: FlowListItem[] } | null {
+): FlowNode | null {
   const entries = Object.entries(variables)
   if (entries.length === 0) {
     return null
   }
-  const items: FlowListItem[] = entries.map(([name, value]) => ({
-    key: name,
-    label: name,
-    value,
-    valueType: valueType(value),
-    group:
-      value && typeof value === 'object' && '__input' in (value as Record<string, unknown>)
-        ? 'input_alias'
-        : 'variable',
-  }))
-  if (viewMode === 'combined' && parent.kind === 'inputs_variables') {
-    const existing = Array.isArray(parent.data.items)
-      ? (parent.data.items as FlowListItem[])
-      : []
-    parent.data.items = [...existing, ...items]
-    return { node: parent, items }
-  }
-  const nodeKind: FlowNodeKind = 'variables'
-  const node = addNode(
+  const parent = addNode(
     ctx,
     'variables',
-    nodeKind,
-    viewMode === 'combined' ? 'Inputs & Variables' : 'Variables',
-    { items, viewMode },
-    parent.id,
+    'variables',
+    'Variables',
+    { isGroup: true },
+    undefined,
   )
-  connect(ctx, parent, node)
-  return { node, items }
+  for (const [name, value] of entries) {
+    addNode(
+      ctx,
+      `variables/${name}`,
+      'variable',
+      name,
+      { name, value, key: name },
+      parent.id,
+    )
+  }
+  return parent
 }
 
 function expandActionItem(
@@ -252,19 +282,26 @@ function expandActionItem(
   },
 ): FlowNode {
   if (Array.isArray(a.sequence)) {
-    const seqNode = addNode(ctx, path, 'sequence', 'Sequence', { sequence: true }, parent.id)
+    const seqNode = addNode(
+      ctx,
+      path,
+      'sequence',
+      'Sequence',
+      { sequence: true, isContainer: true },
+      undefined,
+    )
     if (prev) {
       connect(ctx, prev, seqNode)
     }
     else {
       connect(ctx, parent, seqNode, firstEdge)
     }
-    const leaves = buildActions(ctx, a.sequence, seqNode, `${path}/sequence`)
+    const leaves = buildActionsInContainer(ctx, a.sequence, seqNode, `${path}/sequence`)
     return leaves[leaves.length - 1] ?? seqNode
   }
 
   if (a.repeat && typeof a.repeat === 'object') {
-    const repeatNode = addNode(ctx, path, 'repeat', 'Repeat', a, parent.id)
+    const repeatNode = addNode(ctx, path, 'repeat', 'Repeat', { ...a, isContainer: true }, undefined)
     if (prev) {
       connect(ctx, prev, repeatNode)
     }
@@ -273,14 +310,21 @@ function expandActionItem(
     }
     const body = (a.repeat as { sequence?: unknown[] }).sequence ?? []
     if (body.length > 0) {
-      const leaves = buildActions(ctx, body, repeatNode, `${path}/repeat/sequence`)
+      const leaves = buildActionsInContainer(ctx, body, repeatNode, `${path}/repeat/sequence`)
       return leaves[leaves.length - 1] ?? repeatNode
     }
     return repeatNode
   }
 
   if (Array.isArray(a.parallel)) {
-    const parNode = addNode(ctx, path, 'parallel', 'Parallel', { parallel: true }, parent.id)
+    const parNode = addNode(
+      ctx,
+      path,
+      'parallel',
+      'Parallel',
+      { parallel: true, isContainer: true },
+      undefined,
+    )
     if (prev) {
       connect(ctx, prev, parNode)
     }
@@ -290,7 +334,7 @@ function expandActionItem(
     let last: FlowNode = parNode
     a.parallel.forEach((branch, bi) => {
       if (branch && typeof branch === 'object') {
-        const leaves = buildActions(
+        const leaves = buildActionsInContainer(
           ctx,
           [branch],
           parNode,
@@ -311,7 +355,7 @@ function expandActionItem(
       'delay',
       summarizeAction(a),
       a,
-      parent.id,
+      undefined,
     )
     if (prev) {
       connect(ctx, prev, delayNode)
@@ -323,7 +367,7 @@ function expandActionItem(
   }
 
   if (a.wait_template !== undefined || a.wait_for_trigger !== undefined) {
-    const waitNode = addNode(ctx, path, 'wait', summarizeAction(a), a, parent.id)
+    const waitNode = addNode(ctx, path, 'wait', summarizeAction(a), a, undefined)
     if (prev) {
       connect(ctx, prev, waitNode)
     }
@@ -333,12 +377,220 @@ function expandActionItem(
     return waitNode
   }
 
-  const node = addNode(ctx, path, 'action', summarizeAction(a), a, parent.id)
+  const node = addNode(ctx, path, 'action', summarizeAction(a), a, undefined)
   if (prev) {
     connect(ctx, prev, node)
   }
   else {
     connect(ctx, parent, node, firstEdge)
+  }
+  return node
+}
+
+/** Top-level action chain when no trigger/condition anchor exists (e.g. script blueprints). */
+function buildRootActionChain(
+  ctx: BuildContext,
+  actions: unknown[],
+  pathPrefix: string,
+): void {
+  let prev: FlowNode | undefined
+  actions.forEach((raw, i) => {
+    if (!raw || typeof raw !== 'object') {
+      return
+    }
+    const a = raw as Record<string, unknown>
+    const path = `${pathPrefix}/${i}`
+    if (!prev) {
+      prev = expandActionItemRoot(ctx, a, path)
+    }
+    else {
+      prev = expandActionItem(ctx, a, path, prev, prev)
+    }
+  })
+}
+
+function expandActionItemRoot(
+  ctx: BuildContext,
+  a: Record<string, unknown>,
+  path: string,
+): FlowNode {
+  if (a.choose) {
+    return materializeChoose(ctx, a, path, {})
+  }
+
+  if (Array.isArray(a.sequence)) {
+    const seqNode = addNode(
+      ctx,
+      path,
+      'sequence',
+      'Sequence',
+      { sequence: true, isContainer: true },
+      undefined,
+    )
+    const leaves = buildActionsInContainer(ctx, a.sequence, seqNode, `${path}/sequence`)
+    return leaves[leaves.length - 1] ?? seqNode
+  }
+  const descriptor = getHaBlockDescriptor(a)
+  return addNode(ctx, path, descriptor.nodeKind, summarizeAction(a), a, undefined)
+}
+
+/** Actions nested inside a container node (sequence, parallel, repeat, choose branches). */
+function buildActionsInContainer(
+  ctx: BuildContext,
+  actions: unknown[],
+  container: FlowNode,
+  pathPrefix: string,
+): FlowNode[] {
+  const leaves: FlowNode[] = []
+  let prev: FlowNode | undefined
+
+  actions.forEach((raw, i) => {
+    if (!raw || typeof raw !== 'object') {
+      return
+    }
+    const a = raw as Record<string, unknown>
+    const path = `${pathPrefix}/${i}`
+    const node = expandActionItemInContainer(ctx, a, path, container, prev)
+    prev = node
+    leaves.push(node)
+  })
+
+  return leaves
+}
+
+function materializeChoose(
+  ctx: BuildContext,
+  a: Record<string, unknown>,
+  path: string,
+  options: {
+    parentId?: string
+    flowParent?: FlowNode
+    prev?: FlowNode
+    firstEdge?: {
+      sourceHandle?: string
+      targetHandle?: string
+      label?: string
+      branch?: string
+      itemKey?: string
+    }
+  },
+): FlowNode {
+  const choose = a.choose as Array<{
+    conditions?: unknown[]
+    sequence?: unknown[]
+  }>
+  const optionDefs = choose.map((branch, bi) => ({
+    key: `opt-${bi}`,
+    label: `Option ${bi + 1}`,
+    conditions: branch.conditions ?? [],
+    hasSequence: (branch.sequence ?? []).length > 0,
+  }))
+  const chooseNode = addNode(
+    ctx,
+    path,
+    'choose',
+    'Choose',
+    {
+      options: optionDefs,
+      isContainer: true,
+      hasDefault: Array.isArray((a as { default?: unknown[] }).default)
+        && ((a as { default?: unknown[] }).default?.length ?? 0) > 0,
+    },
+    options.parentId,
+  )
+  if (options.prev) {
+    connect(ctx, options.prev, chooseNode)
+  }
+  else if (options.flowParent) {
+    connect(ctx, options.flowParent, chooseNode, options.firstEdge)
+  }
+
+  choose.forEach((branch, bi) => {
+    const optionKey = `opt-${bi}`
+    addNode(
+      ctx,
+      `${path}/choose/${bi}/option`,
+      'choose_option',
+      `Option ${bi + 1}`,
+      {
+        key: optionKey,
+        label: `Option ${bi + 1}`,
+        conditions: branch.conditions ?? [],
+      },
+      chooseNode.id,
+    )
+  })
+
+  const branchLeaves: FlowNode[] = []
+  choose.forEach((branch, bi) => {
+    const branchPath = `${path}/choose/${bi}`
+    const seq = branch.sequence ?? []
+    const seqLeaves = buildActionsInContainer(
+      ctx,
+      seq,
+      chooseNode,
+      `${branchPath}/sequence`,
+    )
+    if (seqLeaves.length > 0) {
+      branchLeaves.push(seqLeaves[seqLeaves.length - 1]!)
+    }
+  })
+
+  const defaultSeq = (a as { default?: unknown[] }).default ?? []
+  if (defaultSeq.length > 0) {
+    addNode(
+      ctx,
+      `${path}/choose/default/option`,
+      'choose_option',
+      'Default',
+      { key: 'opt-default', label: 'Default', conditions: [] },
+      chooseNode.id,
+    )
+    const defLeaves = buildActionsInContainer(ctx, defaultSeq, chooseNode, `${path}/default`)
+    branchLeaves.push(...defLeaves)
+  }
+
+  return branchLeaves[branchLeaves.length - 1] ?? chooseNode
+}
+
+function expandActionItemInContainer(
+  ctx: BuildContext,
+  a: Record<string, unknown>,
+  path: string,
+  container: FlowNode,
+  prev: FlowNode | undefined,
+): FlowNode {
+  if (a.choose) {
+    return materializeChoose(ctx, a, path, { parentId: container.id, prev })
+  }
+
+  if (Array.isArray(a.sequence)) {
+    const seqNode = addNode(
+      ctx,
+      path,
+      'sequence',
+      'Sequence',
+      { sequence: true, isContainer: true },
+      container.id,
+    )
+    if (prev) {
+      connect(ctx, prev, seqNode)
+    }
+    const leaves = buildActionsInContainer(ctx, a.sequence, seqNode, `${path}/sequence`)
+    return leaves[leaves.length - 1] ?? seqNode
+  }
+
+  const descriptor = getHaBlockDescriptor(a)
+  const node = addNode(
+    ctx,
+    path,
+    descriptor.nodeKind,
+    summarizeAction(a),
+    a,
+    container.id,
+  )
+  if (prev) {
+    connect(ctx, prev, node)
   }
   return node
 }
@@ -367,74 +619,7 @@ function buildActions(
     const path = `${pathPrefix}/${i}`
 
     if (a.choose) {
-      const options = (a.choose as Array<{ conditions?: unknown[]; sequence?: unknown[] }>).map(
-        (branch, bi) => ({
-          key: `opt-${bi}`,
-          label: `Option ${bi + 1}`,
-          conditions: branch.conditions ?? [],
-          hasSequence: (branch.sequence ?? []).length > 0,
-        }),
-      )
-      const chooseNode = addNode(
-        ctx,
-        path,
-        'choose',
-        'Choose',
-        {
-          options,
-          hasDefault: Array.isArray((a as { default?: unknown[] }).default)
-            && ((a as { default?: unknown[] }).default?.length ?? 0) > 0,
-        },
-        parent.id,
-      )
-      if (prev) {
-        connect(ctx, prev, chooseNode)
-      }
-      else {
-        connect(ctx, parent, chooseNode, firstEdge)
-      }
-
-      const choose = a.choose as Array<{
-        conditions?: unknown[]
-        sequence?: unknown[]
-      }>
-      const branchLeaves: FlowNode[] = []
-
-      choose.forEach((branch, bi) => {
-        const branchPath = `${path}/choose/${bi}`
-        const conds = branch.conditions ?? []
-        const seq = branch.sequence ?? []
-        const optionKey = `opt-${bi}`
-        const seqLeaves = buildActions(
-          ctx,
-          seq,
-          chooseNode,
-          `${branchPath}/sequence`,
-          {
-            sourceHandle: optionKey,
-            label: `Option ${bi + 1}`,
-            branch: String(bi),
-            itemKey: optionKey,
-          },
-        )
-        branchLeaves.push(...(seqLeaves.length ? seqLeaves : [chooseNode]))
-        if (conds.length === 0 && seq.length === 0) {
-          branchLeaves.push(chooseNode)
-        }
-      })
-
-      const defaultSeq = (a as { default?: unknown[] }).default ?? []
-      if (defaultSeq.length > 0) {
-        const defLeaves = buildActions(ctx, defaultSeq, chooseNode, `${path}/default`, {
-          sourceHandle: 'opt-default',
-          label: 'Default',
-          branch: 'default',
-          itemKey: 'opt-default',
-        })
-        branchLeaves.push(...defLeaves)
-      }
-
-      prev = branchLeaves[branchLeaves.length - 1] ?? chooseNode
+      prev = materializeChoose(ctx, a, path, { flowParent: parent, prev, firstEdge })
       leaves.push(prev)
       return
     }
@@ -503,50 +688,29 @@ export function buildGraphFromConfig(
     alias?: string
     mode?: string
     viewMode?: FlowViewMode
-    inputItems?: FlowListItem[]
+    blueprint?: {
+      meta: BlueprintMeta
+      inputItems: FlowListItem[]
+      simulationValues: Record<string, unknown>
+    }
   } = {},
 ): Pick<FlowDocument, 'nodes' | 'edges'> {
   const ctx: BuildContext = { nodes: [], edges: [], edgeCounter: 0 }
-  const viewMode = options.viewMode ?? 'split'
 
-  const root = addNode(ctx, 'root', 'root', options.alias ?? 'Automation', {}, undefined)
-
-  let entryAnchor: FlowNode = root
-  if (options.inputItems?.length) {
-    const nodeKind: FlowNodeKind =
-      viewMode === 'combined' ? 'inputs_variables' : 'inputs'
-    const inputsNode = addNode(
-      ctx,
-      'inputs',
-      nodeKind,
-      viewMode === 'combined' ? 'Inputs & Variables' : 'Inputs',
-      { items: options.inputItems, viewMode },
-      root.id,
-    )
-    connect(ctx, root, inputsNode)
-    entryAnchor = inputsNode
+  if (options.blueprint) {
+    const { meta, inputItems, simulationValues } = options.blueprint
+    buildBlueprintGroup(ctx, meta, inputItems, simulationValues)
   }
 
   if (config.variables && typeof config.variables === 'object') {
-    const variables = buildVariablesNode(
-      ctx,
-      config.variables as Record<string, unknown>,
-      entryAnchor,
-      viewMode,
-    )
-    if (variables) {
-      entryAnchor = variables.node
-    }
+    buildVariablesGroup(ctx, config.variables as Record<string, unknown>)
   }
 
   const triggers = (config.triggers ?? config.trigger) as unknown[] | undefined
   const triggerList = Array.isArray(triggers) ? triggers : triggers ? [triggers] : []
   const triggerNodes =
-    triggerList.length > 0 ? buildTriggers(ctx, triggerList, root) : []
-  let chainStart = entryAnchor
-  if (triggerNodes.length > 0) {
-    chainStart = triggerNodes[0] ?? entryAnchor
-  }
+    triggerList.length > 0 ? buildTriggers(ctx, triggerList) : []
+  let chainStart: FlowNode | null = triggerNodes[0] ?? null
 
   const conditions = (config.conditions ?? config.condition) as unknown[] | undefined
   const conditionList = Array.isArray(conditions)
@@ -554,8 +718,8 @@ export function buildGraphFromConfig(
     : conditions
       ? [conditions]
       : []
-  let afterConditions = chainStart
-  if (conditionList.length > 0) {
+  let afterConditions: FlowNode | null = chainStart
+  if (conditionList.length > 0 && chainStart) {
     const condLeaves = buildConditions(ctx, conditionList, chainStart)
     afterConditions = condLeaves[condLeaves.length - 1] ?? chainStart
   }
@@ -566,7 +730,13 @@ export function buildGraphFromConfig(
   const actionList = Array.isArray(actions) ? actions : actions ? [actions] : []
   const prefix = config.sequence ? 'sequence' : 'action'
   if (actionList.length > 0) {
-    buildActions(ctx, actionList, afterConditions, prefix)
+    const actionAnchor = afterConditions ?? chainStart
+    if (actionAnchor) {
+      buildActions(ctx, actionList, actionAnchor, prefix)
+    }
+    else {
+      buildRootActionChain(ctx, actionList, prefix)
+    }
   }
 
   if (triggerNodes.length > 0) {
@@ -581,6 +751,51 @@ const STRUCTURAL_EDGE_KINDS = new Set<FlowEdgeKind | undefined>([
   undefined,
 ])
 
+function layoutConfigGroup(
+  parent: FlowNode,
+  children: FlowNode[],
+  originX: number,
+  layout: Record<string, { x: number; y: number }>,
+): number {
+  const step = FLOW_LAYOUT.configChildStep
+  const header = FLOW_LAYOUT.configHeaderHeight
+  const padding = FLOW_LAYOUT.configPadding
+  const width = FLOW_LAYOUT.configGroupWidth
+  const height = header + children.length * step + padding
+
+  layout[parent.id] = { x: originX, y: FLOW_LAYOUT.startY }
+  parent.data.groupSize = { width, height }
+
+  children.forEach((child, i) => {
+    layout[child.id] = {
+      x: FLOW_LAYOUT.configPadding,
+      y: header + i * step,
+    }
+  })
+
+  return width
+}
+
+function layoutContainerChildren(
+  container: FlowNode,
+  children: FlowNode[],
+  layout: Record<string, { x: number; y: number }>,
+): void {
+  const step = FLOW_LAYOUT.configChildStep
+  const header = FLOW_LAYOUT.configHeaderHeight
+  const padding = FLOW_LAYOUT.configPadding
+  const width = Math.max(FLOW_LAYOUT.configGroupWidth, 200)
+  const height = header + children.length * step + padding
+
+  container.data.groupSize = { width, height }
+  children.forEach((child, i) => {
+    layout[child.id] = {
+      x: padding,
+      y: header + i * step,
+    }
+  })
+}
+
 export function autoLayout(
   nodes: FlowNode[],
   edges: FlowEdge[],
@@ -588,6 +803,31 @@ export function autoLayout(
   const layout: Record<string, { x: number; y: number }> = {}
   const H_GAP = FLOW_LAYOUT.horizontalGap
   const V_GAP = FLOW_LAYOUT.verticalGap
+  const execY = FLOW_LAYOUT.startY + FLOW_LAYOUT.configBandHeight
+
+  let configX = FLOW_LAYOUT.startX
+  const blueprintParent = nodes.find(n => n.kind === 'blueprint' && !n.parentId)
+  if (blueprintParent) {
+    const children = nodes.filter(n => n.parentId === blueprintParent.id)
+    configX += layoutConfigGroup(blueprintParent, children, configX, layout) + H_GAP
+  }
+
+  const variablesParent = nodes.find(n => n.kind === 'variables' && !n.parentId)
+  if (variablesParent) {
+    const children = nodes.filter(
+      n => n.parentId === variablesParent.id && !n.data.hidden,
+    )
+    layoutConfigGroup(variablesParent, children, configX, layout)
+  }
+
+  const automationRoots = nodes.filter(
+    n => n.layer !== 'blueprint' && !n.parentId,
+  )
+
+  for (const container of automationRoots.filter(n => n.data.isContainer === true)) {
+    const children = nodes.filter(n => n.parentId === container.id)
+    layoutContainerChildren(container, children, layout)
+  }
 
   const flowEdges = edges.filter(e => STRUCTURAL_EDGE_KINDS.has(e.edgeKind))
   const adjacency = new Map<string, string[]>()
@@ -597,37 +837,40 @@ export function autoLayout(
     adjacency.set(e.source, list)
   }
 
+  const automationNodes = automationRoots.filter(n => !n.data.isContainer || !n.parentId)
   const depth = new Map<string, number>()
-  const start =
-    nodes.find(n => n.kind === 'blueprint_meta') ?? nodes.find(n => n.kind === 'root')
-  if (!start) {
-    nodes.forEach((n, i) => {
-      layout[n.id] = { x: FLOW_LAYOUT.startX, y: FLOW_LAYOUT.startY + i * V_GAP }
-    })
-    return layout
-  }
+  const start = automationNodes.find(n => n.kind === 'trigger') ?? automationNodes[0]
 
-  const queue: string[] = [start.id]
-  depth.set(start.id, 0)
-  while (queue.length > 0) {
-    const id = queue.shift()!
-    const d = depth.get(id) ?? 0
-    for (const child of adjacency.get(id) ?? []) {
-      if (!depth.has(child)) {
-        depth.set(child, d + 1)
-        queue.push(child)
+  if (start) {
+    const queue: string[] = [start.id]
+    depth.set(start.id, 0)
+    while (queue.length > 0) {
+      const id = queue.shift()!
+      const d = depth.get(id) ?? 0
+      for (const child of adjacency.get(id) ?? []) {
+        const childNode = nodes.find(n => n.id === child)
+        if (!childNode || isConfigLayerNode(childNode) || childNode.parentId) {
+          continue
+        }
+        if (!depth.has(child)) {
+          depth.set(child, d + 1)
+          queue.push(child)
+        }
       }
     }
   }
 
-  for (const n of nodes) {
+  for (const n of automationRoots) {
     if (!depth.has(n.id)) {
       depth.set(n.id, 0)
     }
   }
 
   const byDepth = new Map<number, FlowNode[]>()
-  for (const n of nodes) {
+  for (const n of automationRoots) {
+    if (n.parentId) {
+      continue
+    }
     const d = depth.get(n.id) ?? 0
     const list = byDepth.get(d) ?? []
     list.push(n)
@@ -638,7 +881,7 @@ export function autoLayout(
     group.forEach((n, i) => {
       layout[n.id] = {
         x: FLOW_LAYOUT.startX + d * H_GAP,
-        y: FLOW_LAYOUT.startY + i * V_GAP,
+        y: execY + i * V_GAP,
       }
     })
   }

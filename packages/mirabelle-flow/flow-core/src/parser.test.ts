@@ -23,9 +23,11 @@ describe('parseAutomationYaml', () => {
     expect(doc.blueprintMeta?.inputs.length).toBeGreaterThanOrEqual(3)
     expect(doc.nodes.some(n => n.kind === 'trigger')).toBe(true)
     expect(doc.nodes.some(n => n.kind === 'choose')).toBe(true)
-    expect(doc.nodes.some(n => n.kind === 'inputs')).toBe(true)
-    const meta = doc.nodes.find(n => n.kind === 'blueprint_meta')
-    expect(meta?.data.simulationValues).toBeDefined()
+    expect(doc.nodes.some(n => n.kind === 'blueprint')).toBe(true)
+    expect(doc.nodes.some(n => n.kind === 'blueprint_input')).toBe(true)
+    expect(doc.nodes.some(n => (n.kind as string) === 'root')).toBe(false)
+    const blueprint = doc.nodes.find(n => n.kind === 'blueprint')
+    expect(blueprint?.data.simulationValues).toBeDefined()
     expect(doc.nodes.length).toBeGreaterThan(3)
   })
 
@@ -73,12 +75,11 @@ describe('parseAutomationYaml', () => {
     expect(action?.label).toContain('→')
   })
 
-  it('supports combined inputs/variables view mode', () => {
-    const yaml = loadBlueprint('blueprints/automations/presence_based_lighting.yaml')
-    const doc = parseAutomationYaml(yaml, {
-      source: 'presence_based_lighting.yaml',
-      viewMode: 'combined',
-    })
-    expect(doc.nodes.some(n => n.kind === 'inputs_variables')).toBe(true)
+  it('hides internal variables without external bindings', () => {
+    const yaml = loadBlueprint('blueprints/automations/frient_keypad_with_alarmo.yaml')
+    const doc = parseAutomationYaml(yaml, { source: 'frient_keypad_with_alarmo.yaml' })
+    const vars = doc.nodes.filter(n => n.kind === 'variable')
+    expect(vars.some(v => v.data.hidden === true)).toBe(true)
+    expect(vars.some(v => v.data.hidden !== true)).toBe(true)
   })
 })

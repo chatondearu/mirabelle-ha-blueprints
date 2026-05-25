@@ -11,14 +11,11 @@ export const flowNodeKindSchema = z.enum([
   'delay',
   'wait',
   'variables',
-  'inputs',
-  'inputs_variables',
   'choose_option',
   'ha_block',
   'variable',
   'blueprint_input',
-  'blueprint_meta',
-  'root',
+  'blueprint',
 ])
 
 export const flowNodeLayerSchema = z.enum(['blueprint', 'automation'])

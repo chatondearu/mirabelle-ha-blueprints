@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import type { FlowCanvasNodeProps } from './node-types'
-import StandardNode from './StandardNode.vue'
+import HaContainerNode from './HaContainerNode.vue'
 
 defineProps<FlowCanvasNodeProps>()
 </script>
 
 <template>
-  <StandardNode v-bind="$props" />
+  <HaContainerNode v-bind="$props" />
 </template>
-

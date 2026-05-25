@@ -15,20 +15,23 @@ export function resetBindingEdgeCounter(): void {
 function walkForInputRefs(
   value: unknown,
   consumerId: string,
-  sourceNodeId: string,
-  inputSourceHandles: Map<string, string>,
+  inputNodesByKey: Map<string, string>,
   edges: FlowEdge[],
   seen: Set<string>,
 ): void {
   const key = inputRefKey(value)
   if (key) {
-    const edgeKey = `${sourceNodeId}|input|${key}|${consumerId}`
+    const sourceId = inputNodesByKey.get(key)
+    if (!sourceId) {
+      return
+    }
+    const edgeKey = `${sourceId}|input|${key}|${consumerId}`
     if (!seen.has(edgeKey)) {
       seen.add(edgeKey)
       edges.push({
         id: nextBindingId(),
-        source: sourceNodeId,
-        sourceHandle: inputSourceHandles.get(key),
+        source: sourceId,
+        sourceHandle: `inp-${key}`,
         target: consumerId,
         label: key,
         edgeKind: 'input_binding',
@@ -39,13 +42,13 @@ function walkForInputRefs(
   }
   if (Array.isArray(value)) {
     for (const item of value) {
-      walkForInputRefs(item, consumerId, sourceNodeId, inputSourceHandles, edges, seen)
+      walkForInputRefs(item, consumerId, inputNodesByKey, edges, seen)
     }
     return
   }
   if (value && typeof value === 'object') {
     for (const v of Object.values(value)) {
-      walkForInputRefs(v, consumerId, sourceNodeId, inputSourceHandles, edges, seen)
+      walkForInputRefs(v, consumerId, inputNodesByKey, edges, seen)
     }
   }
 }
@@ -72,53 +75,36 @@ function extractVariableNamesFromText(text: string): string[] {
   return [...names]
 }
 
+const SKIP_BINDING_WALK_KINDS = new Set([
+  'blueprint',
+  'blueprint_input',
+  'variables',
+  'variable',
+])
+
 export function analyzeBindings(nodes: FlowNode[]): FlowEdge[] {
   resetBindingEdgeCounter()
   const edges: FlowEdge[] = []
   const seen = new Set<string>()
-  const inputSourceNode =
-    nodes.find(n => n.kind === 'inputs' || n.kind === 'inputs_variables')
-    ?? nodes.find(n => n.kind === 'blueprint_meta')
-  const inputSourceId = inputSourceNode?.id ?? 'blueprint_meta'
-  const inputSourceHandles = new Map<string, string>()
-  if (inputSourceNode && Array.isArray(inputSourceNode.data.items)) {
-    for (const item of inputSourceNode.data.items as Array<{ key: string }>) {
-      inputSourceHandles.set(item.key, `inp-${item.key}`)
-    }
-  }
-  const variableSourceNode =
-    nodes.find(n => n.kind === 'variables' || n.kind === 'inputs_variables')
 
-  const variableItems = new Map<string, { sourceId: string; sourceHandle?: string }>()
-  if (variableSourceNode && Array.isArray(variableSourceNode.data.items)) {
-    for (const item of variableSourceNode.data.items as Array<{ key: string }>) {
-      variableItems.set(item.key, {
-        sourceId: variableSourceNode.id,
-        sourceHandle: `var-${item.key}`,
-      })
-    }
+  const inputNodesByKey = new Map<string, string>()
+  for (const node of nodes.filter(n => n.kind === 'blueprint_input')) {
+    const key = (node.data.key ?? node.path.replace(/^.*\//, '')) as string
+    inputNodesByKey.set(key, node.id)
+  }
+
+  const variableNodesByName = new Map<string, string>()
+  for (const node of nodes.filter(n => n.kind === 'variable')) {
+    const name = (node.data.name ?? node.label) as string
+    variableNodesByName.set(name, node.id)
   }
 
   for (const node of nodes) {
-    if (
-      node.kind === 'blueprint_meta'
-      || node.kind === 'inputs'
-      || node.kind === 'variables'
-      || node.kind === 'inputs_variables'
-    ) {
+    if (SKIP_BINDING_WALK_KINDS.has(node.kind)) {
       continue
     }
-    walkForInputRefs(
-      node.data,
-      node.id,
-      inputSourceId,
-      inputSourceHandles,
-      edges,
-      seen,
-    )
-    if (typeof node.data === 'object') {
-      walkForVariableRefsWithItems(node.data, node.id, variableItems, edges, seen)
-    }
+    walkForInputRefs(node.data, node.id, inputNodesByKey, edges, seen)
+    walkForVariableRefsWithItems(node.data, node.id, variableNodesByName, edges, seen)
   }
 
   return edges
@@ -127,30 +113,30 @@ export function analyzeBindings(nodes: FlowNode[]): FlowEdge[] {
 function walkForVariableRefsWithItems(
   value: unknown,
   consumerId: string,
-  variableItems: Map<string, { sourceId: string; sourceHandle?: string }>,
+  variableNodesByName: Map<string, string>,
   edges: FlowEdge[],
   seen: Set<string>,
 ): void {
   if (typeof value === 'string') {
     const names = new Set<string>(extractVariableNamesFromText(value))
-    for (const key of variableItems.keys()) {
+    for (const key of variableNodesByName.keys()) {
       const pattern = new RegExp(`\\b${key}\\b`)
       if (pattern.test(value)) {
         names.add(key)
       }
     }
     for (const name of names) {
-      const source = variableItems.get(name)
-      if (!source) {
+      const sourceId = variableNodesByName.get(name)
+      if (!sourceId) {
         continue
       }
-      const edgeKey = `${source.sourceId}|var|${name}|${consumerId}`
+      const edgeKey = `${sourceId}|var|${name}|${consumerId}`
       if (!seen.has(edgeKey)) {
         seen.add(edgeKey)
         edges.push({
           id: nextBindingId(),
-          source: source.sourceId,
-          sourceHandle: source.sourceHandle,
+          source: sourceId,
+          sourceHandle: `var-${name}`,
           target: consumerId,
           label: name,
           edgeKind: 'variable_binding',
@@ -162,18 +148,18 @@ function walkForVariableRefsWithItems(
   }
   if (Array.isArray(value)) {
     for (const item of value) {
-      walkForVariableRefsWithItems(item, consumerId, variableItems, edges, seen)
+      walkForVariableRefsWithItems(item, consumerId, variableNodesByName, edges, seen)
     }
     return
   }
   if (value && typeof value === 'object') {
     for (const v of Object.values(value)) {
-      walkForVariableRefsWithItems(v, consumerId, variableItems, edges, seen)
+      walkForVariableRefsWithItems(v, consumerId, variableNodesByName, edges, seen)
     }
   }
 }
 
-/** Nodes and edges reachable from a binding source (meta input key or variable name). */
+/** Nodes and edges reachable from a binding source (input or variable child node). */
 export function getBindingHighlight(
   sourceNodeId: string,
   bindingLabel: string | undefined,
@@ -182,6 +168,11 @@ export function getBindingHighlight(
 ): { nodeIds: Set<string>, edgeIds: Set<string> } {
   const nodeIds = new Set<string>([sourceNodeId])
   const edgeIds = new Set<string>()
+
+  const sourceNode = nodes.find(n => n.id === sourceNodeId)
+  if (sourceNode?.parentId) {
+    nodeIds.add(sourceNode.parentId)
+  }
 
   for (const edge of edges) {
     if (edge.source !== sourceNodeId) {

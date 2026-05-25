@@ -1,4 +1,5 @@
 import type { FlowEdge, FlowNode } from '@mirabelle/flow-shared'
+import { isConfigLayerNode } from '@mirabelle/flow-shared'
 
 export function extractTriggerIdsFromCondition(data: Record<string, unknown>): string[] {
   const ids: string[] = []
@@ -110,28 +111,17 @@ export function getTriggerPathNodeIds(
   const nodeById = new Map(nodes.map(n => [n.id, n]))
   const active = new Set<string>([triggerId])
 
-  const root = nodes.find(n => n.kind === 'root')
-  if (root) {
-    active.add(root.id)
-  }
-  const variables = nodes.find(n => n.kind === 'variables')
-  if (variables) {
-    active.add(variables.id)
+  for (const node of nodes) {
+    if (isConfigLayerNode(node)) {
+      active.add(node.id)
+    }
   }
 
   const entryPoints = findEntryPointsForTrigger(trigger, nodes, edges)
 
   if (entryPoints.length === 0) {
     for (const node of nodes) {
-      if (
-        node.kind === 'blueprint_meta'
-        || node.kind === 'blueprint_input'
-        || node.kind === 'inputs'
-        || node.kind === 'inputs_variables'
-      ) {
-        continue
-      }
-      if (node.kind === 'variable') {
+      if (isConfigLayerNode(node)) {
         continue
       }
       if (node.kind === 'trigger' && node.id !== triggerId) {
@@ -152,15 +142,6 @@ export function getTriggerPathNodeIds(
     if (node.kind === 'trigger' && node.id !== triggerId) {
       active.delete(node.id)
     }
-    if (
-      node.kind === 'blueprint_meta'
-      || node.kind === 'blueprint_input'
-      || node.kind === 'inputs'
-      || node.kind === 'inputs_variables'
-    ) {
-      active.delete(node.id)
-    }
-    // variables stay visible when they feed the active branch
   }
 
   return active

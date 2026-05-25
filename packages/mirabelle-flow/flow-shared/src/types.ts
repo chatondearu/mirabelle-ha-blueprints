@@ -20,14 +20,11 @@ export type FlowNodeKind =
   | 'delay'
   | 'wait'
   | 'variables'
-  | 'inputs'
-  | 'inputs_variables'
   | 'choose_option'
   | 'ha_block'
   | 'variable'
   | 'blueprint_input'
-  | 'blueprint_meta'
-  | 'root'
+  | 'blueprint'
 
 export type DocumentKind = 'automation' | 'script' | 'blueprint' | 'instance'
 

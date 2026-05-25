@@ -12,14 +12,11 @@ export const NODE_KIND_ICON_CLASS: Record<FlowNodeKind, string> = {
   delay: 'i-lucide-clock',
   wait: 'i-lucide-hourglass',
   variables: 'i-lucide-braces',
-  inputs: 'i-lucide-sliders-horizontal',
-  inputs_variables: 'i-lucide-list-tree',
   choose_option: 'i-lucide-list',
   ha_block: 'i-lucide-box',
   blueprint_input: 'i-lucide-sliders-horizontal',
-  blueprint_meta: 'i-lucide-file-code-2',
+  blueprint: 'i-lucide-file-code-2',
   variable: 'i-lucide-variable',
-  root: 'i-lucide-workflow',
 }
 
 export const NODE_ICON_SAFELIST = [

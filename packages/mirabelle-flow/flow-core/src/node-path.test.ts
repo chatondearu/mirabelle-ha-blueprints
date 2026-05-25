@@ -12,15 +12,17 @@ function loadBlueprint(relPath: string): string {
 }
 
 describe('node-path', () => {
-  it('upstream path from action includes root and triggers', () => {
+  it('upstream path from choose includes trigger entry', () => {
     const yaml = loadBlueprint('blueprints/automations/presence_based_lighting.yaml')
     const doc = parseAutomationYaml(yaml, { source: 'presence_based_lighting.yaml' })
 
     const choose = doc.nodes.find(n => n.kind === 'choose')
+    const trigger = doc.nodes.find(n => n.kind === 'trigger')
     expect(choose).toBeDefined()
+    expect(trigger).toBeDefined()
 
     const { nodeIds } = getUpstreamPath(choose!.id, doc.nodes, doc.edges)
-    expect(nodeIds.has('root')).toBe(true)
+    expect(nodeIds.has(trigger!.id)).toBe(true)
     expect(nodeIds.has(choose!.id)).toBe(true)
   })
 

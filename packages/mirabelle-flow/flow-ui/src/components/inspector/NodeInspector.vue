@@ -57,7 +57,7 @@ function applyRaw() {
 </script>
 
 <template>
-  <BlueprintMetaPanel v-if="node?.kind === 'blueprint_meta'" />
+  <BlueprintMetaPanel v-if="node?.kind === 'blueprint'" />
   <VariableInspector v-else-if="node?.kind === 'variable'" />
   <div v-else-if="!node" class="p-4 text-sm text-neutral-500">
     Select a node
