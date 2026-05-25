@@ -12,8 +12,10 @@ import {
 } from '@vue-flow/core'
 import { Background } from '@vue-flow/background'
 import { Controls } from '@vue-flow/controls'
+import { reconcileGroupLayouts } from '@mirabelle/flow-core'
 import { computed, watch } from 'vue'
 import { useFlowStore } from '@/stores/flow'
+import CanvasVariablesToolbar from './CanvasVariablesToolbar.vue'
 import FlowNeonEdge from './FlowNeonEdge.vue'
 import { FLOW_NODE_RENDERER_MAP } from './flow-node-renderer-map'
 
@@ -35,14 +37,27 @@ const hasPathHighlight = computed(
   () => store.pathHighlightNodeIds.size > 0 && !store.pathFilterNodeId,
 )
 
+const groupLayout = computed(() => {
+  const doc = store.document
+  if (!doc) {
+    return { layout: {} as Record<string, { x: number, y: number }>, groupSizes: {} as Record<string, { width: number, height: number }> }
+  }
+  return reconcileGroupLayouts(
+    doc.nodes,
+    doc.layout,
+    n => store.isNodeVisibleOnCanvas(n),
+  )
+})
+
 const nodes = computed<Node[]>(() => {
   const doc = store.document
   if (!doc) {
     return []
   }
+  const { layout: layoutPositions, groupSizes } = groupLayout.value
   return doc.nodes
     .filter(n => isNodeVisible(n.id))
-    .filter(n => n.data.hidden !== true)
+    .filter(n => store.isNodeVisibleOnCanvas(n))
     .map((n: FlowNodeType) => {
       const pathActive = store.pathHighlightNodeIds.has(n.id)
       const pathDimmed =
@@ -50,13 +65,18 @@ const nodes = computed<Node[]>(() => {
         && !pathActive
         && !isConfigLayerNode(n)
       const simulationActive = store.simulationActiveNodeIds.has(n.id)
-      const groupSize = n.data.groupSize as { width: number, height: number } | undefined
+      const groupSize =
+        groupSizes[n.id]
+        ?? (n.data.groupSize as { width: number, height: number } | undefined)
+      const isChild = Boolean(n.parentId)
       return {
         id: n.id,
         type: n.kind,
-        position: doc.layout[n.id] ?? { x: 0, y: 0 },
+        position: layoutPositions[n.id] ?? doc.layout[n.id] ?? { x: 0, y: 0 },
         parentNode: n.parentId,
         extent: n.parentId ? ('parent' as const) : undefined,
+        draggable: !isChild,
+        selectable: true,
         style: groupSize
           ? { width: `${groupSize.width}px`, height: `${groupSize.height}px` }
           : undefined,
@@ -82,7 +102,7 @@ const edges = computed<Edge[]>(() => {
     return []
   }
   const visibleIds = new Set(
-    doc.nodes.filter(n => n.data.hidden !== true).map(n => n.id),
+    doc.nodes.filter(n => store.isNodeVisibleOnCanvas(n)).map(n => n.id),
   )
   return doc.edges
     .filter(e => isNodeVisible(e.source) && isNodeVisible(e.target))
@@ -125,14 +145,23 @@ onPaneClick(() => {
 
 onNodesChange((changes) => {
   for (const change of changes) {
-    if (change.type === 'position' && change.position && change.id) {
-      store.updateLayout(change.id, change.position.x, change.position.y)
+    if (change.type !== 'position' || !change.position || !change.id) {
+      continue
     }
+    const irNode = store.document?.nodes.find(n => n.id === change.id)
+    if (irNode?.parentId) {
+      continue
+    }
+    store.updateLayout(change.id, change.position.x, change.position.y)
   }
 })
 
 watch(
-  () => [store.document?.nodes.length, store.pathFilterNodeId],
+  () => [
+    store.document?.nodes.length,
+    store.pathFilterNodeId,
+    store.variableFilterMode,
+  ],
   () => {
     setTimeout(() => fitView({ padding: 0.2 }), 50)
   },
@@ -167,6 +196,8 @@ watch(
       Upstream path for <strong class="text-emerald-300">{{ store.selectedNode.label }}</strong>
       · double-click to isolate
     </div>
+
+    <CanvasVariablesToolbar />
 
     <div class="relative min-h-0 flex-1">
       <VueFlow

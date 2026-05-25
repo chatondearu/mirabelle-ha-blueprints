@@ -8,7 +8,22 @@ import type {
   FlowNodeKind,
   FlowViewMode,
 } from '@mirabelle/flow-shared'
-import { FLOW_LAYOUT, getNodeLayer, isConfigLayerNode } from '@mirabelle/flow-shared'
+import {
+  FLOW_LAYOUT,
+  getNodeLayer,
+  isConfigLayerNode,
+  layoutGroupChildren,
+  reconcileGroupLayouts,
+} from '@mirabelle/flow-shared'
+import {
+  expandServiceActionInContainer,
+  materializeChoose,
+  materializeIf,
+  summarizeCondition,
+  summarizeHaBlock,
+  summarizeServiceAction,
+  type ActionBuildContext,
+} from './action-expander.js'
 import { getHaBlockDescriptor } from './ha-block-registry.js'
 import { extractTriggerIdsFromCondition } from './trigger-path.js'
 
@@ -97,45 +112,97 @@ function summarizeTrigger(t: Record<string, unknown>): string {
   return id ? `Trigger [${id}]` : 'Trigger'
 }
 
-function summarizeCondition(c: Record<string, unknown>): string {
-  const cond = c.condition as string | undefined
-  if (cond === 'trigger' && typeof c.id === 'string') {
-    return `Trigger: ${c.id}`
+function asActionContext(ctx: BuildContext): ActionBuildContext {
+  return {
+    nodes: ctx.nodes,
+    edges: ctx.edges,
+    addNode: (path, kind, label, data, parentId) =>
+      addNode(ctx, path, kind, label, data, parentId),
+    connect: (source, target, options) => connect(ctx, source, target, options),
   }
-  if (cond === 'template' && typeof c.value_template === 'string') {
-    const t = c.value_template
-    return t.length > 40 ? `Template: ${t.slice(0, 40)}…` : `Template: ${t}`
-  }
-  if (cond === 'state') {
-    return `State: ${String(c.entity_id ?? '')}`
-  }
-  return cond ? `Condition: ${cond}` : 'Condition'
+}
+
+function expandActionsInContainer(
+  ctx: BuildContext,
+  actions: unknown[],
+  container: FlowNode,
+  pathPrefix: string,
+): FlowNode[] {
+  return buildActionsInContainer(ctx, actions, container, pathPrefix)
+}
+
+/** Branch sequence after choose/if: nodes live outside the container parent. */
+function buildBranchSequenceOutside(
+  ctx: BuildContext,
+  actions: unknown[],
+  anchor: FlowNode,
+  pathPrefix: string,
+  branchKey: string,
+): FlowNode[] {
+  let prev: FlowNode | undefined
+  const leaves: FlowNode[] = []
+  actions.forEach((raw, i) => {
+    if (!raw || typeof raw !== 'object') {
+      return
+    }
+    const a = raw as Record<string, unknown>
+    const path = `${pathPrefix}/${i}`
+    if (!prev) {
+      const node = expandActionItemRoot(ctx, a, path)
+      connect(ctx, anchor, node, {
+        sourceHandle: branchKey,
+        targetHandle: 'flow',
+        itemKey: branchKey,
+        branch: branchKey,
+        label: branchKey,
+      })
+      prev = node
+    }
+    else {
+      prev = expandActionItem(ctx, a, path, prev, prev)
+    }
+    leaves.push(prev)
+  })
+  return leaves
 }
 
 function summarizeAction(a: Record<string, unknown>): string {
-  const descriptor = getHaBlockDescriptor(a)
   if (typeof a.service === 'string') {
-    return a.service
+    return summarizeServiceAction(a)
   }
-  if (a.choose) {
-    return 'Choose'
+  return summarizeHaBlock(a)
+}
+
+function expandServiceAtFlowLevel(
+  ctx: BuildContext,
+  a: Record<string, unknown>,
+  path: string,
+  parent: FlowNode,
+  prev: FlowNode | undefined,
+  firstEdge?: {
+    sourceHandle?: string
+    targetHandle?: string
+    label?: string
+    branch?: string
+    itemKey?: string
+  },
+): FlowNode {
+  const wrap = addNode(
+    ctx,
+    path,
+    'sequence',
+    summarizeServiceAction(a),
+    { isContainer: true, serviceWrap: true, layoutHeaderHeight: 40 },
+    undefined,
+  )
+  if (prev) {
+    connect(ctx, prev, wrap)
   }
-  if (a.delay) {
-    return `Delay: ${JSON.stringify(a.delay)}`
+  else {
+    connect(ctx, parent, wrap, firstEdge)
   }
-  if (a.wait_template) {
-    return 'Wait template'
-  }
-  if (a.repeat) {
-    return 'Repeat'
-  }
-  if (a.parallel) {
-    return 'Parallel'
-  }
-  if (a.sequence) {
-    return 'Sequence'
-  }
-  return descriptor.summary(a)
+  expandServiceActionInContainer(asActionContext(ctx), a, `${path}/svc`, wrap, undefined)
+  return wrap
 }
 
 function buildTriggers(
@@ -377,7 +444,23 @@ function expandActionItem(
     return waitNode
   }
 
-  const node = addNode(ctx, path, 'action', summarizeAction(a), a, undefined)
+  if (a.if) {
+    return materializeIf(
+      asActionContext(ctx),
+      a,
+      path,
+      { flowParent: parent, prev, firstEdge },
+      (actx, actions, anchor, prefix, branchKey) =>
+        buildBranchSequenceOutside(ctx, actions, anchor, prefix, branchKey),
+    )
+  }
+
+  if (typeof a.service === 'string') {
+    return expandServiceAtFlowLevel(ctx, a, path, parent, prev, firstEdge)
+  }
+
+  const descriptor = getHaBlockDescriptor(a)
+  const node = addNode(ctx, path, descriptor.nodeKind, summarizeAction(a), a, undefined)
   if (prev) {
     connect(ctx, prev, node)
   }
@@ -415,7 +498,38 @@ function expandActionItemRoot(
   path: string,
 ): FlowNode {
   if (a.choose) {
-    return materializeChoose(ctx, a, path, {})
+    return materializeChoose(
+      asActionContext(ctx),
+      a,
+      path,
+      {},
+      (actx, actions, anchor, prefix, branchKey) =>
+        buildBranchSequenceOutside(ctx, actions, anchor, prefix, branchKey),
+    )
+  }
+
+  if (a.if) {
+    return materializeIf(
+      asActionContext(ctx),
+      a,
+      path,
+      {},
+      (actx, actions, anchor, prefix, branchKey) =>
+        buildBranchSequenceOutside(ctx, actions, anchor, prefix, branchKey),
+    )
+  }
+
+  if (typeof a.service === 'string') {
+    const wrap = addNode(
+      ctx,
+      path,
+      'sequence',
+      summarizeServiceAction(a),
+      { isContainer: true, serviceWrap: true, layoutHeaderHeight: 40 },
+      undefined,
+    )
+    expandServiceActionInContainer(asActionContext(ctx), a, `${path}/svc`, wrap, undefined)
+    return wrap
   }
 
   if (Array.isArray(a.sequence)) {
@@ -458,101 +572,6 @@ function buildActionsInContainer(
   return leaves
 }
 
-function materializeChoose(
-  ctx: BuildContext,
-  a: Record<string, unknown>,
-  path: string,
-  options: {
-    parentId?: string
-    flowParent?: FlowNode
-    prev?: FlowNode
-    firstEdge?: {
-      sourceHandle?: string
-      targetHandle?: string
-      label?: string
-      branch?: string
-      itemKey?: string
-    }
-  },
-): FlowNode {
-  const choose = a.choose as Array<{
-    conditions?: unknown[]
-    sequence?: unknown[]
-  }>
-  const optionDefs = choose.map((branch, bi) => ({
-    key: `opt-${bi}`,
-    label: `Option ${bi + 1}`,
-    conditions: branch.conditions ?? [],
-    hasSequence: (branch.sequence ?? []).length > 0,
-  }))
-  const chooseNode = addNode(
-    ctx,
-    path,
-    'choose',
-    'Choose',
-    {
-      options: optionDefs,
-      isContainer: true,
-      hasDefault: Array.isArray((a as { default?: unknown[] }).default)
-        && ((a as { default?: unknown[] }).default?.length ?? 0) > 0,
-    },
-    options.parentId,
-  )
-  if (options.prev) {
-    connect(ctx, options.prev, chooseNode)
-  }
-  else if (options.flowParent) {
-    connect(ctx, options.flowParent, chooseNode, options.firstEdge)
-  }
-
-  choose.forEach((branch, bi) => {
-    const optionKey = `opt-${bi}`
-    addNode(
-      ctx,
-      `${path}/choose/${bi}/option`,
-      'choose_option',
-      `Option ${bi + 1}`,
-      {
-        key: optionKey,
-        label: `Option ${bi + 1}`,
-        conditions: branch.conditions ?? [],
-      },
-      chooseNode.id,
-    )
-  })
-
-  const branchLeaves: FlowNode[] = []
-  choose.forEach((branch, bi) => {
-    const branchPath = `${path}/choose/${bi}`
-    const seq = branch.sequence ?? []
-    const seqLeaves = buildActionsInContainer(
-      ctx,
-      seq,
-      chooseNode,
-      `${branchPath}/sequence`,
-    )
-    if (seqLeaves.length > 0) {
-      branchLeaves.push(seqLeaves[seqLeaves.length - 1]!)
-    }
-  })
-
-  const defaultSeq = (a as { default?: unknown[] }).default ?? []
-  if (defaultSeq.length > 0) {
-    addNode(
-      ctx,
-      `${path}/choose/default/option`,
-      'choose_option',
-      'Default',
-      { key: 'opt-default', label: 'Default', conditions: [] },
-      chooseNode.id,
-    )
-    const defLeaves = buildActionsInContainer(ctx, defaultSeq, chooseNode, `${path}/default`)
-    branchLeaves.push(...defLeaves)
-  }
-
-  return branchLeaves[branchLeaves.length - 1] ?? chooseNode
-}
-
 function expandActionItemInContainer(
   ctx: BuildContext,
   a: Record<string, unknown>,
@@ -561,7 +580,35 @@ function expandActionItemInContainer(
   prev: FlowNode | undefined,
 ): FlowNode {
   if (a.choose) {
-    return materializeChoose(ctx, a, path, { parentId: container.id, prev })
+    return materializeChoose(
+      asActionContext(ctx),
+      a,
+      path,
+      { parentId: container.id, prev },
+      (actx, actions, anchor, prefix, branchKey) =>
+        buildBranchSequenceOutside(ctx, actions, anchor, prefix, branchKey),
+    )
+  }
+
+  if (a.if) {
+    return materializeIf(
+      asActionContext(ctx),
+      a,
+      path,
+      { parentId: container.id, prev },
+      (actx, actions, anchor, prefix, branchKey) =>
+        buildBranchSequenceOutside(ctx, actions, anchor, prefix, branchKey),
+    )
+  }
+
+  if (typeof a.service === 'string') {
+    return expandServiceActionInContainer(
+      asActionContext(ctx),
+      a,
+      path,
+      container,
+      prev,
+    )
   }
 
   if (Array.isArray(a.sequence)) {
@@ -619,7 +666,27 @@ function buildActions(
     const path = `${pathPrefix}/${i}`
 
     if (a.choose) {
-      prev = materializeChoose(ctx, a, path, { flowParent: parent, prev, firstEdge })
+      prev = materializeChoose(
+        asActionContext(ctx),
+        a,
+        path,
+        { flowParent: parent, prev, firstEdge },
+        (actx, actions, anchor, prefix, branchKey) =>
+          buildBranchSequenceOutside(ctx, actions, anchor, prefix, branchKey),
+      )
+      leaves.push(prev)
+      return
+    }
+
+    if (a.if) {
+      prev = materializeIf(
+        asActionContext(ctx),
+        a,
+        path,
+        { flowParent: parent, prev, firstEdge },
+        (actx, actions, anchor, prefix, branchKey) =>
+          buildBranchSequenceOutside(ctx, actions, anchor, prefix, branchKey),
+      )
       leaves.push(prev)
       return
     }
@@ -657,29 +724,6 @@ function connectTriggerReferenceEdges(ctx: BuildContext): void {
     }
   }
 
-  const chooseNodes = ctx.nodes.filter(n => n.kind === 'choose')
-  for (const chooseNode of chooseNodes) {
-    const options = (chooseNode.data.options as Array<{ key: string; conditions: unknown[] }> | undefined) ?? []
-    for (const opt of options) {
-      for (const raw of opt.conditions) {
-        if (!raw || typeof raw !== 'object') {
-          continue
-        }
-        const refs = extractTriggerIdsFromCondition(raw as Record<string, unknown>)
-        for (const refId of refs) {
-          const trigger = resolveTriggerNode(ctx, refId)
-          if (trigger) {
-            connect(ctx, trigger, chooseNode, {
-              label: refId,
-              edgeKind: 'reference',
-              targetHandle: `cond-${opt.key}`,
-              itemKey: opt.key,
-            })
-          }
-        }
-      }
-    }
-  }
 }
 
 export function buildGraphFromConfig(
@@ -757,43 +801,17 @@ function layoutConfigGroup(
   originX: number,
   layout: Record<string, { x: number; y: number }>,
 ): number {
-  const step = FLOW_LAYOUT.configChildStep
-  const header = FLOW_LAYOUT.configHeaderHeight
-  const padding = FLOW_LAYOUT.configPadding
-  const width = FLOW_LAYOUT.configGroupWidth
-  const height = header + children.length * step + padding
+  const { positions, size } = layoutGroupChildren(children, {
+    minWidth: FLOW_LAYOUT.configGroupWidth,
+  })
 
   layout[parent.id] = { x: originX, y: FLOW_LAYOUT.startY }
-  parent.data.groupSize = { width, height }
+  parent.data.groupSize = size
+  for (const [childId, pos] of Object.entries(positions)) {
+    layout[childId] = pos
+  }
 
-  children.forEach((child, i) => {
-    layout[child.id] = {
-      x: FLOW_LAYOUT.configPadding,
-      y: header + i * step,
-    }
-  })
-
-  return width
-}
-
-function layoutContainerChildren(
-  container: FlowNode,
-  children: FlowNode[],
-  layout: Record<string, { x: number; y: number }>,
-): void {
-  const step = FLOW_LAYOUT.configChildStep
-  const header = FLOW_LAYOUT.configHeaderHeight
-  const padding = FLOW_LAYOUT.configPadding
-  const width = Math.max(FLOW_LAYOUT.configGroupWidth, 200)
-  const height = header + children.length * step + padding
-
-  container.data.groupSize = { width, height }
-  children.forEach((child, i) => {
-    layout[child.id] = {
-      x: padding,
-      y: header + i * step,
-    }
-  })
+  return size.width
 }
 
 export function autoLayout(
@@ -803,13 +821,20 @@ export function autoLayout(
   const layout: Record<string, { x: number; y: number }> = {}
   const H_GAP = FLOW_LAYOUT.horizontalGap
   const V_GAP = FLOW_LAYOUT.verticalGap
-  const execY = FLOW_LAYOUT.startY + FLOW_LAYOUT.configBandHeight
 
   let configX = FLOW_LAYOUT.startX
+  let configBandBottom = FLOW_LAYOUT.startY + FLOW_LAYOUT.configBandMinHeight
   const blueprintParent = nodes.find(n => n.kind === 'blueprint' && !n.parentId)
   if (blueprintParent) {
     const children = nodes.filter(n => n.parentId === blueprintParent.id)
     configX += layoutConfigGroup(blueprintParent, children, configX, layout) + H_GAP
+    const size = blueprintParent.data.groupSize as { height: number } | undefined
+    if (size) {
+      configBandBottom = Math.max(
+        configBandBottom,
+        FLOW_LAYOUT.startY + size.height,
+      )
+    }
   }
 
   const variablesParent = nodes.find(n => n.kind === 'variables' && !n.parentId)
@@ -818,16 +843,22 @@ export function autoLayout(
       n => n.parentId === variablesParent.id && !n.data.hidden,
     )
     layoutConfigGroup(variablesParent, children, configX, layout)
+    const size = variablesParent.data.groupSize as { height: number } | undefined
+    if (size) {
+      configBandBottom = Math.max(
+        configBandBottom,
+        FLOW_LAYOUT.startY + size.height,
+      )
+    }
   }
+
+  reconcileGroupLayouts(nodes, layout, n => n.data.hidden !== true)
+
+  const execY = configBandBottom + FLOW_LAYOUT.configExecGap
 
   const automationRoots = nodes.filter(
     n => n.layer !== 'blueprint' && !n.parentId,
   )
-
-  for (const container of automationRoots.filter(n => n.data.isContainer === true)) {
-    const children = nodes.filter(n => n.parentId === container.id)
-    layoutContainerChildren(container, children, layout)
-  }
 
   const flowEdges = edges.filter(e => STRUCTURAL_EDGE_KINDS.has(e.edgeKind))
   const adjacency = new Map<string, string[]>()

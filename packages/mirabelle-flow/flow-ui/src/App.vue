@@ -115,7 +115,7 @@ async function saveToHa() {
       </p>
 
       <div class="flex min-h-0 flex-1">
-        <aside class="w-56 shrink-0 border-r border-neutral-800 overflow-hidden flex flex-col">
+        <aside class="w-56 shrink-0 border-r border-neutral-800 overflow-hidden overflow-y-auto flex flex-col">
           <FileExplorer v-if="store.appMode === 'local'" />
           <HaEntityList v-else />
         </aside>
@@ -129,7 +129,7 @@ async function saveToHa() {
           </div>
         </main>
 
-        <aside class="w-72 shrink-0 border-l border-neutral-800 overflow-hidden">
+        <aside class="w-72 shrink-0 border-l border-neutral-800 overflow-hidden overflow-y-auto">
           <NodeInspector />
         </aside>
       </div>

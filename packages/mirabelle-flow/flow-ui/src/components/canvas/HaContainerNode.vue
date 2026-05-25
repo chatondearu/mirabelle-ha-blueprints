@@ -1,10 +1,29 @@
 <script setup lang="ts">
 import { Handle, Position } from '@vue-flow/core'
+import { computed } from 'vue'
 import { useNodeVisuals } from './composables/useNodeVisuals'
 import type { FlowCanvasNodeProps } from './node-types'
 
 const props = defineProps<FlowCanvasNodeProps>()
 const visuals = useNodeVisuals(props.data)
+
+const branchHandles = computed(() => {
+  const options = props.data.rawData?.options as
+    | Array<{ key: string, label?: string, hasSequence?: boolean }>
+    | undefined
+  if (!options?.length) {
+    return []
+  }
+  const withFlow = options.filter(o => o.hasSequence !== false)
+  const count = withFlow.length
+  return withFlow.map((opt, index) => ({
+    ...opt,
+    top:
+      count === 1
+        ? '50%'
+        : `${((index + 1) / (count + 1)) * 100}%`,
+  }))
+})
 </script>
 
 <template>
@@ -22,6 +41,16 @@ const visuals = useNodeVisuals(props.data)
       {{ data.label }}
     </div>
     <Handle
+      v-for="opt in branchHandles"
+      :key="opt.key"
+      type="source"
+      :position="Position.Right"
+      :id="opt.key"
+      class="!bg-neutral-400"
+      :style="{ top: opt.top }"
+    />
+    <Handle
+      v-if="branchHandles.length === 0"
       type="source"
       :position="Position.Right"
       id="flow"

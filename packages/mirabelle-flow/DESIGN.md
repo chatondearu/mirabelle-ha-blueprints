@@ -53,6 +53,7 @@ Active edges use custom `FlowNeonEdge` (glow, arrow marker, `animateMotion` part
 
 - **Config band (top):** parent **`blueprint`** + child **`blueprint_input`** nodes; parent **`variables`** + child **`variable`** nodes (internal variables hidden unless they have an external binding).
 - **Execution band (bottom):** **`trigger`** nodes are flow entry points; HA blocks (`choose`, `sequence`, …) are parent containers with nested children.
+- **Deep action expansion:** `choose` / `if` parents contain only first-level **`condition`** nodes (one block per branch) plus a **Default** marker; branch **`sequence`** actions are laid out **outside** the parent and linked via `flow` edges (`opt-0`, `opt-default`, …). **`service`** calls may use **`ha_block`** children for `target` / `data` under the action node only.
 - **Inline editing** on each **`blueprint_input`** child (selector-aware; HA-first).
 - **Simulation catalog** (sidebar, localStorage): fallback entity ids when HA is not connected; HA entity list takes priority in pickers when connected.
 - **Simulation mode** (default on): substitutes inputs, expands nested actions, enriches labels (`service → entity`).

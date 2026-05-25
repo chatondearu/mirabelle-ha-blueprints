@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { estimateNodeSize } from '@mirabelle/flow-shared'
 import { parseAutomationYaml } from './parser.js'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../../')
@@ -71,13 +72,61 @@ describe('graph structure', () => {
     expect(refs.length).toBeGreaterThanOrEqual(2)
   })
 
-  it('creates choose as container with option child nodes', () => {
+  it('layouts blueprint input children without vertical overlap', () => {
+    const yaml = loadBlueprint('blueprints/automations/presence_based_lighting.yaml')
+    const doc = parseAutomationYaml(yaml, { source: 'presence_based_lighting.yaml' })
+    const blueprint = doc.nodes.find(n => n.kind === 'blueprint')
+    const inputs = doc.nodes.filter(n => n.kind === 'blueprint_input')
+    const ordered = inputs
+      .map(n => ({
+        y: doc.layout[n.id]!.y,
+        h: estimateNodeSize(n).height,
+      }))
+      .sort((a, b) => a.y - b.y)
+    for (let i = 0; i < ordered.length - 1; i++) {
+      expect(ordered[i]!.y + ordered[i]!.h).toBeLessThanOrEqual(ordered[i + 1]!.y)
+    }
+    const groupSize = blueprint?.data.groupSize as { height: number } | undefined
+    expect(groupSize?.height).toBeGreaterThan(ordered[ordered.length - 1]!.y)
+  })
+
+  it('creates choose with conditions inside and only a Default option marker', () => {
     const yaml = loadBlueprint('blueprints/automations/presence_based_lighting.yaml')
     const doc = parseAutomationYaml(yaml, { source: 'presence_based_lighting.yaml' })
     const chooseNode = doc.nodes.find(n => n.kind === 'choose')
     expect(chooseNode?.data.isContainer).toBe(true)
-    const options = doc.nodes.filter(n => n.kind === 'choose_option')
-    expect(options.length).toBeGreaterThan(0)
-    expect(options.every(n => n.parentId === chooseNode?.id)).toBe(true)
+    const conditions = doc.nodes.filter(
+      n => n.kind === 'condition' && n.parentId === chooseNode?.id,
+    )
+    expect(conditions.length).toBeGreaterThan(0)
+    const optionMarkers = doc.nodes.filter(n => n.kind === 'choose_option')
+    expect(optionMarkers.length).toBe(1)
+    expect(optionMarkers[0]?.data.key).toBe('opt-default')
+  })
+
+  it('places branch actions outside the choose parent', () => {
+    const yaml = loadBlueprint('blueprints/automations/presence_based_lighting.yaml')
+    const doc = parseAutomationYaml(yaml, {
+      source: 'presence_based_lighting.yaml',
+      preview: false,
+    })
+    const chooseNode = doc.nodes.find(n => n.kind === 'choose')
+    const turnOn = doc.nodes.find(
+      n =>
+        n.kind === 'action'
+        && typeof n.data.service === 'string'
+        && n.data.service.includes('turn_on'),
+    )
+    expect(turnOn).toBeDefined()
+    expect(turnOn?.parentId).not.toBe(chooseNode?.id)
+    const branchFlow = doc.edges.filter(
+      e => e.edgeKind === 'flow' && e.source === chooseNode?.id,
+    )
+    expect(branchFlow.length).toBeGreaterThan(0)
+    expect(
+      branchFlow.some(
+        e => e.target === turnOn?.id || e.target === turnOn?.parentId,
+      ),
+    ).toBe(true)
   })
 })

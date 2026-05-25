@@ -87,6 +87,9 @@ export interface SimulationCatalog {
 
 export type FlowViewMode = 'split' | 'combined'
 
+/** Canvas filter for blueprint `variables` child nodes. */
+export type VariableFilterMode = 'binding_only' | 'all'
+
 export interface FlowListItem {
   key: string
   label: string

@@ -10,3 +10,8 @@ export * from './enrich-labels.js'
 export * from './simulation-highlight.js'
 export * from './ha-block-registry.js'
 export * from './variable-visibility.js'
+export {
+  reconcileGroupLayouts,
+  layoutGroupChildren,
+  estimateNodeSize,
+} from '@mirabelle/flow-shared'

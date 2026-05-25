@@ -1,4 +1,10 @@
-import type { FlowViewMode, SimulationCatalog, TraceOverlay } from '@mirabelle/flow-shared'
+import type {
+  FlowNode,
+  FlowViewMode,
+  SimulationCatalog,
+  TraceOverlay,
+  VariableFilterMode,
+} from '@mirabelle/flow-shared'
 import {
   loadSimulationCatalog,
   saveSimulationCatalog,
@@ -36,6 +42,7 @@ export const useFlowStore = defineStore('flow', () => {
   const highlightedItemsByNode = ref<Record<string, string[]>>({})
   const simulationActiveNodeIds = ref<Set<string>>(new Set())
   const rawYamlPanel = ref('')
+  const variableFilterMode = ref<VariableFilterMode>('binding_only')
 
   const selectedNode = computed(() =>
     document.value?.nodes.find(n => n.id === selectedNodeId.value) ?? null,
@@ -46,6 +53,31 @@ export const useFlowStore = defineStore('flow', () => {
   const pathFilterNode = computed(() =>
     document.value?.nodes.find(n => n.id === pathFilterNodeId.value) ?? null,
   )
+
+  const hasBlueprintVariables = computed(() =>
+    document.value?.nodes.some(n => n.kind === 'variable') ?? false,
+  )
+
+  const variableFilterStats = computed(() => {
+    const variables = document.value?.nodes.filter(n => n.kind === 'variable') ?? []
+    const hidden = variables.filter(n => n.data.hidden === true).length
+    return {
+      total: variables.length,
+      hidden,
+      visible: variables.length - hidden,
+    }
+  })
+
+  function isNodeVisibleOnCanvas(node: FlowNode): boolean {
+    if (node.kind === 'variable' && variableFilterMode.value === 'all') {
+      return true
+    }
+    return node.data.hidden !== true
+  }
+
+  function setVariableFilterMode(mode: VariableFilterMode) {
+    variableFilterMode.value = mode
+  }
 
   const pathFilterNodeIds = computed(() => {
     if (!document.value || !pathFilterNodeId.value) {
@@ -347,6 +379,11 @@ export const useFlowStore = defineStore('flow', () => {
     pathFilterNodeIds,
     simulationActiveNodeIds,
     rawYamlPanel,
+    variableFilterMode,
+    hasBlueprintVariables,
+    variableFilterStats,
+    isNodeVisibleOnCanvas,
+    setVariableFilterMode,
     isDirty,
     loadYaml,
     reloadWithPreview,

@@ -53,6 +53,36 @@ export const HA_BLOCK_REGISTRY: HaBlockDescriptor[] = [
     nodeKind: 'sequence',
     summary: () => 'Sequence',
   },
+  {
+    key: 'if',
+    nodeKind: 'ha_block',
+    summary: () => 'If',
+  },
+  {
+    key: 'stop',
+    nodeKind: 'ha_block',
+    summary: block => `Stop: ${String(block.stop ?? 'all')}`,
+  },
+  {
+    key: 'variables',
+    nodeKind: 'ha_block',
+    summary: () => 'Set variables',
+  },
+  {
+    key: 'event',
+    nodeKind: 'ha_block',
+    summary: block => `Event: ${String(block.event ?? '')}`,
+  },
+  {
+    key: 'scene',
+    nodeKind: 'ha_block',
+    summary: block => `Scene: ${String(block.scene ?? '')}`,
+  },
+  {
+    key: 'device_action',
+    nodeKind: 'ha_block',
+    summary: block => `Device: ${String(block.device ?? block.entity_id ?? '')}`,
+  },
 ]
 
 export function getHaBlockDescriptor(block: Record<string, unknown>): HaBlockDescriptor {

@@ -1,4 +1,5 @@
 import type { FlowDocument, FlowNode } from '@mirabelle/flow-shared'
+import { summarizeServiceAction } from './action-expander.js'
 import { isInputRef } from './yaml.js'
 
 function truncate(text: string, max = 48): string {
@@ -23,14 +24,7 @@ export function enrichNodeLabels(doc: FlowDocument): void {
     ?? {}
   for (const node of doc.nodes) {
     if (node.kind === 'action' && typeof node.data.service === 'string') {
-      const target = node.data.target as { entity_id?: string } | undefined
-      const entity =
-        typeof target?.entity_id === 'string'
-          ? target.entity_id
-          : undefined
-      node.label = entity
-        ? `${node.data.service} → ${entity}`
-        : node.data.service
+      node.label = summarizeServiceAction(node.data)
     }
 
     if (node.kind === 'trigger') {

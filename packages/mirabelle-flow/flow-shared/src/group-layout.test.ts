@@ -1,0 +1,66 @@
+import { describe, expect, it } from 'vitest'
+import type { FlowNode } from './types.js'
+import {
+  estimateNodeSize,
+  layoutGroupChildren,
+  reconcileGroupLayouts,
+} from './group-layout.js'
+
+function child(id: string, kind: FlowNode['kind'], parentId: string): FlowNode {
+  return {
+    id,
+    kind,
+    label: id,
+    path: id,
+    data: {},
+    parentId,
+    layer: 'blueprint',
+  }
+}
+
+describe('layoutGroupChildren', () => {
+  it('stacks children without vertical overlap', () => {
+    const children = [
+      child('a', 'blueprint_input', 'parent'),
+      child('b', 'blueprint_input', 'parent'),
+      child('c', 'variable', 'parent'),
+    ]
+    const { positions, size } = layoutGroupChildren(children)
+
+    const ordered = children.map(c => ({
+      id: c.id,
+      y: positions[c.id]!.y,
+      h: estimateNodeSize(c).height,
+    }))
+    ordered.sort((a, b) => a.y - b.y)
+    for (let i = 0; i < ordered.length - 1; i++) {
+      expect(ordered[i]!.y + ordered[i]!.h).toBeLessThanOrEqual(ordered[i + 1]!.y)
+    }
+    expect(size.height).toBeGreaterThan(ordered[ordered.length - 1]!.y)
+  })
+})
+
+describe('reconcileGroupLayouts', () => {
+  it('shrinks variables group when hidden children are excluded', () => {
+    const parent: FlowNode = {
+      id: 'variables',
+      kind: 'variables',
+      label: 'Variables',
+      path: 'variables',
+      data: { isGroup: true },
+      layer: 'blueprint',
+    }
+    const visible = child('v1', 'variable', 'variables')
+    const hidden = child('v2', 'variable', 'variables')
+    hidden.data.hidden = true
+    const nodes = [parent, visible, hidden]
+    const baseLayout = { variables: { x: 0, y: 0 } }
+
+    const all = reconcileGroupLayouts(nodes, baseLayout, () => true)
+    const filtered = reconcileGroupLayouts(nodes, baseLayout, n => n.data.hidden !== true)
+
+    expect(filtered.groupSizes.variables!.height).toBeLessThan(all.groupSizes.variables!.height)
+    expect(filtered.layout.v2).toBeUndefined()
+    expect(filtered.layout.v1).toBeDefined()
+  })
+})
