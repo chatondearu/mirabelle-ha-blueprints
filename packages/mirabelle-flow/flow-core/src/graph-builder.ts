@@ -763,7 +763,91 @@ function connectTriggerReferenceEdges(ctx: BuildContext): void {
       }
     }
   }
+}
 
+function triggerMatchesConditionRef(trigger: FlowNode, refId: string): boolean {
+  const haId = typeof trigger.data.id === 'string' ? trigger.data.id : undefined
+  if (haId && haId === refId) {
+    return true
+  }
+  const indexMatch = refId.match(/^trigger_(\d+)$/)
+  return indexMatch !== null && trigger.path === `trigger/${indexMatch[1]}`
+}
+
+function findExplicitTriggerFlowTargets(
+  ctx: BuildContext,
+  trigger: FlowNode,
+): FlowNode[] {
+  return ctx.nodes.filter(
+    n =>
+      n.kind === 'condition'
+      && extractTriggerIdsFromCondition(n.data).some(refId =>
+        triggerMatchesConditionRef(trigger, refId),
+      ),
+  )
+}
+
+/** First executable node after triggers (global condition or first action anchor). */
+function findDefaultExecutionEntry(ctx: BuildContext): FlowNode | undefined {
+  const rootCondition = ctx.nodes.find(n => n.path === 'condition/0')
+  if (rootCondition) {
+    return rootCondition
+  }
+
+  const firstTrigger = ctx.nodes.find(n => n.path === 'trigger/0')
+  if (firstTrigger) {
+    const anchorEdge = ctx.edges.find(
+      e =>
+        e.source === firstTrigger.id
+        && (e.edgeKind === 'flow' || e.edgeKind === undefined),
+    )
+    if (anchorEdge) {
+      return ctx.nodes.find(n => n.id === anchorEdge.target)
+    }
+  }
+
+  return ctx.nodes.find(
+    n =>
+      n.path === 'action/0'
+      || (n.path?.startsWith('action/0/') && !n.path.includes('/choose/')),
+  )
+}
+
+function hasFlowEdgeTo(ctx: BuildContext, sourceId: string, targetId: string): boolean {
+  return ctx.edges.some(
+    e =>
+      e.source === sourceId
+      && e.target === targetId
+      && (e.edgeKind === 'flow' || e.edgeKind === undefined),
+  )
+}
+
+/** Wire every root trigger into the execution graph (not only trigger/0). */
+function connectTriggerFlowEdges(ctx: BuildContext): void {
+  const rootTriggers = ctx.nodes.filter(
+    n => n.kind === 'trigger' && !n.parentId,
+  )
+  if (rootTriggers.length === 0) {
+    return
+  }
+
+  const defaultEntry = findDefaultExecutionEntry(ctx)
+
+  for (const trigger of rootTriggers) {
+    const explicitTargets = findExplicitTriggerFlowTargets(ctx, trigger)
+    const targets =
+      explicitTargets.length > 0
+        ? explicitTargets
+        : defaultEntry
+          ? [defaultEntry]
+          : []
+
+    for (const target of targets) {
+      if (!hasFlowEdgeTo(ctx, trigger.id, target.id)) {
+        connect(ctx, trigger, target)
+      }
+    }
+  }
 }
 
 export function buildGraphFromConfig(
@@ -825,6 +909,7 @@ export function buildGraphFromConfig(
 
   if (triggerNodes.length > 0) {
     connectTriggerReferenceEdges(ctx)
+    connectTriggerFlowEdges(ctx)
   }
 
   return { nodes: ctx.nodes, edges: ctx.edges }

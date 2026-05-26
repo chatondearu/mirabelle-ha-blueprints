@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { estimateNodeSize } from '@mirabelle/flow-shared'
 import { parseAutomationYaml } from './parser.js'
+import { extractTriggerIdsFromCondition } from './trigger-path.js'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../../')
 
@@ -68,6 +69,72 @@ describe('graph structure', () => {
     )
     // actions may live inside HA container parents
     expect(services.length).toBeGreaterThan(2)
+  })
+
+  it('connects every root trigger to the default execution entry when unassigned', () => {
+    const yaml = loadBlueprint('blueprints/automations/presence_based_lighting.yaml')
+    const doc = parseAutomationYaml(yaml, { source: 'presence_based_lighting.yaml' })
+
+    const globalCondition = doc.nodes.find(n => n.path === 'condition/0')
+    expect(globalCondition).toBeDefined()
+
+    const triggers = doc.nodes.filter(n => n.kind === 'trigger' && !n.parentId)
+    expect(triggers.length).toBe(2)
+
+    for (const trigger of triggers) {
+      expect(
+        doc.edges.some(
+          e =>
+            e.source === trigger.id
+            && e.target === globalCondition!.id
+            && (e.edgeKind === 'flow' || e.edgeKind === undefined),
+        ),
+      ).toBe(true)
+    }
+  })
+
+  it('routes triggers with explicit condition: trigger id to their branch conditions', () => {
+    const yaml = loadBlueprint('blueprints/automations/frient_keypad_with_alarmo.yaml')
+    const doc = parseAutomationYaml(yaml, { source: 'frient_keypad_with_alarmo.yaml' })
+
+    const keypad = doc.nodes.find(
+      n => n.kind === 'trigger' && n.data.id === 'keypad_event',
+    )
+    const alarmo = doc.nodes.find(
+      n => n.kind === 'trigger' && n.data.id === 'alarmo_state_change',
+    )
+    expect(keypad).toBeDefined()
+    expect(alarmo).toBeDefined()
+
+    const keypadCond = doc.nodes.find(
+      n =>
+        n.kind === 'condition'
+        && extractTriggerIdsFromCondition(n.data).includes('keypad_event'),
+    )
+    const alarmoCond = doc.nodes.find(
+      n =>
+        n.kind === 'condition'
+        && extractTriggerIdsFromCondition(n.data).includes('alarmo_state_change'),
+    )
+    expect(keypadCond).toBeDefined()
+    expect(alarmoCond).toBeDefined()
+
+    expect(
+      doc.edges.some(
+        e =>
+          e.source === keypad!.id
+          && e.target === keypadCond!.id
+          && (e.edgeKind === 'flow' || e.edgeKind === undefined),
+      ),
+    ).toBe(true)
+    expect(
+      doc.edges.some(
+        e =>
+          e.source === alarmo!.id
+          && e.target === alarmoCond!.id
+          && (e.edgeKind === 'flow' || e.edgeKind === undefined),
+      ),
+    ).toBe(true)
   })
 
   it('does not connect config nodes to triggers with flow edges', () => {
