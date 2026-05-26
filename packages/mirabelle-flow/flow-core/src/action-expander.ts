@@ -178,6 +178,46 @@ export interface ChooseBranch {
   sequence?: unknown[]
 }
 
+function isIfBranchList(ifList: unknown[]): boolean {
+  return ifList.some(
+    item =>
+      item !== null
+      && typeof item === 'object'
+      && ('conditions' in item || 'sequence' in item),
+  )
+}
+
+/** HA supports branch-list `if` and condition-list `if` + `then` / `else`. */
+export function parseIfActionShape(a: Record<string, unknown>): {
+  mode: 'branches' | 'then_else'
+  branches: ChooseBranch[]
+  conditions: unknown[]
+  thenSeq: unknown[]
+  elseSeq: unknown[]
+} {
+  const ifList = Array.isArray(a.if) ? a.if : []
+  const thenSeq = Array.isArray(a.then) ? a.then : []
+  const elseSeq = Array.isArray(a.else) ? a.else : []
+
+  if (isIfBranchList(ifList)) {
+    return {
+      mode: 'branches',
+      branches: ifList as ChooseBranch[],
+      conditions: [],
+      thenSeq: [],
+      elseSeq: elseSeq,
+    }
+  }
+
+  return {
+    mode: 'then_else',
+    branches: [],
+    conditions: ifList,
+    thenSeq,
+    elseSeq,
+  }
+}
+
 export function summarizeHaBlock(a: Record<string, unknown>): string {
   const descriptor = getHaBlockDescriptor(a)
   if (descriptor.key === 'service') {
@@ -322,8 +362,9 @@ export function materializeIf(
   },
   expandBranchSequence: ExpandBranchSequenceFn,
 ): FlowNode {
-  const branches = (Array.isArray(a.if) ? a.if : []) as ChooseBranch[]
-  const elseSeq = (a as { else?: unknown[] }).else ?? []
+  const shape = parseIfActionShape(a)
+  const branchCount =
+    shape.mode === 'branches' ? shape.branches.length : shape.conditions.length > 0 ? 1 : 0
   const ifNode = ctx.addNode(
     path,
     'ha_block',
@@ -332,8 +373,9 @@ export function materializeIf(
       blockKey: 'if',
       isContainer: true,
       layoutHeaderHeight: 40,
-      branchCount: branches.length,
-      hasDefault: elseSeq.length > 0,
+      branchCount,
+      hasDefault: shape.elseSeq.length > 0,
+      ifShape: shape.mode,
     },
     options.parentId,
   )
@@ -344,17 +386,61 @@ export function materializeIf(
     ctx.connect(options.flowParent, ifNode, options.firstEdge)
   }
 
-  branches.forEach((branch, bi) => {
-    buildConditionsInContainer(
-      ctx,
-      branch.conditions ?? [],
-      ifNode,
-      `${path}/if/${bi}/conditions`,
-      { branchKey: `if-${bi}`, branchIndex: bi },
-    )
-  })
+  const leaves: FlowNode[] = []
 
-  if (elseSeq.length > 0) {
+  if (shape.mode === 'then_else') {
+    if (shape.conditions.length > 0) {
+      buildConditionsInContainer(
+        ctx,
+        shape.conditions,
+        ifNode,
+        `${path}/if/conditions`,
+        { branchKey: 'if-0', branchIndex: 0 },
+      )
+    }
+
+    if (shape.thenSeq.length > 0) {
+      const thenLeaves = expandBranchSequence(
+        ctx,
+        shape.thenSeq,
+        ifNode,
+        `${path}/if/then/sequence`,
+        'if-0',
+      )
+      if (thenLeaves.length > 0) {
+        leaves.push(thenLeaves[thenLeaves.length - 1]!)
+      }
+    }
+  }
+  else {
+    shape.branches.forEach((branch, bi) => {
+      buildConditionsInContainer(
+        ctx,
+        branch.conditions ?? [],
+        ifNode,
+        `${path}/if/${bi}/conditions`,
+        { branchKey: `if-${bi}`, branchIndex: bi },
+      )
+    })
+
+    shape.branches.forEach((branch, bi) => {
+      const seq = branch.sequence ?? []
+      if (seq.length > 0) {
+        const branchLeaves = expandBranchSequence(
+          ctx,
+          seq,
+          ifNode,
+          `${path}/if/${bi}/sequence`,
+          `if-${bi}`,
+        )
+        if (branchLeaves.length > 0) {
+          leaves.push(branchLeaves[branchLeaves.length - 1]!)
+        }
+      }
+    })
+  }
+
+  if (shape.elseSeq.length > 0) {
     ctx.addNode(
       `${path}/if/else/marker`,
       'choose_option',
@@ -362,29 +448,9 @@ export function materializeIf(
       { key: 'if-else', label: 'Else', isDefault: true, layoutOrder: 9000 },
       ifNode.id,
     )
-  }
-
-  const leaves: FlowNode[] = []
-  branches.forEach((branch, bi) => {
-    const seq = branch.sequence ?? []
-    if (seq.length > 0) {
-      const branchLeaves = expandBranchSequence(
-        ctx,
-        seq,
-        ifNode,
-        `${path}/if/${bi}/sequence`,
-        `if-${bi}`,
-      )
-      if (branchLeaves.length > 0) {
-        leaves.push(branchLeaves[branchLeaves.length - 1]!)
-      }
-    }
-  })
-
-  if (elseSeq.length > 0) {
     const elseLeaves = expandBranchSequence(
       ctx,
-      elseSeq,
+      shape.elseSeq,
       ifNode,
       `${path}/if/else/sequence`,
       'if-else',

@@ -176,6 +176,57 @@ describe('graph structure', () => {
     expect(groupSize?.height).toBeGreaterThan(ordered[ordered.length - 1]!.y)
   })
 
+  it('materializes if/then/else with conditions as children of the If container', () => {
+    const yaml = `
+trigger:
+  - platform: state
+    entity_id: light.test
+action:
+  - if:
+      - condition: template
+        value_template: "{{ true }}"
+    then:
+      - service: light.turn_on
+        target:
+          entity_id: light.test
+    else:
+      - service: light.turn_off
+        target:
+          entity_id: light.test
+`
+    const doc = parseAutomationYaml(yaml, { source: 'if-then-else.yaml' })
+    const ifNode = doc.nodes.find(
+      n => n.kind === 'ha_block' && n.data.blockKey === 'if',
+    )
+    expect(ifNode).toBeDefined()
+    const children = doc.nodes.filter(n => n.parentId === ifNode!.id)
+    expect(children.some(n => n.kind === 'condition')).toBe(true)
+    expect(children.some(n => n.kind === 'choose_option' && n.label === 'Else')).toBe(true)
+    expect(
+      doc.nodes.some(
+        n =>
+          n.kind === 'action'
+          && String(n.data.service).includes('turn_on'),
+      ),
+    ).toBe(true)
+  })
+
+  it('materializes living-area if/then with template conditions inside If', () => {
+    const yaml = loadBlueprint(
+      'blueprints/automations/living-area-adaptive-lighting.yaml',
+    )
+    const doc = parseAutomationYaml(yaml, {
+      source: 'living-area-adaptive-lighting.yaml',
+      preview: true,
+    })
+    const ifNode = doc.nodes.find(
+      n => n.kind === 'ha_block' && n.data.blockKey === 'if',
+    )
+    expect(ifNode).toBeDefined()
+    const children = doc.nodes.filter(n => n.parentId === ifNode!.id)
+    expect(children.filter(n => n.kind === 'condition').length).toBeGreaterThan(0)
+  })
+
   it('creates choose with conditions inside and only a Default option marker', () => {
     const yaml = loadBlueprint('blueprints/automations/presence_based_lighting.yaml')
     const doc = parseAutomationYaml(yaml, { source: 'presence_based_lighting.yaml' })

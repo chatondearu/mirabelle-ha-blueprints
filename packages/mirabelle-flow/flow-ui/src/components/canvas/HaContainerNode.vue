@@ -10,6 +10,7 @@ const { iconClass, stateClasses, titleKind } = useNodeVisuals(() => props.data)
   <div
     class="flow-node-group flow-node-card"
     :data-kind="data.kind"
+    :data-block-key="data.rawData?.blockKey"
     :class="stateClasses"
   >
     <div class="flex items-center gap-1.5 font-medium capitalize">

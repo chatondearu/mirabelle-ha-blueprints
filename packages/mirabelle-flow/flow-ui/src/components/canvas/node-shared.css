@@ -108,6 +108,11 @@
   background-color: #171717;
 }
 
+.flow-node-card[data-kind='ha_block'][data-block-key='if'] {
+  border-color: #64748b;
+  background-color: #1e293b;
+}
+
 .flow-node-card.is-path-dimmed {
   opacity: 0.2;
   filter: saturate(0.5);
