@@ -259,6 +259,48 @@ action:
     expect(turnOn?.parentId).not.toBe(chooseNode?.id)
   })
 
+  it('places repeat body actions outside the repeat parent', () => {
+    const yaml = `
+trigger:
+  - platform: state
+    entity_id: light.test
+action:
+  - repeat:
+      for_each: "{{ ['a', 'b'] }}"
+      sequence:
+        - service: light.turn_on
+          target:
+            entity_id: light.test
+        - service: light.turn_off
+          target:
+            entity_id: light.test
+`
+    const doc = parseAutomationYaml(yaml, { source: 'repeat-outside.yaml' })
+    const repeatNode = doc.nodes.find(n => n.kind === 'repeat')
+    expect(repeatNode?.data.isContainer).toBe(true)
+    const turnOn = doc.nodes.find(
+      n =>
+        n.kind === 'action'
+        && typeof n.data.service === 'string'
+        && n.data.service.includes('turn_on'),
+    )
+    expect(turnOn).toBeDefined()
+    expect(turnOn?.parentId).not.toBe(repeatNode?.id)
+    expect(
+      doc.edges.some(
+        e =>
+          e.edgeKind === 'flow'
+          && e.source === repeatNode?.id
+          && (e.target === turnOn?.id || e.target === turnOn?.parentId),
+      ),
+    ).toBe(true)
+    expect(
+      doc.nodes.filter(
+        n => n.parentId === repeatNode?.id && n.kind === 'action',
+      ).length,
+    ).toBe(0)
+  })
+
   it('places branch actions outside the choose parent', () => {
     const yaml = loadBlueprint('blueprints/automations/presence_based_lighting.yaml')
     const doc = parseAutomationYaml(yaml, {

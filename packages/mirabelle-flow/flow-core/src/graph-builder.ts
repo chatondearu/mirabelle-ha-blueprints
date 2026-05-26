@@ -140,6 +140,64 @@ function expandActionsInContainer(
   return buildActionsInContainer(ctx, actions, container, pathPrefix)
 }
 
+const REPEAT_BODY_BRANCH = 'repeat-body'
+
+/** Repeat body sequence is laid out outside the repeat container (like choose branches). */
+function expandRepeatBlock(
+  ctx: BuildContext,
+  a: Record<string, unknown>,
+  path: string,
+  options: {
+    parentId?: string
+    prev?: FlowNode
+    flowParent?: FlowNode
+    firstEdge?: {
+      sourceHandle?: string
+      targetHandle?: string
+      label?: string
+      branch?: string
+      itemKey?: string
+    }
+  } = {},
+): FlowNode {
+  const repeatNode = addNode(
+    ctx,
+    path,
+    'repeat',
+    'Repeat',
+    {
+      ...a,
+      blockKey: 'repeat',
+      isContainer: true,
+      layoutHeaderHeight: 40,
+    },
+    options.parentId,
+  )
+  if (options.prev) {
+    connect(ctx, options.prev, repeatNode)
+  }
+  else if (options.flowParent) {
+    connect(ctx, options.flowParent, repeatNode, options.firstEdge)
+  }
+
+  const repeatPayload =
+    a.repeat && typeof a.repeat === 'object'
+      ? (a.repeat as { sequence?: unknown[] })
+      : undefined
+  const body = repeatPayload?.sequence ?? []
+  if (body.length > 0) {
+    const leaves = buildBranchSequenceOutside(
+      ctx,
+      body,
+      repeatNode,
+      `${path}/repeat/sequence`,
+      REPEAT_BODY_BRANCH,
+    )
+    return leaves[leaves.length - 1] ?? repeatNode
+  }
+  return repeatNode
+}
+
 /** Branch sequence after choose/if: nodes live outside the container parent. */
 function buildBranchSequenceOutside(
   ctx: BuildContext,
@@ -415,19 +473,7 @@ function expandActionItem(
   }
 
   if (a.repeat && typeof a.repeat === 'object') {
-    const repeatNode = addNode(ctx, path, 'repeat', 'Repeat', { ...a, isContainer: true }, undefined)
-    if (prev) {
-      connect(ctx, prev, repeatNode)
-    }
-    else {
-      connect(ctx, parent, repeatNode, firstEdge)
-    }
-    const body = (a.repeat as { sequence?: unknown[] }).sequence ?? []
-    if (body.length > 0) {
-      const leaves = buildActionsInContainer(ctx, body, repeatNode, `${path}/repeat/sequence`)
-      return leaves[leaves.length - 1] ?? repeatNode
-    }
-    return repeatNode
+    return expandRepeatBlock(ctx, a, path, { prev, flowParent: parent, firstEdge })
   }
 
   if (Array.isArray(a.parallel)) {
@@ -566,6 +612,10 @@ function expandActionItemRoot(
     )
   }
 
+  if (a.repeat && typeof a.repeat === 'object') {
+    return expandRepeatBlock(ctx, a, path)
+  }
+
   if (typeof a.service === 'string') {
     return expandServiceAction(asActionContext(ctx), a, path)
   }
@@ -639,6 +689,10 @@ function expandActionItemInContainer(
       (actx, actions, anchor, prefix, branchKey) =>
         buildBranchSequenceOutside(ctx, actions, anchor, prefix, branchKey),
     )
+  }
+
+  if (a.repeat && typeof a.repeat === 'object') {
+    return expandRepeatBlock(ctx, a, path, { parentId: container.id, prev })
   }
 
   if (typeof a.service === 'string') {
