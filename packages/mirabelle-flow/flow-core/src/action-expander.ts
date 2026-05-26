@@ -60,6 +60,30 @@ export function summarizeCondition(c: Record<string, unknown>): string {
   return cond ? `Condition: ${cond}` : 'Condition'
 }
 
+const SERVICE_LABEL_MAX = 96
+
+function truncateLabel(text: string, max = SERVICE_LABEL_MAX): string {
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
+function summarizeDataPayload(data: Record<string, unknown>): string | undefined {
+  const entries = Object.entries(data).filter(([k]) => k !== 'entity_id')
+  if (entries.length === 0) {
+    return undefined
+  }
+  const preview = entries
+    .slice(0, 2)
+    .map(([k, v]) => {
+      if (typeof v === 'string') {
+        const t = v.length > 32 ? `${v.slice(0, 32)}…` : v
+        return `${k}=${t}`
+      }
+      return `${k}=${JSON.stringify(v)}`
+    })
+    .join(', ')
+  return entries.length > 2 ? `${preview}, …` : preview
+}
+
 export function summarizeServiceAction(a: Record<string, unknown>): string {
   const service = String(a.service ?? 'Action')
   const target = a.target as { entity_id?: string | string[] } | undefined
@@ -71,51 +95,17 @@ export function summarizeServiceAction(a: Record<string, unknown>): string {
     entity = target.entity_id.join(', ')
   }
   const data = a.data as Record<string, unknown> | undefined
-  const dataKeys = data ? Object.keys(data).filter(k => k !== 'entity_id') : []
-  if (entity && dataKeys.length > 0) {
-    return `${service} → ${entity} (${dataKeys.slice(0, 2).join(', ')}…)`
+  const dataSummary = data ? summarizeDataPayload(data) : undefined
+  if (entity && dataSummary) {
+    return truncateLabel(`${service} → ${entity} (${dataSummary})`)
   }
   if (entity) {
-    return `${service} → ${entity}`
+    return truncateLabel(`${service} → ${entity}`)
   }
-  if (dataKeys.length > 0) {
-    return `${service} (${dataKeys.join(', ')})`
+  if (dataSummary) {
+    return truncateLabel(`${service} (${dataSummary})`)
   }
   return service
-}
-
-function formatDetailLabel(part: string, value: unknown): string | null {
-  if (value === undefined || value === null) {
-    return null
-  }
-  if (part === 'target' && typeof value === 'object') {
-    const t = value as { entity_id?: string | string[]; device_id?: string }
-    if (typeof t.entity_id === 'string') {
-      return `target: ${t.entity_id}`
-    }
-    if (Array.isArray(t.entity_id)) {
-      return `target: ${t.entity_id.join(', ')}`
-    }
-    if (t.device_id) {
-      return `target: device ${t.device_id}`
-    }
-    return `target: ${JSON.stringify(value)}`
-  }
-  if (part === 'data' && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>)
-    if (entries.length === 0) {
-      return null
-    }
-    const preview = entries
-      .slice(0, 3)
-      .map(([k, v]) => `${k}=${typeof v === 'string' ? v : JSON.stringify(v)}`)
-      .join(', ')
-    return entries.length > 3 ? `data: ${preview}…` : `data: ${preview}`
-  }
-  if (typeof value === 'string') {
-    return `${part}: ${value.length > 40 ? `${value.slice(0, 40)}…` : value}`
-  }
-  return `${part}: ${JSON.stringify(value)}`
 }
 
 /** Condition nodes nested inside a container (choose, if, …). */
@@ -149,7 +139,30 @@ export function buildConditionsInContainer(
   return nodes
 }
 
-/** Service call with target/data as first-level children only (under the action node). */
+/** Service call as a single action node (target/data summarized in the label). */
+export function expandServiceAction(
+  ctx: ActionBuildContext,
+  a: Record<string, unknown>,
+  path: string,
+  options: {
+    parentId?: string
+    prev?: FlowNode
+  } = {},
+): FlowNode {
+  const main = ctx.addNode(
+    path,
+    'action',
+    summarizeServiceAction(a),
+    { ...a, blockKey: 'service' },
+    options.parentId,
+  )
+  if (options.prev) {
+    ctx.connect(options.prev, main)
+  }
+  return main
+}
+
+/** Service inside a HA container (repeat, parallel, …). */
 export function expandServiceActionInContainer(
   ctx: ActionBuildContext,
   a: Record<string, unknown>,
@@ -157,51 +170,7 @@ export function expandServiceActionInContainer(
   container: FlowNode,
   prev: FlowNode | undefined,
 ): FlowNode {
-  const main = ctx.addNode(
-    path,
-    'action',
-    summarizeServiceAction(a),
-    { ...a, blockKey: 'service' },
-    container.id,
-  )
-  if (prev) {
-    ctx.connect(prev, main)
-  }
-
-  let detailIndex = 0
-  let hasDetails = false
-  if (a.target !== undefined) {
-    const label = formatDetailLabel('target', a.target)
-    if (label) {
-      hasDetails = true
-      ctx.addNode(
-        `${path}/detail/${detailIndex++}`,
-        'ha_block',
-        label,
-        { part: 'target', value: a.target },
-        main.id,
-      )
-    }
-  }
-  if (a.data !== undefined) {
-    const label = formatDetailLabel('data', a.data)
-    if (label) {
-      hasDetails = true
-      ctx.addNode(
-        `${path}/detail/${detailIndex++}`,
-        'ha_block',
-        label,
-        { part: 'data', value: a.data },
-        main.id,
-      )
-    }
-  }
-  if (hasDetails) {
-    main.data.isContainer = true
-    main.data.layoutHeaderHeight = 44
-  }
-
-  return main
+  return expandServiceAction(ctx, a, path, { parentId: container.id, prev })
 }
 
 export interface ChooseBranch {

@@ -37,7 +37,7 @@ export function findContainerFlowExit(
   edges: FlowEdge[],
   container: FlowNode,
 ): FlowNode | undefined {
-  if (container.data.isContainer !== true && container.kind !== 'sequence') {
+  if (container.data.isContainer !== true) {
     return undefined
   }
 

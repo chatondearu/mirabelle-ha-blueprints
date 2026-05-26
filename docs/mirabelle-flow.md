@@ -28,6 +28,7 @@ Open the Vite dev server URL (default `http://localhost:5173`).
 - **Variables** — parent **variables** group with child **variable** nodes; internal-only aliases are hidden (`binding_only`)
 - **Export YAML** — download (unchanged file when not edited)
 - **Trace import** — paste exported trace JSON to highlight executed paths
+- **Readable execution graph** — actions chained left-to-right (no `sequence` wrapper nodes); service `target`/`data` summarized on the action card; trigger **reference** lines shown only when the target condition node is selected
 
 ### Simulation workflow
 
@@ -37,7 +38,8 @@ Open the Vite dev server URL (default `http://localhost:5173`).
 4. Click **Apply simulation** — the graph reloads with substituted values and richer action labels.
 5. Click **Show usages on graph** on an input to highlight `input_binding` edges.
 6. Select a visible **variable** child under the variables group to inspect aliases and `variable_binding` links.
-7. With simulation on, select a **trigger** to see branches that statically reference that trigger (green ring).
+7. Click a **condition** node that references a trigger to reveal dashed **reference** edges from that trigger (hidden by default to reduce clutter).
+8. With simulation on, select a **trigger** to see branches that statically reference that trigger (green ring).
 
 ### Limitations
 

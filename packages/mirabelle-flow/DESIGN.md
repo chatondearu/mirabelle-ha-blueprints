@@ -53,7 +53,8 @@ Active edges use custom `FlowNeonEdge` (glow, arrow marker, `animateMotion` part
 
 - **Config band (top):** parent **`blueprint`** + child **`blueprint_input`** nodes; parent **`variables`** + child **`variable`** nodes (internal variables hidden unless they have an external binding).
 - **Execution band (bottom):** **`trigger`** nodes are flow entry points; HA blocks (`choose`, `sequence`, …) are parent containers with nested children.
-- **Deep action expansion:** `choose` / `if` parents contain only first-level **`condition`** nodes (one block per branch) plus a **Default** marker; branch **`sequence`** actions are laid out **outside** the parent and linked via `flow` edges (`opt-0`, `opt-default`, …). **`service`** calls may use **`ha_block`** children for `target` / `data` under the action node only.
+- **Deep action expansion:** `choose` / `if` parents contain only first-level **`condition`** nodes (one block per branch) plus a **Default** marker; branch **`sequence`** actions are laid out **outside** the parent and linked via `flow` edges from branch exit children. YAML **`sequence:`** lists are **flattened** into a linear chain (no `sequence` container). **`service`** `target` / `data` are summarized in the action label (no redundant `ha_block` children).
+- **Execution layout:** `execution-layout.ts` places root execution nodes **left → right** by longest-path column, with **lanes** per choose/if branch to avoid overlap.
 - **Inline editing** on each **`blueprint_input`** child (selector-aware; HA-first).
 - **Simulation catalog** (sidebar, localStorage): fallback entity ids when HA is not connected; HA entity list takes priority in pickers when connected.
 - **Simulation mode** (default on): substitutes inputs, expands nested actions, enriches labels (`service → entity`).
@@ -170,7 +171,7 @@ Style Reka parts with UnoCSS + `data-[state=active]:` attributes; do not fight R
 
 - Use default theme CSS imports in `main.ts`.
 - Custom node type: `FlowNode` only for M0.
-- Handles are **conditional** (`computeNodeHandleVisibility` in flow-ui): parent groups (`blueprint`, `variables`, HA containers) have **no** handles; child nodes show a **target** only for `input_binding`, `variable_binding`, or `reference` edges, and a **source** when they emit flow or binding edges. Structural flow connects child-to-child in the IR (`flow-endpoints.ts`), not via parent branch handles.
+- Handles are **conditional** (`computeNodeHandleVisibility` in flow-ui): HA **parent** containers show a **left target** only for external `flow` edges; **no source** on parents. **Child** nodes show a target only for `input_binding`, `variable_binding`, or `reference`. **`reference`** edges are hidden until the **target** node is selected. Structural `flow` uses `flow-endpoints.ts` (child-to-child, branch exits).
 - Background grid: `@vue-flow/background` (subtle; do not overpower nodes).
 - Controls: `@vue-flow/controls` bottom-right if present.
 

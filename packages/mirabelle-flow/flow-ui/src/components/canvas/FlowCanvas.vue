@@ -15,7 +15,10 @@ import { Controls } from '@vue-flow/controls'
 import { reconcileGroupLayouts } from '@mirabelle/flow-core'
 import { computed, watch } from 'vue'
 import { useFlowStore } from '@/stores/flow'
-import { computeNodeHandleVisibility } from './composables/node-handle-visibility'
+import {
+  buildChildIdsByParent,
+  computeNodeHandleVisibility,
+} from './composables/node-handle-visibility'
 import CanvasVariablesToolbar from './CanvasVariablesToolbar.vue'
 import FlowNeonEdge from './FlowNeonEdge.vue'
 import { FLOW_NODE_RENDERER_MAP } from './flow-node-renderer-map'
@@ -56,6 +59,7 @@ const nodes = computed<Node[]>(() => {
     return []
   }
   const { layout: layoutPositions, groupSizes } = groupLayout.value
+  const childIdsByParent = buildChildIdsByParent(doc.nodes)
   return doc.nodes
     .filter(n => isNodeVisible(n.id))
     .filter(n => store.isNodeVisibleOnCanvas(n))
@@ -99,6 +103,7 @@ const nodes = computed<Node[]>(() => {
             n.parentId,
             isContainer,
             doc.edges,
+            childIdsByParent,
           ),
         },
       }
@@ -113,9 +118,15 @@ const edges = computed<Edge[]>(() => {
   const visibleIds = new Set(
     doc.nodes.filter(n => store.isNodeVisibleOnCanvas(n)).map(n => n.id),
   )
+  const selectedId = store.selectedNodeId
   return doc.edges
     .filter(e => isNodeVisible(e.source) && isNodeVisible(e.target))
     .filter(e => visibleIds.has(e.source) && visibleIds.has(e.target))
+    .filter(
+      e =>
+        e.edgeKind !== 'reference'
+        || (selectedId !== null && e.target === selectedId),
+    )
     .map((e) => {
       const pathActive = store.pathHighlightEdgeIds.has(e.id)
       const traceHighlight = store.highlightedNodeIds.has(e.target)

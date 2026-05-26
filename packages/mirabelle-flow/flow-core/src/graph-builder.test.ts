@@ -37,6 +37,25 @@ describe('graph structure', () => {
     expect(varChildren.every(n => n.parentId === varsParent?.id)).toBe(true)
   })
 
+  it('does not create target/data ha_block children under service actions', () => {
+    const yaml = loadBlueprint('blueprints/automations/frient_keypad_with_alarmo.yaml')
+    const doc = parseAutomationYaml(yaml, { source: 'frient_keypad_with_alarmo.yaml' })
+
+    const serviceActions = doc.nodes.filter(
+      n => n.kind === 'action' && typeof n.data.service === 'string',
+    )
+    expect(serviceActions.length).toBeGreaterThan(0)
+
+    const detailBlocks = doc.nodes.filter(
+      n =>
+        n.kind === 'ha_block'
+        && n.parentId
+        && serviceActions.some(a => a.id === n.parentId),
+    )
+    expect(detailBlocks.length).toBe(0)
+    expect(serviceActions.every(a => a.data.isContainer !== true)).toBe(true)
+  })
+
   it('expands choose branches into action nodes', () => {
     const yaml = loadBlueprint('blueprints/automations/frient_keypad_with_alarmo.yaml')
     const doc = parseAutomationYaml(yaml, {
@@ -102,6 +121,24 @@ describe('graph structure', () => {
     const optionMarkers = doc.nodes.filter(n => n.kind === 'choose_option')
     expect(optionMarkers.length).toBe(1)
     expect(optionMarkers[0]?.data.key).toBe('opt-default')
+  })
+
+  it('does not materialize sequence container nodes for inline action lists', () => {
+    const yaml = loadBlueprint('blueprints/automations/presence_based_lighting.yaml')
+    const doc = parseAutomationYaml(yaml, {
+      source: 'presence_based_lighting.yaml',
+      preview: false,
+    })
+    expect(doc.nodes.some(n => n.kind === 'sequence')).toBe(false)
+    const chooseNode = doc.nodes.find(n => n.kind === 'choose')
+    const turnOn = doc.nodes.find(
+      n =>
+        n.kind === 'action'
+        && typeof n.data.service === 'string'
+        && n.data.service.includes('turn_on'),
+    )
+    expect(turnOn).toBeDefined()
+    expect(turnOn?.parentId).not.toBe(chooseNode?.id)
   })
 
   it('places branch actions outside the choose parent', () => {

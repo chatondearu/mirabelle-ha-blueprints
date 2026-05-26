@@ -128,7 +128,7 @@ Follow [`DESIGN.md`](./DESIGN.md) for visuals. Code conventions:
 ### Blueprint simulation
 
 - **Config band (top):** parent **`blueprint`** with child **`blueprint_input`** nodes; parent **`variables`** with child **`variable`** nodes (hidden when no external `variable_binding`).
-- **Execution flow (bottom):** **`trigger`** entry points → HA container nodes (`choose`, `sequence`, …) with nested children. Config connects only via `input_binding` / `variable_binding`, not `flow` edges.
+- **Execution flow (bottom):** **`trigger`** → HA containers (`choose`, `repeat`, …) left-to-right via `execution-layout.ts`; YAML `sequence:` flattened to action chains; no service `target`/`data` child nodes. Config uses `input_binding` / `variable_binding` only. `reference` edges hidden until target node selected.
 - **Action expansion:** `flow-core/src/action-expander.ts` materializes branch conditions, service `target`/`data` details, and extra HA blocks (`if`, `stop`, `event`, …). Extend this module when adding new YAML action shapes.
 - **`simulationCatalog`** in Pinia + `localStorage`; entity pickers are **HA-first** via `useEntityPicker` (fallback catalog).
 - **`previewMode`** defaults to on; `applySimulation()` reloads YAML through `parseAutomationYaml` with `substituteInputs`.
