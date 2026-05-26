@@ -2,7 +2,7 @@
 import { Handle, Position } from '@vue-flow/core'
 import type { NodeHandleVisibility } from './composables/node-handle-visibility'
 
-const props = defineProps<{
+defineProps<{
   handles: NodeHandleVisibility
   sourceId?: string
   targetClass?: string

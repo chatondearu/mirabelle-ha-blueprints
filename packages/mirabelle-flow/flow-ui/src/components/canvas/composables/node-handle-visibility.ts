@@ -31,6 +31,15 @@ export function computeNodeHandleVisibility(
   const outgoing = edges.filter(e => e.source === nodeId)
   const childIds = childIdsByParent.get(nodeId)
 
+  // Triggers must always expose an output handle so users can read the flow
+  // and see trigger reference lines.
+  if (kind === 'trigger') {
+    return {
+      showTarget: incoming.some(e => isFlowEdge(e.edgeKind) || isBindingInEdge(e.edgeKind)),
+      showSource: true,
+    }
+  }
+
   const flowInFromOutside = incoming.some((e) => {
     if (!isFlowEdge(e.edgeKind)) {
       return false

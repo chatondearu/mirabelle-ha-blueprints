@@ -118,6 +118,7 @@ const edges = computed<Edge[]>(() => {
   const visibleIds = new Set(
     doc.nodes.filter(n => store.isNodeVisibleOnCanvas(n)).map(n => n.id),
   )
+  const kindById = new Map(doc.nodes.map(n => [n.id, n.kind] as const))
   const selectedId = store.selectedNodeId
   return doc.edges
     .filter(e => isNodeVisible(e.source) && isNodeVisible(e.target))
@@ -125,6 +126,7 @@ const edges = computed<Edge[]>(() => {
     .filter(
       e =>
         e.edgeKind !== 'reference'
+        || kindById.get(e.source) === 'trigger'
         || (selectedId !== null && e.target === selectedId),
     )
     .map((e) => {
