@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { Handle, Position } from '@vue-flow/core'
-import type { NodeHandleVisibility } from './composables/node-handle-visibility'
+import { TARGET_TOP_HANDLE_ID, type NodeHandleVisibility } from './composables/node-handle-visibility'
 
 defineProps<{
   handles: NodeHandleVisibility
   sourceId?: string
   targetClass?: string
+  targetTopClass?: string
   sourceClass?: string
 }>()
 </script>
@@ -16,6 +17,13 @@ defineProps<{
     type="target"
     :position="Position.Left"
     :class="targetClass ?? '!bg-neutral-400'"
+  />
+  <Handle
+    v-if="handles.showTargetTop"
+    :id="TARGET_TOP_HANDLE_ID"
+    type="target"
+    :position="Position.Top"
+    :class="targetTopClass ?? '!bg-violet-300'"
   />
   <Handle
     v-if="handles.showSource"

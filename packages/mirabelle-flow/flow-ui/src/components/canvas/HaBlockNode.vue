@@ -26,7 +26,12 @@ const blockKey = computed(() => String(props.data.rawData?.blockKey ?? ''))
     ]"
     :data-kind="data.kind"
   >
-    <FlowNodeHandles v-if="!isContainer" :handles="data.handles" target-class="!bg-neutral-500" />
+    <FlowNodeHandles
+      v-if="!isContainer"
+      :handles="data.handles"
+      target-class="!bg-neutral-500"
+      target-top-class="!bg-violet-300"
+    />
     <div class="flex items-center gap-1.5 font-medium">
       <span class="flow-node-card__icon" :class="iconClass" aria-hidden="true" />
       <span v-if="isContainer" class="capitalize">{{ blockKey || data.label }}</span>

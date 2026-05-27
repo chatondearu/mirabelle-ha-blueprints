@@ -14,6 +14,28 @@ function flowEdges(edges: FlowEdge[]): FlowEdge[] {
   )
 }
 
+const BINDING_EDGE_KINDS = new Set([
+  'input_binding',
+  'variable_binding',
+])
+
+function expandWithBindingNodes(
+  base: Set<string>,
+  edges: FlowEdge[],
+): Set<string> {
+  const active = new Set(base)
+  for (const e of edges) {
+    if (!e.edgeKind || !BINDING_EDGE_KINDS.has(e.edgeKind)) {
+      continue
+    }
+    if (active.has(e.source) || active.has(e.target)) {
+      active.add(e.source)
+      active.add(e.target)
+    }
+  }
+  return active
+}
+
 function buildAdjacency(edges: FlowEdge[]): Map<string, string[]> {
   const adj = new Map<string, string[]>()
   for (const e of edges) {
@@ -102,12 +124,14 @@ export function getFocusedPathNodeIds(
   }
 
   if (node.kind === 'trigger') {
-    return getTriggerPathNodeIds(nodeId, nodes, edges) ?? new Set([nodeId])
+    const base = getTriggerPathNodeIds(nodeId, nodes, edges) ?? new Set([nodeId])
+    return expandWithBindingNodes(base, edges)
   }
 
   const upstream = getUpstreamPathNodeIds(nodeId, nodes, edges)
   const downstream = getDownstreamPathNodeIds(nodeId, nodes, edges)
-  return new Set([...upstream, ...downstream])
+  const base = new Set([...upstream, ...downstream])
+  return expandWithBindingNodes(base, edges)
 }
 
 export function getUpstreamPath(

@@ -23,7 +23,8 @@ const strokeColor = computed(() => {
 
 const isBinding = computed(() =>
   props.data?.edgeKind === 'input_binding'
-  || props.data?.edgeKind === 'variable_binding',
+  || props.data?.edgeKind === 'variable_binding'
+  || props.data?.edgeKind === 'reference',
 )
 
 const markerId = computed(() => {

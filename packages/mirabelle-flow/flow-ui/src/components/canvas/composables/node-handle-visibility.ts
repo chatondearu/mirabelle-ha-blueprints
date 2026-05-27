@@ -1,13 +1,13 @@
 import type { FlowEdge, FlowEdgeKind, FlowNodeKind } from '@mirabelle/flow-shared'
 
-const BINDING_IN_KINDS = new Set<FlowEdgeKind>([
-  'input_binding',
-  'variable_binding',
-  'reference',
-])
+/** Target handle for dashed semantic edges (reference, bindings). */
+export const TARGET_TOP_HANDLE_ID = 'target-top'
 
 export interface NodeHandleVisibility {
+  /** Left target for solid execution (`flow`) edges. */
   showTarget: boolean
+  /** Top target for dashed semantic edges (reference, input/variable bindings). */
+  showTargetTop: boolean
   showSource: boolean
 }
 
@@ -15,8 +15,16 @@ function isFlowEdge(edgeKind: FlowEdgeKind | undefined): boolean {
   return edgeKind === 'flow' || edgeKind === undefined
 }
 
-function isBindingInEdge(edgeKind: FlowEdgeKind | undefined): boolean {
-  return edgeKind !== undefined && BINDING_IN_KINDS.has(edgeKind)
+function isDashedTargetEdge(edgeKind: FlowEdgeKind | undefined): boolean {
+  return (
+    edgeKind === 'reference'
+    || edgeKind === 'input_binding'
+    || edgeKind === 'variable_binding'
+  )
+}
+
+export function edgeUsesTopTarget(edgeKind: FlowEdgeKind | undefined): boolean {
+  return isDashedTargetEdge(edgeKind)
 }
 
 export function computeNodeHandleVisibility(
@@ -31,11 +39,10 @@ export function computeNodeHandleVisibility(
   const outgoing = edges.filter(e => e.source === nodeId)
   const childIds = childIdsByParent.get(nodeId)
 
-  // Triggers must always expose an output handle so users can read the flow
-  // and see trigger reference lines.
   if (kind === 'trigger') {
     return {
-      showTarget: incoming.some(e => isFlowEdge(e.edgeKind) || isBindingInEdge(e.edgeKind)),
+      showTarget: incoming.some(e => isFlowEdge(e.edgeKind)),
+      showTargetTop: incoming.some(e => isDashedTargetEdge(e.edgeKind)),
       showSource: true,
     }
   }
@@ -50,7 +57,7 @@ export function computeNodeHandleVisibility(
     return !childIds.has(e.source)
   })
 
-  const bindingIn = incoming.some(e => isBindingInEdge(e.edgeKind))
+  const dashedIn = incoming.some(e => isDashedTargetEdge(e.edgeKind))
   const flowIn = incoming.some(e => isFlowEdge(e.edgeKind))
   const flowOut = outgoing.some(e => isFlowEdge(e.edgeKind))
   const bindingOut = outgoing.some(
@@ -64,19 +71,22 @@ export function computeNodeHandleVisibility(
   if (isGroupParent) {
     return {
       showTarget: flowInFromOutside,
+      showTargetTop: dashedIn,
       showSource: false,
     }
   }
 
   if (isChild) {
     return {
-      showTarget: bindingIn,
+      showTarget: flowIn,
+      showTargetTop: dashedIn,
       showSource: isBindingSource ? bindingOut : flowOut,
     }
   }
 
   return {
-    showTarget: bindingIn || flowIn,
+    showTarget: flowIn,
+    showTargetTop: dashedIn,
     showSource: isBindingSource ? bindingOut : flowOut,
   }
 }

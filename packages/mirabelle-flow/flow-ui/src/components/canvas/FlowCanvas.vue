@@ -18,6 +18,8 @@ import { useFlowStore } from '@/stores/flow'
 import {
   buildChildIdsByParent,
   computeNodeHandleVisibility,
+  edgeUsesTopTarget,
+  TARGET_TOP_HANDLE_ID,
 } from './composables/node-handle-visibility'
 import CanvasVariablesToolbar from './CanvasVariablesToolbar.vue'
 import FlowNeonEdge from './FlowNeonEdge.vue'
@@ -138,7 +140,9 @@ const edges = computed<Edge[]>(() => {
         source: e.source,
         target: e.target,
         sourceHandle: e.sourceHandle,
-        targetHandle: e.targetHandle,
+        targetHandle: edgeUsesTopTarget(e.edgeKind)
+          ? TARGET_TOP_HANDLE_ID
+          : e.targetHandle,
         label: e.label,
         labelStyle: pathActive
           ? { fill: '#6ee7b7', fontSize: 10, fontWeight: 600 }
