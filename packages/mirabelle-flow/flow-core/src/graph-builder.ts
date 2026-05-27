@@ -27,6 +27,7 @@ import {
 import { layoutExecutionBand } from './execution-layout.js'
 import { findBranchExitNode, resolveFlowSource } from './flow-endpoints.js'
 import { getHaBlockDescriptor } from './ha-block-registry.js'
+import { classifyHaItem, isHaConditionItem } from './ha-item-classifier.js'
 import { extractTriggerIdsFromCondition } from './trigger-path.js'
 
 interface BuildContext {
@@ -198,6 +199,29 @@ function expandRepeatBlock(
   return repeatNode
 }
 
+/** Container nodes must receive the branch flow edge; expand* returns the last leaf. */
+function flowEntryNodeForBranchAction(
+  ctx: BuildContext,
+  path: string,
+  a: Record<string, unknown>,
+  expanded: FlowNode,
+): FlowNode {
+  if (a.choose) {
+    return ctx.nodes.find(n => n.path === path && n.kind === 'choose') ?? expanded
+  }
+  if (a.if) {
+    return (
+      ctx.nodes.find(
+        n => n.path === path && n.kind === 'ha_block' && n.data.blockKey === 'if',
+      ) ?? expanded
+    )
+  }
+  if (a.repeat && typeof a.repeat === 'object') {
+    return ctx.nodes.find(n => n.path === path && n.kind === 'repeat') ?? expanded
+  }
+  return expanded
+}
+
 /** Branch sequence after choose/if: nodes live outside the container parent. */
 function buildBranchSequenceOutside(
   ctx: BuildContext,
@@ -216,9 +240,10 @@ function buildBranchSequenceOutside(
     const path = `${pathPrefix}/${i}`
     if (!prev) {
       const node = expandActionItemRoot(ctx, a, path)
+      const flowEntry = flowEntryNodeForBranchAction(ctx, path, a, node)
       const branchSource =
         findBranchExitNode(ctx.nodes, anchor, branchKey) ?? anchor
-      connect(ctx, branchSource, node, {
+      connect(ctx, branchSource, flowEntry, {
         itemKey: branchKey,
         branch: branchKey,
         label: branchKey,
@@ -314,6 +339,40 @@ function expandServiceAtFlowLevel(
   return main
 }
 
+function expandConditionAtFlowLevel(
+  ctx: BuildContext,
+  c: Record<string, unknown>,
+  path: string,
+  options: {
+    parent?: FlowNode
+    prev?: FlowNode
+    firstEdge?: FlattenChainOptions['firstEdge']
+    parentId?: string
+    branchKey?: string
+    layoutOrder?: number
+  } = {},
+): FlowNode {
+  const node = addNode(
+    ctx,
+    path,
+    'condition',
+    summarizeCondition(c),
+    {
+      ...c,
+      ...(options.branchKey !== undefined ? { branchKey: options.branchKey } : {}),
+      ...(options.layoutOrder !== undefined ? { layoutOrder: options.layoutOrder } : {}),
+    },
+    options.parentId,
+  )
+  if (options.prev) {
+    connect(ctx, options.prev, node)
+  }
+  else if (options.parent) {
+    connect(ctx, options.parent, node, options.firstEdge)
+  }
+  return node
+}
+
 function buildTriggers(
   ctx: BuildContext,
   triggers: unknown[],
@@ -324,13 +383,17 @@ function buildTriggers(
     if (!t || typeof t !== 'object') {
       return
     }
+    const trigger = t as Record<string, unknown>
+    if (classifyHaItem(trigger) !== 'trigger') {
+      return
+    }
     const path = `trigger/${i}`
     const node = addNode(
       ctx,
       path,
       'trigger',
-      summarizeTrigger(t as Record<string, unknown>),
-      t as Record<string, unknown>,
+      summarizeTrigger(trigger),
+      trigger,
       parent?.id,
     )
     if (parent) {
@@ -351,13 +414,17 @@ function buildConditions(
     if (!c || typeof c !== 'object') {
       return
     }
+    const cond = c as Record<string, unknown>
+    if (!isHaConditionItem(cond)) {
+      return
+    }
     const path = `condition/${i}`
     const node = addNode(
       ctx,
       path,
       'condition',
-      summarizeCondition(c as Record<string, unknown>),
-      c as Record<string, unknown>,
+      summarizeCondition(cond),
+      cond,
       undefined,
     )
     connect(ctx, parent, node)
@@ -457,6 +524,10 @@ function expandActionItem(
     itemKey?: string
   },
 ): FlowNode {
+  if (classifyHaItem(a) === 'condition') {
+    return expandConditionAtFlowLevel(ctx, a, path, { parent, prev, firstEdge })
+  }
+
   if (Array.isArray(a.sequence)) {
     if (prev) {
       return (
@@ -590,6 +661,10 @@ function expandActionItemRoot(
   a: Record<string, unknown>,
   path: string,
 ): FlowNode {
+  if (classifyHaItem(a) === 'condition') {
+    return expandConditionAtFlowLevel(ctx, a, path)
+  }
+
   if (a.choose) {
     return materializeChoose(
       asActionContext(ctx),
@@ -669,6 +744,13 @@ function expandActionItemInContainer(
   container: FlowNode,
   prev: FlowNode | undefined,
 ): FlowNode {
+  if (classifyHaItem(a) === 'condition') {
+    return expandConditionAtFlowLevel(ctx, a, path, {
+      parentId: container.id,
+      prev,
+    })
+  }
+
   if (a.choose) {
     return materializeChoose(
       asActionContext(ctx),

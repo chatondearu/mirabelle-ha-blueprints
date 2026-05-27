@@ -60,6 +60,33 @@ describe('layoutExecutionBand', () => {
     expect(doc.layout[choose!.id]!.x).toBeGreaterThan(doc.layout[trigger!.id]!.x)
   })
 
+  it('places living-area choose after triggers with incoming flow', () => {
+    const yaml = loadBlueprint(
+      'blueprints/automations/living-area-adaptive-lighting.yaml',
+    )
+    const doc = parseAutomationYaml(yaml, {
+      source: 'living-area-adaptive-lighting.yaml',
+      preview: true,
+    })
+
+    const triggers = doc.nodes.filter(n => n.kind === 'trigger' && !n.parentId)
+    const choose = doc.nodes.find(
+      n => n.kind === 'choose' && n.path === 'action/0/if/then/sequence/0',
+    )
+    expect(choose).toBeDefined()
+    expect(triggers.length).toBeGreaterThan(0)
+
+    const flowIn = doc.edges.some(
+      e =>
+        e.target === choose!.id
+        && (e.edgeKind === 'flow' || e.edgeKind === undefined),
+    )
+    expect(flowIn).toBe(true)
+
+    const triggerX = Math.min(...triggers.map(t => doc.layout[t.id]!.x))
+    expect(doc.layout[choose!.id]!.x).toBeGreaterThan(triggerX)
+  })
+
   it('uses multiple columns for choose with branch actions', () => {
     const yaml = loadBlueprint('blueprints/automations/presence_based_lighting.yaml')
     const doc = parseAutomationYaml(yaml, {

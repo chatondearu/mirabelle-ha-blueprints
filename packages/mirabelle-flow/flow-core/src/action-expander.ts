@@ -1,5 +1,6 @@
 import type { FlowNode } from '@mirabelle/flow-shared'
 import { getHaBlockDescriptor } from './ha-block-registry.js'
+import { isHaConditionItem } from './ha-item-classifier.js'
 
 export interface ActionBuildContext {
   nodes: FlowNode[]
@@ -123,6 +124,9 @@ export function buildConditionsInContainer(
       return
     }
     const c = raw as Record<string, unknown>
+    if (!isHaConditionItem(c)) {
+      return
+    }
     const node = ctx.addNode(
       `${pathPrefix}/${i}`,
       'condition',

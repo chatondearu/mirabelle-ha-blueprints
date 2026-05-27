@@ -61,12 +61,6 @@ function assignColumns(
     column.set(t.id, 0)
   }
 
-  for (const n of execRoots) {
-    if (!column.has(n.id)) {
-      column.set(n.id, 0)
-    }
-  }
-
   let changed = true
   let passes = 0
   while (changed && passes < execRoots.length + 5) {
@@ -104,6 +98,17 @@ function assignColumns(
         changed = true
       }
     }
+  }
+
+  for (const n of execRoots) {
+    if (column.has(n.id)) {
+      continue
+    }
+    if (n.kind === 'trigger') {
+      column.set(n.id, 0)
+      continue
+    }
+    column.set(n.id, 1)
   }
 
   return column

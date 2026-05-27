@@ -11,6 +11,7 @@ export * from './execution-layout.js'
 export * from './enrich-labels.js'
 export * from './simulation-highlight.js'
 export * from './ha-block-registry.js'
+export * from './ha-item-classifier.js'
 export * from './variable-visibility.js'
 export {
   reconcileGroupLayouts,

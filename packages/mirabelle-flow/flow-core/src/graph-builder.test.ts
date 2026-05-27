@@ -259,6 +259,40 @@ action:
     expect(turnOn?.parentId).not.toBe(chooseNode?.id)
   })
 
+  it('materializes condition-shaped items as condition nodes even under action paths', () => {
+    const yaml = `
+trigger:
+  - platform: state
+    entity_id: light.test
+action:
+  - condition: template
+    value_template: "{{ true }}"
+  - service: light.turn_on
+    target:
+      entity_id: light.test
+`
+    const doc = parseAutomationYaml(yaml, { source: 'content-condition.yaml' })
+    const cond = doc.nodes.find(
+      n => n.kind === 'condition' && n.path === 'action/0',
+    )
+    const service = doc.nodes.find(
+      n =>
+        n.kind === 'action'
+        && typeof n.data.service === 'string'
+        && n.path === 'action/1',
+    )
+    expect(cond).toBeDefined()
+    expect(service).toBeDefined()
+    expect(
+      doc.edges.some(
+        e =>
+          e.source === cond!.id
+          && e.target === service!.id
+          && (e.edgeKind === 'flow' || e.edgeKind === undefined),
+      ),
+    ).toBe(true)
+  })
+
   it('places repeat body actions outside the repeat parent', () => {
     const yaml = `
 trigger:

@@ -1,4 +1,5 @@
 import type { FlowNodeKind } from '@mirabelle/flow-shared'
+import { isHaConditionItem } from './ha-item-classifier.js'
 
 export interface HaBlockDescriptor {
   key: string
@@ -86,6 +87,16 @@ export const HA_BLOCK_REGISTRY: HaBlockDescriptor[] = [
 ]
 
 export function getHaBlockDescriptor(block: Record<string, unknown>): HaBlockDescriptor {
+  if (isHaConditionItem(block)) {
+    return {
+      key: 'condition',
+      nodeKind: 'condition',
+      summary: block =>
+        typeof block.condition === 'string'
+          ? `Condition: ${block.condition}`
+          : 'Condition',
+    }
+  }
   for (const descriptor of HA_BLOCK_REGISTRY) {
     if (descriptor.key in block) {
       return descriptor
