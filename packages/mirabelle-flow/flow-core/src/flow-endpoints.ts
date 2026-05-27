@@ -21,11 +21,23 @@ export function findBranchExitNode(
   const conditions = children.filter(
     n => n.kind === 'condition' && n.data.branchKey === branchKey,
   )
-  if (conditions.length === 0) {
-    return undefined
+  if (conditions.length > 0) {
+    return conditions.sort(
+      (a, b) =>
+        (Number(b.data.layoutOrder) || 0) - (Number(a.data.layoutOrder) || 0),
+    )[0]
   }
 
-  return conditions.sort(
+  const groups = children.filter(
+    n =>
+      n.kind === 'ha_block'
+      && n.data.blockKey === 'conditions'
+      && n.data.branchKey === branchKey,
+  )
+  if (groups.length === 0) {
+    return undefined
+  }
+  return groups.sort(
     (a, b) =>
       (Number(b.data.layoutOrder) || 0) - (Number(a.data.layoutOrder) || 0),
   )[0]

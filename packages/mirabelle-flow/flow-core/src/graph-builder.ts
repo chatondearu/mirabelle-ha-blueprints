@@ -36,6 +36,10 @@ interface BuildContext {
   edgeCounter: number
 }
 
+function isConditionsGroupNode(node: FlowNode): boolean {
+  return node.kind === 'ha_block' && node.data.blockKey === 'conditions'
+}
+
 function nextEdgeId(ctx: BuildContext): string {
   ctx.edgeCounter += 1
   return `e-${ctx.edgeCounter}`
@@ -80,8 +84,9 @@ function connect(
 ): void {
   const edgeKind = options.edgeKind ?? 'flow'
   const isFlow = edgeKind === 'flow' || edgeKind === undefined
+  const keepGroupSource = isConditionsGroupNode(source)
   const resolvedSource =
-    isFlow && options.resolveSource !== false
+    isFlow && options.resolveSource !== false && !keepGroupSource
       ? resolveFlowSource(ctx.nodes, ctx.edges, source)
       : source
   const exists = ctx.edges.some(
@@ -409,28 +414,48 @@ function buildConditions(
   conditions: unknown[],
   parent: FlowNode,
 ): FlowNode[] {
-  const leaves: FlowNode[] = []
-  conditions.forEach((c, i) => {
-    if (!c || typeof c !== 'object') {
-      return
-    }
-    const cond = c as Record<string, unknown>
-    if (!isHaConditionItem(cond)) {
-      return
-    }
-    const path = `condition/${i}`
+  const validConditions = conditions.filter(
+    c => !!c && typeof c === 'object' && isHaConditionItem(c as Record<string, unknown>),
+  ) as Record<string, unknown>[]
+  if (validConditions.length === 0) {
+    return []
+  }
+
+  const group = addNode(
+    ctx,
+    'condition',
+    'ha_block',
+    'Conditions',
+    {
+      blockKey: 'conditions',
+      isContainer: true,
+      conditionOperator: 'and',
+      layoutOrder: 0,
+    },
+    undefined,
+  )
+  connect(ctx, parent, group, { resolveSource: false })
+
+  let prev: FlowNode | undefined
+  validConditions.forEach((cond, i) => {
     const node = addNode(
       ctx,
-      path,
+      `condition/${i}`,
       'condition',
       summarizeCondition(cond),
-      cond,
-      undefined,
+      { ...cond, layoutOrder: i + 1 },
+      group.id,
     )
-    connect(ctx, parent, node)
-    leaves.push(node)
+    if (prev) {
+      connect(ctx, prev, node)
+    }
+    else {
+      connect(ctx, group, node, { resolveSource: false })
+    }
+    prev = node
   })
-  return leaves
+
+  return [group]
 }
 
 function valueType(value: unknown): string {
@@ -925,6 +950,13 @@ function findExplicitTriggerFlowTargets(
 
 /** First executable node after triggers (global condition or first action anchor). */
 function findDefaultExecutionEntry(ctx: BuildContext): FlowNode | undefined {
+  const rootConditionGroup = ctx.nodes.find(
+    n => isConditionsGroupNode(n) && n.path === 'condition' && !n.parentId,
+  )
+  if (rootConditionGroup) {
+    return rootConditionGroup
+  }
+
   const rootCondition = ctx.nodes.find(n => n.path === 'condition/0')
   if (rootCondition) {
     return rootCondition

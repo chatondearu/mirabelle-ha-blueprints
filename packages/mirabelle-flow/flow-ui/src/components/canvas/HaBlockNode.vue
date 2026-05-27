@@ -25,9 +25,9 @@ const blockKey = computed(() => String(props.data.rawData?.blockKey ?? ''))
       isContainer ? 'flow-node-group' : 'flow-node-card--child min-w-36',
     ]"
     :data-kind="data.kind"
+    :data-block-key="data.rawData?.blockKey"
   >
     <FlowNodeHandles
-      v-if="!isContainer"
       :handles="data.handles"
       target-class="!bg-neutral-500"
       target-top-class="!bg-violet-300"

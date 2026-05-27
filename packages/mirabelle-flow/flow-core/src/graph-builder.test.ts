@@ -75,8 +75,10 @@ describe('graph structure', () => {
     const yaml = loadBlueprint('blueprints/automations/presence_based_lighting.yaml')
     const doc = parseAutomationYaml(yaml, { source: 'presence_based_lighting.yaml' })
 
-    const globalCondition = doc.nodes.find(n => n.path === 'condition/0')
-    expect(globalCondition).toBeDefined()
+    const globalConditionGroup = doc.nodes.find(
+      n => n.kind === 'ha_block' && n.data.blockKey === 'conditions' && n.path === 'condition',
+    )
+    expect(globalConditionGroup).toBeDefined()
 
     const triggers = doc.nodes.filter(n => n.kind === 'trigger' && !n.parentId)
     expect(triggers.length).toBe(2)
@@ -86,7 +88,7 @@ describe('graph structure', () => {
         doc.edges.some(
           e =>
             e.source === trigger.id
-            && e.target === globalCondition!.id
+            && e.target === globalConditionGroup!.id
             && (e.edgeKind === 'flow' || e.edgeKind === undefined),
         ),
       ).toBe(true)
@@ -200,7 +202,15 @@ action:
     )
     expect(ifNode).toBeDefined()
     const children = doc.nodes.filter(n => n.parentId === ifNode!.id)
-    expect(children.some(n => n.kind === 'condition')).toBe(true)
+    const condGroup = children.find(
+      n => n.kind === 'ha_block' && n.data.blockKey === 'conditions',
+    )
+    expect(condGroup).toBeDefined()
+    expect(
+      doc.nodes.some(
+        n => n.kind === 'condition' && n.parentId === condGroup?.id,
+      ),
+    ).toBe(true)
     expect(children.some(n => n.kind === 'choose_option' && n.label === 'Else')).toBe(true)
     expect(
       doc.nodes.some(
@@ -224,7 +234,17 @@ action:
     )
     expect(ifNode).toBeDefined()
     const children = doc.nodes.filter(n => n.parentId === ifNode!.id)
-    expect(children.filter(n => n.kind === 'condition').length).toBeGreaterThan(0)
+    const condGroups = children.filter(
+      n => n.kind === 'ha_block' && n.data.blockKey === 'conditions',
+    )
+    expect(condGroups.length).toBeGreaterThan(0)
+    expect(
+      doc.nodes.some(
+        n =>
+          n.kind === 'condition'
+          && condGroups.some(group => group.id === n.parentId),
+      ),
+    ).toBe(true)
   })
 
   it('creates choose with conditions inside and only a Default option marker', () => {
@@ -232,13 +252,70 @@ action:
     const doc = parseAutomationYaml(yaml, { source: 'presence_based_lighting.yaml' })
     const chooseNode = doc.nodes.find(n => n.kind === 'choose')
     expect(chooseNode?.data.isContainer).toBe(true)
-    const conditions = doc.nodes.filter(
-      n => n.kind === 'condition' && n.parentId === chooseNode?.id,
+    const conditionGroups = doc.nodes.filter(
+      n =>
+        n.kind === 'ha_block'
+        && n.data.blockKey === 'conditions'
+        && n.parentId === chooseNode?.id,
     )
-    expect(conditions.length).toBeGreaterThan(0)
+    expect(conditionGroups.length).toBeGreaterThan(0)
+    expect(
+      doc.nodes.some(
+        n =>
+          n.kind === 'condition'
+          && conditionGroups.some(group => group.id === n.parentId),
+      ),
+    ).toBe(true)
     const optionMarkers = doc.nodes.filter(n => n.kind === 'choose_option')
     expect(optionMarkers.length).toBe(1)
     expect(optionMarkers[0]?.data.key).toBe('opt-default')
+  })
+
+  it('keeps condition:and as a condition node inside choose condition groups', () => {
+    const yaml = `
+trigger:
+  - platform: state
+    entity_id: light.test
+action:
+  - choose:
+      - conditions:
+          - condition: state
+            entity_id: light.test
+            state: 'on'
+          - condition: and
+            conditions:
+              - condition: template
+                value_template: "{{ true }}"
+              - condition: state
+                entity_id: sensor.x
+                state: ok
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: light.test
+    default:
+      - service: light.turn_off
+        target:
+          entity_id: light.test
+`
+    const doc = parseAutomationYaml(yaml, { source: 'choose-and.yaml' })
+    const chooseNode = doc.nodes.find(n => n.kind === 'choose')
+    expect(chooseNode).toBeDefined()
+
+    const conditionGroup = doc.nodes.find(
+      n =>
+        n.kind === 'ha_block'
+        && n.data.blockKey === 'conditions'
+        && n.parentId === chooseNode?.id,
+    )
+    expect(conditionGroup).toBeDefined()
+
+    const optionConditions = doc.nodes.filter(
+      n => n.kind === 'condition' && n.parentId === conditionGroup?.id,
+    )
+    expect(optionConditions.length).toBe(2)
+    expect(optionConditions.some(n => n.data.condition === 'and')).toBe(true)
+    expect(conditionGroup?.data.branchKey).toBe('opt-0')
   })
 
   it('does not materialize sequence container nodes for inline action lists', () => {
@@ -353,7 +430,10 @@ action:
     const branchSources = doc.nodes.filter(
       n =>
         n.parentId === chooseNode?.id
-        && (n.kind === 'condition' || n.kind === 'choose_option'),
+        && (
+          (n.kind === 'ha_block' && n.data.blockKey === 'conditions')
+          || n.kind === 'choose_option'
+        ),
     )
     const branchFlow = doc.edges.filter(
       e =>

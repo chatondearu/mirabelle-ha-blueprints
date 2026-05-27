@@ -117,16 +117,32 @@ export function buildConditionsInContainer(
   pathPrefix: string,
   options: { branchKey?: string, branchIndex?: number } = {},
 ): FlowNode[] {
-  const nodes: FlowNode[] = []
   const branchIndex = options.branchIndex ?? 0
-  conditions.forEach((raw, i) => {
-    if (!raw || typeof raw !== 'object') {
-      return
-    }
-    const c = raw as Record<string, unknown>
-    if (!isHaConditionItem(c)) {
-      return
-    }
+  const validConditions = conditions.filter(
+    c => !!c && typeof c === 'object' && isHaConditionItem(c as Record<string, unknown>),
+  ) as Record<string, unknown>[]
+  if (validConditions.length === 0) {
+    return []
+  }
+
+  const group = ctx.addNode(
+    pathPrefix,
+    'ha_block',
+    'Conditions',
+    {
+      blockKey: 'conditions',
+      isContainer: true,
+      conditionOperator: 'and',
+      branchKey: options.branchKey,
+      layoutOrder: branchIndex * 100,
+    },
+    container.id,
+  )
+
+  const conditionNodes: FlowNode[] = []
+  let prev: FlowNode | undefined
+
+  validConditions.forEach((c, i) => {
     const node = ctx.addNode(
       `${pathPrefix}/${i}`,
       'condition',
@@ -134,13 +150,23 @@ export function buildConditionsInContainer(
       {
         ...c,
         branchKey: options.branchKey,
-        layoutOrder: branchIndex * 100 + i,
+        layoutOrder: branchIndex * 100 + i + 1,
       },
-      container.id,
+      group.id,
     )
-    nodes.push(node)
+
+    if (prev) {
+      ctx.connect(prev, node)
+    }
+    else {
+      ctx.connect(group, node)
+    }
+
+    conditionNodes.push(node)
+    prev = node
   })
-  return nodes
+
+  return conditionNodes.length > 0 ? [group] : []
 }
 
 /** Service call as a single action node (target/data summarized in the label). */
