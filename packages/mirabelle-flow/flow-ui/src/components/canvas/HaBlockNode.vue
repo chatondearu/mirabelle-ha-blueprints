@@ -2,23 +2,17 @@
 import { computed } from 'vue'
 import { useNodeVisuals } from './composables/useNodeVisuals'
 import FlowNodeHandles from './FlowNodeHandles.vue'
-import IfContainerNode from './IfContainerNode.vue'
 import type { FlowCanvasNodeProps } from './node-types'
 
 const props = defineProps<FlowCanvasNodeProps>()
 const { iconClass, stateClasses } = useNodeVisuals(() => props.data)
 
 const isContainer = computed(() => props.data.rawData?.isContainer === true)
-const isIfContainer = computed(
-  () => isContainer.value && props.data.rawData?.blockKey === 'if',
-)
 const blockKey = computed(() => String(props.data.rawData?.blockKey ?? ''))
 </script>
 
 <template>
-  <IfContainerNode v-if="isIfContainer" v-bind="props" />
   <div
-    v-else
     class="flow-node-card"
     :class="[
       stateClasses,

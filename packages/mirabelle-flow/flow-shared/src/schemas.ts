@@ -5,6 +5,7 @@ export const flowNodeKindSchema = z.enum([
   'condition',
   'action',
   'choose',
+  'if',
   'sequence',
   'parallel',
   'repeat',

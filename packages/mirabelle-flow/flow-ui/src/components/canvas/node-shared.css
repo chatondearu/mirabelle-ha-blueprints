@@ -53,6 +53,11 @@
   background-color: #3b0764;
 }
 
+.flow-node-card[data-kind='if'] {
+  border-color: #64748b;
+  background-color: #1e293b;
+}
+
 .flow-node-card[data-kind='sequence'] {
   border-color: #6366f1;
   background-color: #1e1b4b;
@@ -106,11 +111,6 @@
 .flow-node-card[data-kind='ha_block'] {
   border-color: #737373;
   background-color: #171717;
-}
-
-.flow-node-card[data-kind='ha_block'][data-block-key='if'] {
-  border-color: #64748b;
-  background-color: #1e293b;
 }
 
 .flow-node-card[data-kind='ha_block'][data-block-key='conditions'] {

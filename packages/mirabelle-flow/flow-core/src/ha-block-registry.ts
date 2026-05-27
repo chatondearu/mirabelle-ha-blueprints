@@ -56,7 +56,7 @@ export const HA_BLOCK_REGISTRY: HaBlockDescriptor[] = [
   },
   {
     key: 'if',
-    nodeKind: 'ha_block',
+    nodeKind: 'if',
     summary: () => 'If',
   },
   {

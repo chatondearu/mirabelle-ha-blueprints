@@ -17,6 +17,7 @@ export const NODE_LAYOUT_SIZES: Partial<Record<FlowNodeKind, { width: number, he
   choose_option: { width: 200, height: 36 },
   action: { width: 208, height: 56 },
   condition: { width: 208, height: 68 },
+  if: { width: 200, height: 44 },
   ha_block: { width: 200, height: 44 },
   sequence: { width: 200, height: 48 },
   parallel: { width: 200, height: 48 },

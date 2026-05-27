@@ -82,7 +82,7 @@ export function nodeKindForHaItemRole(role: HaItemRole): FlowNodeKind {
     case 'choose':
       return 'choose'
     case 'if':
-      return 'ha_block'
+      return 'if'
     case 'repeat':
       return 'repeat'
     case 'parallel':

@@ -14,6 +14,7 @@ export type FlowNodeKind =
   | 'condition'
   | 'action'
   | 'choose'
+  | 'if'
   | 'sequence'
   | 'parallel'
   | 'repeat'

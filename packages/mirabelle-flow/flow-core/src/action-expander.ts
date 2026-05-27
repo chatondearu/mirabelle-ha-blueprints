@@ -397,7 +397,7 @@ export function materializeIf(
     shape.mode === 'branches' ? shape.branches.length : shape.conditions.length > 0 ? 1 : 0
   const ifNode = ctx.addNode(
     path,
-    'ha_block',
+    'if',
     'If',
     {
       blockKey: 'if',

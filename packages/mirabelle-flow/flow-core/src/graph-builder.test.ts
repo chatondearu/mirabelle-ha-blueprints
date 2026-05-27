@@ -198,7 +198,7 @@ action:
 `
     const doc = parseAutomationYaml(yaml, { source: 'if-then-else.yaml' })
     const ifNode = doc.nodes.find(
-      n => n.kind === 'ha_block' && n.data.blockKey === 'if',
+      n => n.kind === 'if',
     )
     expect(ifNode).toBeDefined()
     const children = doc.nodes.filter(n => n.parentId === ifNode!.id)
@@ -230,7 +230,7 @@ action:
       preview: true,
     })
     const ifNode = doc.nodes.find(
-      n => n.kind === 'ha_block' && n.data.blockKey === 'if',
+      n => n.kind === 'if',
     )
     expect(ifNode).toBeDefined()
     const children = doc.nodes.filter(n => n.parentId === ifNode!.id)

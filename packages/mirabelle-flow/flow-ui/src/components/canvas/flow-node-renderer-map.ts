@@ -7,6 +7,7 @@ import ChooseOptionNode from './ChooseOptionNode.vue'
 import ConditionNode from './ConditionNode.vue'
 import DelayNode from './DelayNode.vue'
 import HaBlockNode from './HaBlockNode.vue'
+import IfContainerNode from './IfContainerNode.vue'
 import ParallelNode from './ParallelNode.vue'
 import RepeatNode from './RepeatNode.vue'
 import SequenceNode from './SequenceNode.vue'
@@ -28,6 +29,7 @@ export const FLOW_NODE_RENDERER_MAP: NodeTypesObject = {
   choose_option: ChooseOptionNode,
   condition: ConditionNode,
   delay: DelayNode,
+  if: IfContainerNode,
   ha_block: HaBlockNode,
   parallel: ParallelNode,
   repeat: RepeatNode,

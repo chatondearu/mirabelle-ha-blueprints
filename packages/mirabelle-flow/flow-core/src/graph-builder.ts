@@ -217,7 +217,7 @@ function flowEntryNodeForBranchAction(
   if (a.if) {
     return (
       ctx.nodes.find(
-        n => n.path === path && n.kind === 'ha_block' && n.data.blockKey === 'if',
+        n => n.path === path && n.kind === 'if',
       ) ?? expanded
     )
   }

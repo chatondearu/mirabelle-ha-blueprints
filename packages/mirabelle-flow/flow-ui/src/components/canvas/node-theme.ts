@@ -6,6 +6,7 @@ export const NODE_KIND_ICON_CLASS: Record<FlowNodeKind, string> = {
   condition: 'i-lucide-filter',
   action: 'i-lucide-play',
   choose: 'i-lucide-git-branch',
+  if: 'i-lucide-git-fork',
   sequence: 'i-lucide-list-ordered',
   parallel: 'i-lucide-layers',
   repeat: 'i-lucide-repeat',
