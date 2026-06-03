@@ -3,14 +3,14 @@ import { computed } from 'vue'
 import { useEntityPicker } from '@/composables/useEntityPicker'
 import { useFlowStore } from '@/stores/flow'
 import { itemDisplayValue } from './composables/useListNodeHelpers'
-import { useNodeVisuals } from './composables/useNodeVisuals'
+import { useFlowNodeUi } from './composables/useFlowNodeUi'
 import FlowNodeHandles from './FlowNodeHandles.vue'
 import type { FlowCanvasNodeProps } from './node-types'
 
 const props = defineProps<FlowCanvasNodeProps>()
 const store = useFlowStore()
 const picker = useEntityPicker()
-const { stateClasses } = useNodeVisuals(() => props.data)
+const { card } = useFlowNodeUi(() => props.data)
 
 const key = computed(() => String(props.data.rawData?.key ?? ''))
 const selector = computed(
@@ -34,11 +34,7 @@ function updateInput(value: string): void {
 </script>
 
 <template>
-  <div
-    class="flow-node-card flow-node-card--child min-w-36"
-    :data-kind="data.kind"
-    :class="stateClasses"
-  >
+  <div :class="card('min-w-36')">
     <FlowNodeHandles
       :handles="data.handles"
       :source-id="`inp-${key}`"

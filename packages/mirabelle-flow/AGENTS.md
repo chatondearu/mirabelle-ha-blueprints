@@ -116,7 +116,7 @@ Follow [`DESIGN.md`](./DESIGN.md) for visuals. Code conventions:
 - **Components** under `src/components/` by area: `canvas/`, `sidebar/`, `inspector/`, `trace/`.
 - **Props:** define with `defineProps` and TypeScript interfaces; avoid `any`.
 - **Reka UI** for accessible primitives (tabs, labels, dialogs when added). Prefer Reka over ad-hoc ARIA.
-- **UnoCSS** utility classes for layout and theme; avoid large custom CSS files unless necessary (Vue Flow overrides).
+- **UnoCSS** utility classes and shortcuts; flow node palettes via **`uno-variations`** (`useFlowNodeUi`, `src/styles/flow-node-ui.ts`). Avoid `.css` under `components/` (Vue Flow overrides in `uno.config.ts` preflights).
 - **Comments in code:** English only.
 
 ### App modes

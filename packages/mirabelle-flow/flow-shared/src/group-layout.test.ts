@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { FlowNode } from './types.js'
+import { FLOW_NODE_METRICS } from './layout.js'
 import {
   estimateNodeSize,
   layoutGroupChildren,
@@ -19,6 +20,13 @@ function child(id: string, kind: FlowNode['kind'], parentId: string): FlowNode {
 }
 
 describe('layoutGroupChildren', () => {
+  it('uses fixed single-line height for action-like nodes', () => {
+    const action = child('a', 'action', 'parent')
+    const cond = child('c', 'condition', 'parent')
+    expect(estimateNodeSize(action).height).toBe(FLOW_NODE_METRICS.cardSingleLineHeight)
+    expect(estimateNodeSize(cond).height).toBe(FLOW_NODE_METRICS.cardSingleLineHeight)
+  })
+
   it('stacks children without vertical overlap', () => {
     const children = [
       child('a', 'blueprint_input', 'parent'),
@@ -37,6 +45,30 @@ describe('layoutGroupChildren', () => {
       expect(ordered[i]!.y + ordered[i]!.h).toBeLessThanOrEqual(ordered[i + 1]!.y)
     }
     expect(size.height).toBeGreaterThan(ordered[ordered.length - 1]!.y)
+  })
+
+  it('keeps padding around children and ignores transient renderSize hints', () => {
+    const children = [
+      child('a', 'action', 'parent'),
+      child('b', 'condition', 'parent'),
+    ]
+    children[0]!.data.renderSize = { width: 320, height: 70 }
+    const { positions, size } = layoutGroupChildren(children, { headerHeight: 40 })
+
+    expect(positions.a!.x).toBeGreaterThan(0)
+    expect(positions.a!.y).toBeGreaterThan(40)
+    expect(size.width).toBeLessThan(320)
+    expect(size.height).toBeGreaterThan(positions.b!.y)
+  })
+
+  it('expands parent width when child subtree reaches grandchild depth', () => {
+    const c1 = child('c1', 'action', 'parent')
+    const c2 = child('c2', 'action', 'parent')
+    const gc = child('gc1', 'action', 'c1')
+    const ggc = child('ggc1', 'action', 'gc1')
+    const shallow = layoutGroupChildren([c1, c2], { headerHeight: 40 })
+    const deep = layoutGroupChildren([c1, c2, gc, ggc], { headerHeight: 40 })
+    expect(deep.size.width).toBeGreaterThan(shallow.size.width)
   })
 })
 

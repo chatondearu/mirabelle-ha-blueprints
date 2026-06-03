@@ -2,8 +2,9 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { estimateNodeSize, isConfigLayerNode } from '@mirabelle/flow-shared'
+import { estimateNodeSize, isConfigLayerNode, type FlowNode } from '@mirabelle/flow-shared'
 import { parseAutomationYaml } from './parser.js'
+import { layoutExecutionBand } from './execution-layout.js'
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '../../../../')
 
@@ -25,6 +26,65 @@ function boxesOverlap(
 }
 
 describe('layoutExecutionBand', () => {
+  it('orders target column by predecessor barycenter to reduce crossings', () => {
+    const nodes: FlowNode[] = [
+      {
+        id: 't-a',
+        kind: 'trigger',
+        label: 'A',
+        path: 'trigger/0',
+        data: {},
+        layer: 'automation',
+      },
+      {
+        id: 't-b',
+        kind: 'trigger',
+        label: 'B',
+        path: 'trigger/1',
+        data: {},
+        layer: 'automation',
+      },
+      {
+        id: 'n-c',
+        kind: 'action',
+        label: 'C',
+        path: 'action/0',
+        data: {},
+        layer: 'automation',
+      },
+      {
+        id: 'n-d',
+        kind: 'action',
+        label: 'D',
+        path: 'action/1',
+        data: {},
+        layer: 'automation',
+      },
+    ]
+    const edges = [
+      { id: 'e1', source: 't-a', target: 'n-d', edgeKind: 'flow' as const },
+      { id: 'e2', source: 't-b', target: 'n-c', edgeKind: 'flow' as const },
+    ]
+    const layout = layoutExecutionBand(nodes, edges, 120)
+    expect(layout['n-d']!.y).toBeLessThan(layout['n-c']!.y)
+  })
+
+  it('keeps deterministic ordering across repeated layout passes', () => {
+    const nodes: FlowNode[] = [
+      { id: 't1', kind: 'trigger', label: 'T1', path: 'trigger/0', data: {}, layer: 'automation' },
+      { id: 't2', kind: 'trigger', label: 'T2', path: 'trigger/1', data: {}, layer: 'automation' },
+      { id: 'a1', kind: 'action', label: 'A1', path: 'action/0', data: {}, layer: 'automation' },
+      { id: 'a2', kind: 'action', label: 'A2', path: 'action/1', data: {}, layer: 'automation' },
+    ]
+    const edges = [
+      { id: 'e1', source: 't1', target: 'a1', edgeKind: 'flow' as const },
+      { id: 'e2', source: 't2', target: 'a2', edgeKind: 'flow' as const },
+    ]
+    const first = layoutExecutionBand(nodes, edges, 100)
+    const second = layoutExecutionBand(nodes, edges, 100)
+    expect(second).toEqual(first)
+  })
+
   it('places frient execution roots without overlapping boxes', () => {
     const yaml = loadBlueprint('blueprints/automations/frient_keypad_with_alarmo.yaml')
     const doc = parseAutomationYaml(yaml, { source: 'frient_keypad_with_alarmo.yaml' })

@@ -1,6 +1,7 @@
 import type { FlowEdge, FlowNode, FlowPosition } from '@mirabelle/flow-shared'
 import {
   FLOW_LAYOUT,
+  FLOW_NODE_METRICS,
   estimateNodeSize,
   isConfigLayerNode,
 } from '@mirabelle/flow-shared'
@@ -43,6 +44,25 @@ function resolveSourceColumn(
   const parent = nodeById.get(src.parentId)
   if (parent && rootIds.has(parent.id)) {
     return column.get(parent.id)
+  }
+  return undefined
+}
+
+function resolveSourceRootId(
+  sourceId: string,
+  rootIds: Set<string>,
+  nodeById: Map<string, FlowNode>,
+): string | undefined {
+  if (rootIds.has(sourceId)) {
+    return sourceId
+  }
+  const src = nodeById.get(sourceId)
+  if (!src?.parentId) {
+    return undefined
+  }
+  const parent = nodeById.get(src.parentId)
+  if (parent && rootIds.has(parent.id)) {
+    return parent.id
   }
   return undefined
 }
@@ -213,6 +233,155 @@ function resolveOverlaps(
   }
 }
 
+function boxesOverlap(
+  a: { x: number, y: number, w: number, h: number },
+  b: { x: number, y: number, w: number, h: number },
+  gap: number,
+): boolean {
+  return (
+    a.x < b.x + b.w + gap
+    && a.x + a.w + gap > b.x
+    && a.y < b.y + b.h + gap
+    && a.y + a.h + gap > b.y
+  )
+}
+
+function resolveInterColumnOverlaps(
+  positions: Map<string, FlowPosition>,
+  nodes: FlowNode[],
+  gap: number,
+): void {
+  const byColumn = new Map<number, FlowNode[]>()
+  for (const n of nodes) {
+    const pos = positions.get(n.id)
+    if (!pos) {
+      continue
+    }
+    const col = Math.round((pos.x - FLOW_LAYOUT.startX) / FLOW_LAYOUT.horizontalGap)
+    const list = byColumn.get(col) ?? []
+    list.push(n)
+    byColumn.set(col, list)
+  }
+
+  const cols = [...byColumn.keys()].sort((a, b) => a - b)
+  for (let ci = 1; ci < cols.length; ci++) {
+    const left = byColumn.get(cols[ci - 1]!) ?? []
+    const right = byColumn.get(cols[ci]!) ?? []
+    let requiredShift = 0
+
+    for (const ln of left) {
+      const lp = positions.get(ln.id)
+      if (!lp) {
+        continue
+      }
+      const ls = estimateNodeSize(ln)
+      const lb = { x: lp.x, y: lp.y, w: ls.width, h: ls.height }
+
+      for (const rn of right) {
+        const rp = positions.get(rn.id)
+        if (!rp) {
+          continue
+        }
+        const rs = estimateNodeSize(rn)
+        const rb = {
+          x: rp.x,
+          y: rp.y + requiredShift,
+          w: rs.width,
+          h: rs.height,
+        }
+        if (!boxesOverlap(lb, rb, gap)) {
+          continue
+        }
+        const overlapShift = lb.y + lb.h + gap - rb.y
+        if (overlapShift > requiredShift) {
+          requiredShift = overlapShift
+        }
+      }
+    }
+
+    if (requiredShift > 0) {
+      for (const rn of right) {
+        const rp = positions.get(rn.id)
+        if (!rp) {
+          continue
+        }
+        positions.set(rn.id, { ...rp, y: rp.y + requiredShift })
+      }
+    }
+  }
+}
+
+function orderColumnsWithBarycenter(
+  byColumn: Map<number, FlowNode[]>,
+  column: Map<string, number>,
+  lane: Map<string, number>,
+  allNodes: FlowNode[],
+  flowEdges: FlowEdge[],
+): void {
+  const nodeById = new Map(allNodes.map(n => [n.id, n]))
+  const rootIds = new Set(
+    [...byColumn.values()].flat().map(n => n.id),
+  )
+  const sortedCols = [...byColumn.keys()].sort((a, b) => a - b)
+  const rankById = new Map<string, number>()
+
+  for (const col of sortedCols) {
+    const group = byColumn.get(col)
+    if (!group) {
+      continue
+    }
+
+    const barycenterFor = (nodeId: string): number | undefined => {
+      const incomingRanks = flowEdges
+        .filter(e => isFlowEdge(e) && e.target === nodeId)
+        .map((e) => {
+          const srcCol = resolveSourceColumn(
+            e.source,
+            column,
+            rootIds,
+            nodeById,
+          )
+          if (srcCol === undefined || srcCol >= col) {
+            return undefined
+          }
+          const srcRootId = resolveSourceRootId(e.source, rootIds, nodeById)
+          if (!srcRootId) {
+            return undefined
+          }
+          return rankById.get(srcRootId)
+        })
+        .filter((r): r is number => r !== undefined)
+
+      if (incomingRanks.length === 0) {
+        return undefined
+      }
+      return incomingRanks.reduce((sum, n) => sum + n, 0) / incomingRanks.length
+    }
+
+    group.sort((a, b) => {
+      const baryA = barycenterFor(a.id)
+      const baryB = barycenterFor(b.id)
+      if (baryA !== undefined && baryB !== undefined && baryA !== baryB) {
+        return baryA - baryB
+      }
+      if (baryA !== undefined && baryB === undefined) {
+        return -1
+      }
+      if (baryA === undefined && baryB !== undefined) {
+        return 1
+      }
+      return (
+        (lane.get(a.id) ?? 0) - (lane.get(b.id) ?? 0)
+        || a.id.localeCompare(b.id)
+      )
+    })
+
+    group.forEach((n, idx) => {
+      rankById.set(n.id, idx)
+    })
+  }
+}
+
 /**
  * Place execution-band root nodes left-to-right by column, stacked by branch lane.
  */
@@ -241,13 +410,10 @@ export function layoutExecutionBand(
     byColumn.set(col, list)
   }
 
-  const laneGap = 16
+  orderColumnsWithBarycenter(byColumn, column, lane, nodes, flowEdges)
+
+  const laneGap = FLOW_NODE_METRICS.executionLaneGap
   for (const [col, group] of byColumn) {
-    group.sort(
-      (a, b) =>
-        (lane.get(a.id) ?? 0) - (lane.get(b.id) ?? 0)
-        || a.id.localeCompare(b.id),
-    )
     let y = execY
     for (const n of group) {
       layout[n.id] = {
@@ -260,6 +426,7 @@ export function layoutExecutionBand(
 
   const positions = new Map(Object.entries(layout).map(([id, pos]) => [id, pos]))
   resolveOverlaps(positions, execRoots, laneGap)
+  resolveInterColumnOverlaps(positions, execRoots, laneGap)
   for (const [id, pos] of positions) {
     layout[id] = pos
   }

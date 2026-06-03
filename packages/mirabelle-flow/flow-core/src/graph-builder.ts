@@ -36,6 +36,47 @@ interface BuildContext {
   edgeCounter: number
 }
 
+const AUTOMATION_CONTAINER_CHILDREN: FlowNodeKind[] = [
+  'trigger',
+  'condition',
+  'action',
+  'choose',
+  'if',
+  'sequence',
+  'parallel',
+  'repeat',
+  'delay',
+  'wait',
+  'choose_option',
+  'ha_block',
+]
+
+function withContainerMetadata(
+  kind: FlowNodeKind,
+  data: Record<string, unknown>,
+): Record<string, unknown> {
+  if (data.isContainer !== true && data.isGroup !== true) {
+    return data
+  }
+  if (data.containerMeta && typeof data.containerMeta === 'object') {
+    return data
+  }
+  return {
+    ...data,
+    containerMeta: {
+      acceptsChildren: true,
+      allowedChildKinds:
+        kind === 'blueprint'
+          ? ['blueprint_input']
+          : kind === 'variables'
+            ? ['variable']
+            : AUTOMATION_CONTAINER_CHILDREN,
+      relayoutStrategy: 'reconcile_group_layout',
+      insertionUi: 'hover_plus',
+    },
+  }
+}
+
 function isConditionsGroupNode(node: FlowNode): boolean {
   return node.kind === 'ha_block' && node.data.blockKey === 'conditions'
 }
@@ -54,12 +95,13 @@ function addNode(
   parentId?: string,
 ): FlowNode {
   const id = path.replace(/\//g, '_') || 'node'
+  const nodeData = withContainerMetadata(kind, data)
   const node: FlowNode = {
     id,
     kind,
     label,
     path,
-    data,
+    data: nodeData,
     parentId,
     layer: getNodeLayer(kind),
   }
@@ -1139,7 +1181,14 @@ export function autoLayout(
     }
   }
 
-  reconcileGroupLayouts(nodes, layout, n => n.data.hidden !== true)
+  const reconciled = reconcileGroupLayouts(nodes, layout, n => n.data.hidden !== true)
+  Object.assign(layout, reconciled.layout)
+  for (const n of nodes) {
+    const size = reconciled.groupSizes[n.id]
+    if (size) {
+      n.data.groupSize = size
+    }
+  }
 
   const execY = configBandBottom + FLOW_LAYOUT.configExecGap
   const execLayout = layoutExecutionBand(nodes, edges, execY)

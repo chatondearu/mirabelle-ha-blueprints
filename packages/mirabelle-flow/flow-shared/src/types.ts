@@ -34,6 +34,14 @@ export interface FlowPosition {
   y: number
 }
 
+/** Container metadata for future nested drag-and-drop editing. */
+export interface FlowContainerMeta {
+  acceptsChildren: boolean
+  allowedChildKinds?: FlowNodeKind[]
+  relayoutStrategy?: 'reconcile_group_layout' | 'manual'
+  insertionUi?: 'hover_plus' | 'none'
+}
+
 export interface FlowNode {
   id: string
   kind: FlowNodeKind

@@ -7,11 +7,11 @@ import {
   isHighlightedItem,
   itemDisplayValue,
 } from './composables/useListNodeHelpers'
-import { useNodeVisuals } from './composables/useNodeVisuals'
+import { useFlowNodeUi } from './composables/useFlowNodeUi'
 import type { FlowCanvasNodeProps } from './node-types'
 
 const props = defineProps<FlowCanvasNodeProps>()
-const { iconClass, stateClasses, titleKind } = useNodeVisuals(() => props.data)
+const { iconClass, titleKind, card, title, icon } = useFlowNodeUi(() => props.data)
 
 const listItems = computed<FlowListItem[]>(() => {
   const items = props.data.rawData?.items
@@ -20,14 +20,10 @@ const listItems = computed<FlowListItem[]>(() => {
 </script>
 
 <template>
-  <div
-    class="flow-node-card"
-    :data-kind="data.kind"
-    :class="stateClasses"
-  >
+  <div :class="card('max-w-none w-64')">
     <Handle type="target" :position="Position.Left" class="!bg-neutral-400" />
-    <div class="flex items-center gap-1.5 font-medium capitalize">
-      <span class="flow-node-card__icon" :class="iconClass" aria-hidden="true" />
+    <div :class="title('flex items-center gap-1.5 capitalize')">
+      <span :class="icon(iconClass)" aria-hidden="true" />
       <span>{{ titleKind }}</span>
     </div>
     <div class="mt-1 text-xs text-neutral-300">
@@ -61,4 +57,3 @@ const listItems = computed<FlowListItem[]>(() => {
     </div>
   </div>
 </template>
-

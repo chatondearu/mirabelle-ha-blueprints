@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import type { BlueprintMeta } from '@mirabelle/flow-shared'
 import { computed } from 'vue'
-import { useNodeVisuals } from './composables/useNodeVisuals'
+import { useFlowNodeUi } from './composables/useFlowNodeUi'
 import type { FlowCanvasNodeProps } from './node-types'
 
 const props = defineProps<FlowCanvasNodeProps>()
-const { iconClass, stateClasses } = useNodeVisuals(() => props.data)
+const { iconClass, card, title, icon } = useFlowNodeUi(() => props.data)
 
 const meta = computed(
   () => props.data.rawData?.meta as BlueprintMeta | undefined,
@@ -13,13 +13,9 @@ const meta = computed(
 </script>
 
 <template>
-  <div
-    class="flow-node-group flow-node-card"
-    :data-kind="data.kind"
-    :class="stateClasses"
-  >
-    <div class="flex items-center gap-1.5 font-medium">
-      <span class="flow-node-card__icon" :class="iconClass" aria-hidden="true" />
+  <div :class="card()">
+    <div :class="title('flex items-center gap-1.5')">
+      <span :class="icon(iconClass)" aria-hidden="true" />
       <span>Blueprint</span>
     </div>
     <div class="mt-1 text-xs font-medium text-pink-200">

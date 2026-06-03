@@ -6,6 +6,7 @@ export interface FlowCanvasNodeData {
   nodeId: string
   label: string
   kind: FlowNodeKind
+  depth: number
   rawData?: Record<string, unknown>
   highlightedItems?: string[]
   highlighted?: boolean

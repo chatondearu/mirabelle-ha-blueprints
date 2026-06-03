@@ -114,7 +114,7 @@ Optimized for **desktop** (≥1024px). Narrow viewports may scroll horizontally;
 
 ### Node kinds (graph)
 
-Defined in `FlowNode.vue` — keep in sync when adding `FlowNodeKind` values:
+Palette classes live in `flow-ui/src/styles/flow-node-ui.ts` and are applied via **`uno-variations`** (`useFlowNodeUi`). Keep in sync when adding `FlowNodeKind` values:
 
 
 | Kind             | Border               | Background       |
@@ -140,7 +140,7 @@ Executed nodes during trace playback:
 ## Typography
 
 - **Base:** system UI stack via Uno preset (Tailwind-compatible).
-- **Node title:** `text-sm font-medium capitalize` (kind name), prefixed by a Lucide icon (`i-lucide-*`, 16px) mapped per `FlowNodeKind` in `FlowNode.vue`.
+- **Node title:** `flow-node-title` shortcut + layout utilities; Lucide icon (`i-lucide-*`) mapped per `FlowNodeKind` in `flow-node-theme.ts`.
 - **Node label:** `text-xs text-neutral-300` (truncation acceptable; full text in inspector).
 - **Sidebar / tabs:** `text-xs` for density.
 - **Inspector:** `text-sm` for labels and fields.
@@ -166,6 +166,12 @@ Style Reka parts with UnoCSS + `data-[state=active]:` attributes; do not fight R
 - Default: `rounded bg-neutral-800 px-3 py-1 text-sm hover:bg-neutral-700`.
 - Disabled: `disabled:opacity-50` or native `:disabled` (prefer explicit disabled state).
 - Primary (HA save): emerald variant (see header).
+
+### Flow node styling
+
+- **UnoCSS** utilities and **shortcuts** in `flow-ui/uno.config.ts` (`flow-node-title`, `flow-node-label`, `flow-canvas`, …).
+- **Variations** (kind palette, role, depth, path highlight, neon) in `flow-ui/src/styles/flow-node-ui.ts`, resolved in components via `useFlowNodeUi` + [`uno-variations`](https://www.npmjs.com/package/uno-variations).
+- **Naming:** prefer `flow-node-card`, `flow-node-card-child` (no BEM `__` segments). Avoid large `.css` files under `components/`; Vue Flow shell overrides belong in `uno.config.ts` preflights.
 
 ### Vue Flow
 

@@ -1,6 +1,6 @@
 import type { FlowNodeKind } from '@mirabelle/flow-shared'
 
-/** Lucide icon classes (Uno preset-icons). Colors live in node-shared.css via data-kind. */
+/** Lucide icon classes (Uno preset-icons). */
 export const NODE_KIND_ICON_CLASS: Record<FlowNodeKind, string> = {
   trigger: 'i-lucide-zap',
   condition: 'i-lucide-filter',

@@ -55,6 +55,20 @@ const groupLayout = computed(() => {
   )
 })
 
+function nodeDepth(node: FlowNodeType, nodeById: Map<string, FlowNodeType>): number {
+  let depth = 0
+  let current = node
+  while (current.parentId) {
+    depth += 1
+    const parent = nodeById.get(current.parentId)
+    if (!parent) {
+      break
+    }
+    current = parent
+  }
+  return depth
+}
+
 const nodes = computed<Node[]>(() => {
   const doc = store.document
   if (!doc) {
@@ -62,6 +76,7 @@ const nodes = computed<Node[]>(() => {
   }
   const { layout: layoutPositions, groupSizes } = groupLayout.value
   const childIdsByParent = buildChildIdsByParent(doc.nodes)
+  const nodeById = new Map(doc.nodes.map(n => [n.id, n] as const))
   return doc.nodes
     .filter(n => isNodeVisible(n.id))
     .filter(n => store.isNodeVisibleOnCanvas(n))
@@ -83,6 +98,7 @@ const nodes = computed<Node[]>(() => {
         position: layoutPositions[n.id] ?? doc.layout[n.id] ?? { x: 0, y: 0 },
         parentNode: n.parentId,
         extent: n.parentId ? ('parent' as const) : undefined,
+        expandParent: Boolean(n.parentId),
         draggable: !isChild,
         selectable: true,
         style: groupSize
@@ -92,6 +108,7 @@ const nodes = computed<Node[]>(() => {
           nodeId: n.id,
           label: n.label,
           kind: n.kind,
+          depth: nodeDepth(n, nodeById),
           rawData: n.data,
           highlightedItems: store.highlightedItemsByNode[n.id] ?? [],
           highlighted: store.highlightedNodeIds.has(n.id),
@@ -232,7 +249,7 @@ watch(
         :edges="edges"
         :node-types="nodeTypes"
         :edge-types="edgeTypes"
-        class="mirabelle-flow-canvas h-full w-full"
+        class="flow-canvas"
         @node-drag-stop="(e: NodeDragEvent) => {
           if (e.node.position) {
             store.updateLayout(e.node.id, e.node.position.x, e.node.position.y)
@@ -244,29 +261,10 @@ watch(
       </VueFlow>
       <div
         v-else
-        class="flex h-full items-center justify-center text-neutral-500"
+        class="flow-canvas-empty"
       >
         Open a YAML file or load a repo blueprint
       </div>
     </div>
   </div>
 </template>
-
-<style>
-.mirabelle-flow-canvas {
-  background: #0a0a0a;
-}
-
-/* Vue Flow theme paints a white card on .vue-flow__node — hide it so .flow-node-card colors show */
-.mirabelle-flow-canvas .vue-flow__node,
-.mirabelle-flow-canvas .vue-flow__node-default,
-.mirabelle-flow-canvas .vue-flow__node.selectable,
-.mirabelle-flow-canvas .vue-flow__node.selected {
-  background: transparent !important;
-  border: none !important;
-  padding: 0 !important;
-  box-shadow: none !important;
-  width: auto !important;
-  min-width: 0 !important;
-}
-</style>
