@@ -1,15 +1,16 @@
 import { defineConfig, presetIcons, presetUno } from 'unocss'
-import {
-  FLOW_NODE_NEON_CLASS,
-  FLOW_NODE_PALETTE_SAFELIST,
-} from './src/styles/flow-node-ui'
+import { FLOW_NODE_UI_SAFELIST } from './src/styles/flow-node-ui'
 import { NODE_ICON_SAFELIST } from './src/styles/flow-node-theme'
 
 export default defineConfig({
+  content: {
+    filesystem: [
+      'src/**/*.{vue,ts}',
+    ],
+  },
   safelist: [
     ...NODE_ICON_SAFELIST,
-    ...FLOW_NODE_PALETTE_SAFELIST,
-    ...Object.values(FLOW_NODE_NEON_CLASS),
+    ...FLOW_NODE_UI_SAFELIST,
   ],
   shortcuts: {
     'flow-node-title': 'min-w-0 truncate whitespace-nowrap',

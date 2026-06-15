@@ -65,10 +65,12 @@ export function useFlowNodeUi(
   const variations = computed(() => {
     const d = toValue(data)
     const depthKey = d.depth >= 1 && d.depth <= 3 ? String(d.depth) : undefined
+    const isNestedChild = d.depth >= 1 && d.depth <= 3
     return {
       palette: resolvePalette(d),
       role: resolveRole(d, options?.role),
-      depth: depthKey,
+      // Nested children keep palette background; only strip border chrome.
+      depth: isNestedChild ? depthKey : undefined,
       neon: d.pathActive ? resolveNeonTone(d) : undefined,
       pathDimmed: d.pathDimmed,
       pathFocus: d.pathFocus,
