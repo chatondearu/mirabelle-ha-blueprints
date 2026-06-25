@@ -8,6 +8,12 @@ This blueprint adjusts cover positions using key positions (`0`, `25`, `50`, `75
 - Season mode (auto, summer, winter)
 - Presence and awake state
 - Facade orientation groups (north/east/south/west)
+- Per-cover door/window contact sensors
+
+> **Version 2 (breaking change).** The logic is now **stateless**: the two former helper
+> inputs (`Action Priority Helper` and `Summer Shading Latch Helper`) and the
+> `Control Strategy` preset were removed, night handling was unified, and the global contact
+> inputs were replaced by **per-cover** contact links. See [Migration from v1](#migration-from-v1).
 
 ## Installation
 
@@ -30,7 +36,8 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 ## Prerequisites
 
 - Home Assistant `2025.5.3` or later
-- Covers supporting `cover.set_cover_position` (0-100 position support)
+- Covers supporting `cover.set_cover_position` (0-100 position support). Covers without a
+  `current_position` attribute are ignored (no open/close-only fallback).
 - Optional outdoor temperature source:
   - an outdoor temperature sensor, or
   - a weather entity fallback (forecast first, then weather temperature)
@@ -44,76 +51,106 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 
 ## Configuration
 
-### Required Inputs
+Inputs are grouped into collapsible sections in the UI.
 
-- **All Managed Covers**: all covers controlled by the automation
+### Covers & Orientation
+
+- **All Managed Covers** (required): all covers controlled by the automation
+- **North / East / South / West-Facing Covers** (optional): facade groups. If none is
+  configured, all covers are treated as one group.
+
+### Presence & Awake
+
 - **Persons At Home**: select one or more persons; automation runs if at least one is `home`
 - **Close Covers When Away**: if enabled, all managed covers close when nobody is home
-- **Awake Entity (Optional)**: primary awake source when set
-- **Awake Schedule (Optional)**: used when Awake Entity is empty
-- **Fallback awake mode**: if both are empty, daylight is used (`sun.sun` above horizon)
-- **Summer Shading Latch Helper (Optional)**: an `input_boolean` to persist summer shading state and avoid close/open oscillation
-- **Action Priority Helper (Optional)**: an `input_number` to store last applied action priority and block unwanted lower-priority overrides
-- **Control Strategy**: choose `balanced`, `thermal_comfort`, or `motor_wear`
-- **Manual Override Hold (Minutes)**: hold manual per-cover actions before comfort logic takes back control
-- **Minimum Position Delta**: ignore small comfort/fallback moves below this difference
-- **Minimum Action Interval (Minutes)**: minimum delay between comfort/fallback moves for the same cover
-- **Outdoor Temperature Sensor (Optional)**: primary outdoor temperature source
-- **Weather Entity (Optional Fallback)**: used when Outdoor Temperature Sensor is empty
-- **Indoor Temperature Sensor (Optional)**
+- **Awake Entity (Optional)**: primary awake source when set (`on`/`home` = awake)
+- **Awake Schedule (Optional)**: used when Awake Entity is empty (`on` = awake)
+- If both are empty, daylight is used (`sun.sun` above horizon)
+
+### Contact Sensors (Per Cover)
+
+- **Cover ↔ Contact Sensor Links**: a list of entries, each linking **one cover** to **one or
+  more** contact sensors. When any linked sensor of a cover is `on`, **that cover** moves to the
+  Contact Open Position. Different covers can have a different number of sensors.
+- **Contact Open Position**: position used for a cover while one of its linked sensors is open.
+
+Example (bay windows with two sensors, french doors with one):
+
+```yaml
+cover_contact_links:
+  - cover: cover.bay_window_left
+    sensors:
+      - binary_sensor.bay_window_left_top
+      - binary_sensor.bay_window_left_bottom
+  - cover: cover.bay_window_right
+    sensors:
+      - binary_sensor.bay_window_right_top
+      - binary_sensor.bay_window_right_bottom
+  - cover: cover.french_door_left
+    sensors:
+      - binary_sensor.french_door_left
+  - cover: cover.french_door_right
+    sensors:
+      - binary_sensor.french_door_right
+```
+
+Contact opening overrides comfort logic and ignores manual override / anti-wear filtering, but
+stays **below** the global safety branches (away / wind / night). It also applies regardless of
+the awake state (an open door implies presence).
+
+### Night & Wind Safety
+
+- **Night Position**: position used at night (`0` = closed, the default). Set higher to keep
+  covers partly open at night. This single input replaces the former
+  `Close Covers At Night` + `Winter Night Position` pair.
 - **Wind Speed Sensor (Optional)**: if empty, wind protection is disabled
-- **Contact Sensors (Optional)**: door/window sensors that can request an opening position
-- **Covers For Contact Opening (Optional)**: target covers for contact-based opening (all covers if empty)
+- **Max Wind Speed**: wind safety threshold
+- **Position With High Wind**: position used when wind is above the threshold
 
-### Optional Facade Inputs
+### Temperature Sources
 
-- **North-Facing Covers**
-- **East-Facing Covers**
-- **South-Facing Covers**
-- **West-Facing Covers**
+- **Outdoor Temperature Sensor (Optional)**: primary outdoor source
+- **Weather Entity (Optional Fallback)**: used when the outdoor sensor is empty
+- **Indoor Temperature Sensor (Optional)**
 
-If no facade group is configured, all covers are treated as one group.
+Outdoor temperature priority:
 
-### Season and Thermal Inputs
+1. Outdoor Temperature Sensor
+2. Weather forecast temperature (first forecast item)
+3. Weather current temperature attribute
+4. `0` if no source is available (thermal branches are guarded and skipped in that case)
 
-- **Season Mode**:
-  - `auto` = summer between configured summer start/end dates
-  - `summer` = force summer behavior
-  - `winter` = force winter behavior
-- **Summer Start Month (Auto Mode)** / **Summer Start Day (Auto Mode)**
-- **Summer End Month (Auto Mode)** / **Summer End Day (Auto Mode)**
+### Season
+
+- **Season Mode**: `auto` (summer between configured dates), `summer`, or `winter`
+- **Summer Start/End Month & Day (Auto Mode)**: cross-year ranges are supported
+
+### Thermal Thresholds
+
 - **Summer Close Temperature**: outdoor threshold for summer shading
-- **Winter Open Temperature Below**: outdoor threshold to favor winter solar gains
 - **Indoor Hot Temperature**: indoor threshold to activate summer shading
+- **Winter Open Temperature Below**: outdoor threshold to favor winter solar gains
 - **Winter Indoor Cold Temperature**: indoor threshold to favor winter solar gains
 - **Temperature Hysteresis Buffer**: deadband in °C to reduce threshold oscillation
 - **Sensor Stability Window (Minutes)**: minimum unchanged duration before using sensor values (`0`, `5`, `10`, `15`)
-- **Max Wind Speed**: wind safety threshold
-- **Close Covers At Night**: enable/disable automatic closure when sun is below horizon
 
-Sensor fallback behavior:
-
-- Outdoor temperature priority:
-  1. Outdoor Temperature Sensor
-  2. Weather forecast temperature (first forecast item)
-  3. Weather current temperature attribute
-  4. `0` if no source is available
-- Indoor temperature: `0` when no indoor sensor is configured
-- Wind: disabled when no wind sensor is configured
-- Stability window: when enabled, temperature/weather/wind values must remain unchanged for the configured duration
-
-### Position Inputs
+### Comfort Positions
 
 Each value is selected from key positions (`0`, `25`, `50`, `75`, `100`):
 
-- **Position With High Wind**
-- **Contact Open Position**
-- **Winter Night Position**
 - **Summer Position (Non Sun-Facing)**
 - **Summer Position (Sun-Facing Facade)**
 - **Winter Day Position (Solar Gains)**
 - **Winter Day Position (No Solar Gains Needed)**
-- **Neutral Position**
+- **Neutral Position** (used in summer daylight once it is cool enough)
+
+### Motion & Manual Override
+
+- **Manual Override Hold (Minutes)**: hold a manually changed cover out of comfort moves for this duration
+- **Minimum Position Delta**: ignore small comfort moves below this difference (default `10`)
+- **Minimum Action Interval (Minutes)**: minimum delay between comfort moves for the same cover (default `5`)
+
+Safety branches (away / wind / night) and contact opening ignore both the delta and the interval.
 
 ## Behavior Summary
 
@@ -121,100 +158,43 @@ The automation reevaluates on:
 
 - Presence changes
 - Managed cover state changes
-- Awake source changes (entity/schedule) trigger an immediate reevaluation
+- Awake source changes (entity/schedule)
 - Indoor/outdoor/weather temperature changes
-- Wind speed changes (if wind sensor configured)
-- Contact sensor changes (if configured)
+- Wind speed changes (if a wind sensor is configured)
+- Linked contact sensor changes
 - `sun.sun` state changes
 - Every 10 minutes
 
-Decision order:
+### Decision model
 
-1. **Away handling**:
-  - if `Close Covers When Away` is enabled and nobody is home, all managed covers are closed
-  - if disabled and nobody is home, no further action is taken
-2. **Night handling**:
-  - if `Close Covers At Night` is enabled, all managed covers are closed at night (summer and winter)
-  - if `Close Covers At Night` is disabled, winter night uses `Winter Night Position` (0/25/50/75/100)
-3. **Awake gating (daytime only)**: if not awake, no further action is taken
-4. **Wind high (daytime only)**: all managed covers move to `Position With High Wind`
-5. **Contact open**: when any configured contact sensor is open, target covers move to `Contact Open Position`
-6. **Summer hot** (daytime, indoor or outdoor threshold reached):
-  - all covers move to `Summer Position (Non Sun-Facing)`
-  - sun-facing facade moves to `Summer Position (Sun-Facing Facade)`
-7. **Winter day and heat gain needed**:
-  - all covers move to `Winter Day Position (Solar Gains)`
-8. **Fallback (daytime)**:
-  - winter daylight: `Winter Day Position (No Solar Gains Needed)`
-  - otherwise: `Neutral Position`
+The automation computes a single global **mode**, then a **target position per cover**, then
+applies each target through one loop (a cover absent from the target map is left untouched):
 
-Summer shading state (anti-loop):
+1. **Away**: nobody home and *Close When Away* enabled → all covers to `0`
+   (if *Close When Away* is disabled, nothing happens)
+2. **Wind** (safety): wind above threshold → all covers to *Position With High Wind*
+3. **Night** (safety): sun below horizon → all covers to *Night Position*
+4. **Active** (daytime, someone home), decided **per cover**:
+   1. a linked contact sensor is open → *Contact Open Position*
+   2. not awake → no movement
+   3. **summer + daylight**:
+      - hot (`threshold + buffer`) → sun-facing facade to *Summer Position (Sun-Facing Facade)*, others to *Summer Position (Non Sun-Facing)*
+      - cool enough (`threshold - buffer`) → *Neutral Position*
+      - in between → **hold** (no movement)
+   4. **winter + daylight**:
+      - solar gain needed (`threshold - buffer`) → *Winter Day Position (Solar Gains)*
+      - otherwise → *Winter Day Position (No Solar Gains Needed)*
 
-- Summer shading turns **on** when summer heat thresholds are exceeded (`threshold + buffer`)
-- Summer shading turns **off** only when both summer release conditions are met (`threshold - buffer`)
-- Between those two bands, shading stays active (without latch helper) until release thresholds are met
-- If `Summer Shading Latch Helper` is configured, it is used as persistent state memory
-- Sun-facing covers target `Summer Position (Sun-Facing Facade)`; other facades target `Summer Position (Non Sun-Facing)`
-- If a facade group is empty for the current sun azimuth, all managed covers are treated as sun-facing for shading (safety fallback)
-- Non-sun and sun-facing updates are now independent, so one cannot block the other
+### Stateless anti-oscillation
 
-Manual override and motor protection:
+Version 2 removes the external priority/latch helpers. Stability is achieved with:
 
-- Manual changes are detected per cover and held for `Manual Override Hold (Minutes)` before comfort/fallback branches can move that cover again
-- Manual hold applies to comfort branches only; safety branches (away/night/wind) can still override
-- `Control Strategy` adjusts defaults for movement aggressiveness:
-  - `thermal_comfort`: fastest thermal reaction
-  - `balanced`: moderate anti-wear filtering
-  - `motor_wear`: stronger anti-wear filtering
-- Effective anti-wear filtering uses the max between strategy defaults and your explicit values:
-  - `Minimum Position Delta`
-  - `Minimum Action Interval (Minutes)`
-
-Action priority memory (anti-fallback loop):
-
-- If `Action Priority Helper` is configured, each branch writes a numeric priority
-- Lower-priority branches are blocked while a higher-priority action remains active
-- Automatic reset to `0` happens when:
-  - returning home after away-priority action
-  - switching back to daytime after night-priority action
-  - safety/contact priority is no longer active (wind/night/contact cleared)
-- Suggested helper configuration: `input_number` with min `0`, max `100`, step `1`
-
-Auto season behavior:
-
-- Summer is active between configured start/end dates (month + day)
-- Winter is active outside that range
-- Cross-year ranges are supported (for example: start in November, end in March)
-
-When optional sensors are missing:
-
-- Summer/winter thermal decisions use only available temperature sources
-- Wind safety branch is skipped if no wind sensor is configured
-- Cover commands are guarded to avoid sending actions when targets are already at the requested state/position
-- Position guards apply to covers exposing `current_position`; covers without this attribute are ignored for position no-op checks
-
-Anti-oscillation safeguards:
-
-- Temperature thresholds use hysteresis:
-  - summer hot checks use `threshold + buffer`
-  - winter gain checks use `threshold - buffer`
-- Sensor values are considered only when stable for the configured window (or immediately when set to `0`)
-- Optional sensor entities are validated before use (`unknown`/`unavailable`/missing entities are ignored)
-
-Recommended presets:
-
-- **Stable profile** (less frequent movements):
-  - `Temperature Hysteresis Buffer`: `0.8`
-  - `Sensor Stability Window (Minutes)`: `10`
-- **Reactive profile** (faster response):
-  - `Temperature Hysteresis Buffer`: `0.3`
-  - `Sensor Stability Window (Minutes)`: `5`
-
-Awake gating priority:
-
-1. If **Awake Entity** is set, it is used (`on`/`home` = awake)
-2. Else if **Awake Schedule** is set, it is used (`on` = awake)
-3. Else daylight is used (`sun.sun` above horizon = awake)
+- **Hysteresis**: summer hot uses `threshold + buffer`, release/gain checks use `threshold - buffer`
+- **Hold band**: in the summer deadband, covers keep their current position (no helper needed)
+- **No-op guard**: a cover is never commanded if it is already at its target
+- **Minimum Position Delta** and **Minimum Action Interval** for comfort moves
+- **Sensor Stability Window**: noisy sensor values are used only once stable
+- Optional sensor entities are validated before use (`unknown`/`unavailable`/missing are ignored)
 
 ## Orientation Mapping
 
@@ -225,17 +205,15 @@ The sun-facing facade is inferred using `sun.sun` azimuth:
 - West: `225° <= azimuth < 315°`
 - North: all other azimuth values
 
+If a facade group is empty for the current sun azimuth, all managed covers are treated as
+sun-facing for shading (safety fallback).
+
 ## Example Profiles
 
 ### North/South House (common setup)
 
-- Configure only `North-Facing Covers` and `South-Facing Covers`
-- Leave east/west empty
-- Suggested start:
-  - Summer non-sun: `75`
-  - Summer sun-facing: `25`
-  - Winter gains: `100`
-  - Winter no gains: `50`
+- Configure only `North-Facing Covers` and `South-Facing Covers`; leave east/west empty
+- Suggested start: summer non-sun `75`, summer sun-facing `25`, winter gains `100`, winter no gains `50`
 
 ### Aggressive Summer Shading
 
@@ -243,28 +221,38 @@ The sun-facing facade is inferred using `sun.sun` azimuth:
 - Summer sun-facing: `0` or `25`
 - Indoor hot temp: lower value (e.g. `23.5`)
 
+## Migration from v1
+
+If you used the previous version, re-import the blueprint and update your automation:
+
+- **Removed** `Action Priority Helper` and `Summer Shading Latch Helper`: delete those inputs.
+  You can also delete the `input_number` / `input_boolean` helpers if they were created only for
+  this blueprint. Anti-oscillation is now handled internally.
+- **Removed** `Control Strategy`: tune behavior directly with *Minimum Position Delta* and
+  *Minimum Action Interval (Minutes)*.
+- **Removed** `Close Covers At Night` + `Winter Night Position`: replaced by a single
+  *Night Position* (set `0` to close at night, the previous default behavior).
+- **Replaced** `Contact Sensors` + `Covers For Contact Opening` by **Cover ↔ Contact Sensor
+  Links**: define one entry per cover with its own sensors (see the example above).
+
+Bug fixes included in v2:
+
+- Summer shading no longer leaks into winter (season is now an explicit guard).
+- The night position is reachable without configuring an awake entity (safety branches run
+  before the awake gate).
+- Comfort actions can no longer be blocked indefinitely (the priority helper is gone).
+
 ## Troubleshooting
 
 - **No movement**:
   - check selected persons (at least one must be `home`)
   - check `Close Covers When Away` option for away behavior
-  - if Awake Entity is set, check awake state (`on` or `home`)
-  - if Awake Schedule is set, check schedule state (`on`)
-  - if none is set, behavior follows daylight
+  - if Awake Entity is set, check awake state (`on` or `home`); if Awake Schedule is set, check `on`; otherwise behavior follows daylight
   - verify optional sensor availability (outdoor/weather, indoor, wind)
-- **Unexpected facade selection**:
-  - verify facade groups and current `sun.sun` azimuth
-- **Position service errors**:
-  - ensure the cover integration supports `cover.set_cover_position`
-- **Too frequent movements**:
-  - increase `Minimum Position Delta`
-  - increase `Minimum Action Interval (Minutes)`
-  - use `motor_wear` strategy
-- **Hot day but covers stay at 75% all day**:
-  - verify `South-Facing Covers` / `North-Facing Covers` are filled for your house layout
-  - expected behavior in summer heat: sun-facing facade at `Summer Position (Sun-Facing Facade)` (default `25`), others at `75`
-  - re-import the latest blueprint version (older versions could skip shading when all covers were already at `75%`)
-  - check `Sensor Stability Window` is not blocking hot thresholds for noisy sensors
-- **Manual move gets reverted too quickly**:
-  - increase `Manual Override Hold (Minutes)`
-  - verify the move was a real state change on the cover (not only attribute noise)
+- **A cover never moves**: ensure it exposes `current_position` (the blueprint skips covers without it)
+- **Unexpected facade selection**: verify facade groups and current `sun.sun` azimuth
+- **Position service errors**: ensure the cover integration supports `cover.set_cover_position`
+- **Too frequent movements**: increase `Minimum Position Delta` and/or `Minimum Action Interval (Minutes)`, or raise the hysteresis buffer
+- **Contact opening does nothing**: verify the cover in the link is part of *All Managed Covers* and that its linked sensors report `on` when open
+- **Manual move gets reverted too quickly**: increase `Manual Override Hold (Minutes)`
+```
