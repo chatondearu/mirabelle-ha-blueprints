@@ -71,7 +71,8 @@ Inputs are grouped into collapsible sections in the UI.
 
 - **Cover ↔ Contact Sensor Links**: a list of entries, each linking **one cover** to **one or
   more** contact sensors. When any linked sensor of a cover is `on`, **that cover** moves to the
-  Contact Open Position. Different covers can have a different number of sensors.
+  Contact Open Position. Different covers can have a different number of sensors. This input is
+  edited as a YAML object (a list of `cover` + `sensors` entries).
 - **Contact Open Position**: position used for a cover while one of its linked sensors is open.
 
 Example (bay windows with two sensors, french doors with one):
@@ -154,16 +155,16 @@ Safety branches (away / wind / night) and contact opening ignore both the delta 
 
 ## Behavior Summary
 
-The automation reevaluates on:
+The automation reevaluates immediately on:
 
 - Presence changes
 - Managed cover state changes
-- Awake source changes (entity/schedule)
-- Indoor/outdoor/weather temperature changes
-- Wind speed changes (if a wind sensor is configured)
-- Linked contact sensor changes
-- `sun.sun` state changes
-- Every 10 minutes
+- `sun.sun` state changes (daylight, azimuth)
+- Awake entity/schedule changes
+- A linked contact sensor opening or closing
+
+Temperature, weather and wind changes are picked up on the **10-minute** re-evaluation
+(thermal signals are slow, so they do not need instant triggers).
 
 ### Decision model
 

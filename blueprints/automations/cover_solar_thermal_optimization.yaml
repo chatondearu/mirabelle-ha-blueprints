@@ -123,25 +123,15 @@ blueprint:
             When any linked sensor is open, that specific cover moves to the
             Contact Open Position. Each entry targets a single cover and its own sensors,
             so different covers can have a different number of sensors.
+            Provide a list of entries, each with a "cover" entity id and a "sensors" list,
+            for example:
+              - cover: cover.bay_window
+                sensors:
+                  - binary_sensor.bay_window_top
+                  - binary_sensor.bay_window_bottom
           default: []
           selector:
-            object:
-              label_field: cover
-              multiple: true
-              fields:
-                cover:
-                  label: Cover
-                  selector:
-                    entity:
-                      filter:
-                        - domain: cover
-                sensors:
-                  label: Contact Sensors
-                  selector:
-                    entity:
-                      filter:
-                        - domain: binary_sensor
-                      multiple: true
+            object: {}
         contact_open_position:
           name: Contact Open Position
           description: Position used for a cover when one of its linked sensors is open.
@@ -481,59 +471,54 @@ blueprint:
 mode: single
 
 trigger_variables:
-  presence_persons_input: !input presence_persons
   awake_entity_input: !input awake_entity
   awake_schedule_input: !input awake_schedule
-  outdoor_temperature_input: !input outdoor_temperature
-  indoor_temperature_input: !input indoor_temperature
-  wind_speed_input: !input wind_speed
-  weather_entity_input: !input weather_entity
   cover_contact_links_input: !input cover_contact_links
 
 trigger:
-  # Managed covers and the sun always exist, so plain state triggers are safe here.
+  # Real state triggers fire on any change. An empty entity list is tolerated
+  # by Home Assistant (it simply tracks nothing).
   - platform: state
     entity_id: !input covers
   - platform: state
+    entity_id: !input presence_persons
+  - platform: state
     entity_id: sun.sun
-  # Presence is watched through a fingerprint template to tolerate an empty list.
-  - platform: template
-    value_template: >
-      {% set ns = namespace(parts=[]) %}
-      {% for person in presence_persons_input %}
-        {% set ns.parts = ns.parts + [states(person)] %}
-      {% endfor %}
-      {{ ns.parts | join(',') }}
-  # Awake source (entity, schedule, or daylight fallback).
+  # Awake source (entity, schedule, or daylight fallback). A template trigger
+  # fires when the rendered value transitions to true, so this is kept boolean.
   - platform: template
     value_template: >
       {% if awake_entity_input | length > 0 %}
-        {{ states(awake_entity_input) }}
+        {{ states(awake_entity_input) in ['on', 'home'] }}
       {% elif awake_schedule_input | length > 0 %}
-        {{ states(awake_schedule_input) }}
+        {{ is_state(awake_schedule_input, 'on') }}
       {% else %}
         {{ is_state('sun.sun', 'above_horizon') }}
       {% endif %}
-  # Temperature and wind fingerprint.
+  # Contact opening edge: fires when at least one linked sensor becomes open.
   - platform: template
     value_template: >
-      {% set outdoor = states(outdoor_temperature_input) if outdoor_temperature_input | length > 0 else '' %}
-      {% set indoor = states(indoor_temperature_input) if indoor_temperature_input | length > 0 else '' %}
-      {% set wind = states(wind_speed_input) if wind_speed_input | length > 0 else '' %}
-      {% set weather_temp = state_attr(weather_entity_input, 'temperature') if weather_entity_input | length > 0 else '' %}
-      {% set forecast = state_attr(weather_entity_input, 'forecast') if weather_entity_input | length > 0 else none %}
-      {% set forecast_temp = forecast[0].temperature if forecast is iterable and forecast is not string and forecast | count > 0 and forecast[0].temperature is defined else '' %}
-      {{ outdoor ~ '|' ~ indoor ~ '|' ~ wind ~ '|' ~ weather_temp ~ '|' ~ forecast_temp }}
-  # Per-cover contact sensors fingerprint.
-  - platform: template
-    value_template: >
-      {% set ns = namespace(parts=[]) %}
+      {% set ns = namespace(open=false) %}
       {% for link in cover_contact_links_input %}
-        {% for sensor in (link.sensors if link.sensors is defined else []) %}
-          {% set ns.parts = ns.parts + [sensor ~ '=' ~ states(sensor)] %}
-        {% endfor %}
+        {% set sensors = link.sensors if (link.sensors is defined and link.sensors is not none) else [] %}
+        {% if expand(sensors) | selectattr('state', 'eq', 'on') | list | count > 0 %}
+          {% set ns.open = true %}
+        {% endif %}
       {% endfor %}
-      {{ ns.parts | join(',') }}
+      {{ ns.open }}
+  # Contact clearing edge: fires when all linked sensors are closed again,
+  # so the affected cover can return to its comfort position.
+  - platform: template
+    value_template: >
+      {% set ns = namespace(open=false) %}
+      {% for link in cover_contact_links_input %}
+        {% set sensors = link.sensors if (link.sensors is defined and link.sensors is not none) else [] %}
+        {% if expand(sensors) | selectattr('state', 'eq', 'on') | list | count > 0 %}
+          {% set ns.open = true %}
+        {% endif %}
+      {% endfor %}
+      {{ not ns.open }}
+  # Catch-all for slow signals (temperature, wind, weather, awake entity).
   - platform: time_pattern
     minutes: "/10"
 
