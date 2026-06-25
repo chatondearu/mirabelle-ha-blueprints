@@ -363,21 +363,11 @@ blueprint:
       icon: mdi:arrow-up-down
       collapsed: true
       input:
-        summer_non_sun_position:
-          name: Summer Position (Non Sun-Facing)
-          description: Base position for facades not directly exposed to the sun.
-          default: "75"
-          selector:
-            select:
-              options:
-                - "0"
-                - "25"
-                - "50"
-                - "75"
-                - "100"
         summer_sun_facing_position:
           name: Summer Position (Sun-Facing Facade)
-          description: Shading position for the currently sun-exposed facade.
+          description: >
+            Shading position applied only to the facade currently exposed to the sun
+            during summer heat. Other facades stay at the Neutral (open) position.
           default: "25"
           selector:
             select:
@@ -389,7 +379,9 @@ blueprint:
                 - "100"
         winter_day_gain_position:
           name: Winter Day Position (Solar Gains)
-          description: Position used in winter daylight when heat gains are needed.
+          description: >
+            Open position applied only to the sun-facing facade in winter daylight
+            when heat gains are needed.
           default: "100"
           selector:
             select:
@@ -400,8 +392,10 @@ blueprint:
                 - "75"
                 - "100"
         winter_day_hold_position:
-          name: Winter Day Position (No Solar Gains Needed)
-          description: Position used in winter daylight when gains are not needed.
+          name: Winter Day Position (Insulating / No Gains)
+          description: >
+            Insulating position used in winter daylight for facades not under the sun,
+            and for all facades when no solar gains are needed.
           default: "50"
           selector:
             select:
@@ -413,7 +407,9 @@ blueprint:
                 - "100"
         neutral_position:
           name: Neutral Position
-          description: Position used in summer daylight once it is cool enough.
+          description: >
+            Open position used in summer daylight for facades not under the sun,
+            and for all facades once it is cool enough.
           default: "100"
           selector:
             select:
@@ -556,7 +552,6 @@ variables:
   contact_open_position_input: !input contact_open_position
   night_position_input: !input night_position
   wind_position_input: !input wind_position
-  summer_non_sun_position_input: !input summer_non_sun_position
   summer_sun_facing_position_input: !input summer_sun_facing_position
   winter_day_gain_position_input: !input winter_day_gain_position
   winter_day_hold_position_input: !input winter_day_hold_position
@@ -566,7 +561,6 @@ variables:
   contact_open_position: "{{ contact_open_position_input | int(100) }}"
   night_position: "{{ night_position_input | int(0) }}"
   wind_position: "{{ wind_position_input | int(0) }}"
-  summer_non_sun_position: "{{ summer_non_sun_position_input | int(75) }}"
   summer_sun_facing_position: "{{ summer_sun_facing_position_input | int(25) }}"
   winter_day_gain_position: "{{ winter_day_gain_position_input | int(100) }}"
   winter_day_hold_position: "{{ winter_day_hold_position_input | int(50) }}"
@@ -666,9 +660,9 @@ variables:
   # --- Season ---
   is_summer: >
     {% if season_mode == 'summer' %}
-      true
+      {{ true }}
     {% elif season_mode == 'winter' %}
-      false
+      {{ false }}
     {% else %}
       {% set now_md = now().month * 100 + now().day %}
       {% set start_md = summer_start_month * 100 + summer_start_day %}
@@ -826,14 +820,24 @@ variables:
           {% set target = none %}
         {% elif is_summer %}
           {% if summer_hot %}
-            {% set target = summer_sun_facing_position if cid in active_sun_facing_cover_ids else summer_non_sun_position %}
+            {# Follow the sun: shade only the sun-facing facade, keep the rest open. #}
+            {% if cid in active_sun_facing_cover_ids %}
+              {% set target = summer_sun_facing_position %}
+            {% else %}
+              {% set target = neutral_position %}
+            {% endif %}
           {% elif summer_cool_enough %}
             {% set target = neutral_position %}
           {% else %}
             {% set target = none %}
           {% endif %}
         {% else %}
-          {% set target = winter_day_gain_position if winter_need_solar_gain else winter_day_hold_position %}
+          {# Winter: open only the sun-facing facade for gains, insulate the rest. #}
+          {% if winter_need_solar_gain and cid in active_sun_facing_cover_ids %}
+            {% set target = winter_day_gain_position %}
+          {% else %}
+            {% set target = winter_day_hold_position %}
+          {% endif %}
         {% endif %}
       {% endif %}
       {% if target is not none %}
@@ -850,10 +854,12 @@ action:
             cover_id: "{{ repeat.item[0] }}"
             target_position: "{{ repeat.item[1] | int }}"
             current_position: "{{ state_attr(repeat.item[0], 'current_position') }}"
-            # Safety branches and contact opening bypass comfort filtering.
+            # Only true safety (away/wind) and contact opening bypass comfort
+            # filtering. Night closing respects manual override so an evening
+            # manual open is not immediately reverted.
             forced_move: >
               {{
-                cover_mode in ['away', 'wind', 'night']
+                cover_mode in ['away', 'wind']
                 or repeat.item[0] in contact_open_cover_ids
               }}
         - condition: template

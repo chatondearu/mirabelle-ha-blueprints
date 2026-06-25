@@ -139,19 +139,20 @@ Outdoor temperature priority:
 
 Each value is selected from key positions (`0`, `25`, `50`, `75`, `100`):
 
-- **Summer Position (Non Sun-Facing)**
-- **Summer Position (Sun-Facing Facade)**
-- **Winter Day Position (Solar Gains)**
-- **Winter Day Position (No Solar Gains Needed)**
-- **Neutral Position** (used in summer daylight once it is cool enough)
+- **Summer Position (Sun-Facing Facade)**: shading applied only to the facade under the sun
+- **Winter Day Position (Solar Gains)**: open position applied only to the sun-facing facade
+- **Winter Day Position (Insulating / No Gains)**: insulating position for the other facades in winter
+- **Neutral Position**: open position for non-sun facades in summer and for all facades once cool
 
 ### Motion & Manual Override
 
-- **Manual Override Hold (Minutes)**: hold a manually changed cover out of comfort moves for this duration
+- **Manual Override Hold (Minutes)**: hold a manually changed cover out of comfort/night moves for this duration
 - **Minimum Position Delta**: ignore small comfort moves below this difference (default `10`)
 - **Minimum Action Interval (Minutes)**: minimum delay between comfort moves for the same cover (default `5`)
 
-Safety branches (away / wind / night) and contact opening ignore both the delta and the interval.
+Only the true safety branches (away / wind) and contact opening ignore the delta, interval and
+manual override. **Night closing now respects manual override**, so a manual open in the evening
+is held for the Manual Override duration instead of being reverted immediately.
 
 ## Behavior Summary
 
@@ -171,20 +172,25 @@ Temperature, weather and wind changes are picked up on the **10-minute** re-eval
 The automation computes a single global **mode**, then a **target position per cover**, then
 applies each target through one loop (a cover absent from the target map is left untouched):
 
-1. **Away**: nobody home and *Close When Away* enabled → all covers to `0`
+1. **Away** (safety): nobody home and *Close When Away* enabled → all covers to `0`
    (if *Close When Away* is disabled, nothing happens)
 2. **Wind** (safety): wind above threshold → all covers to *Position With High Wind*
-3. **Night** (safety): sun below horizon → all covers to *Night Position*
+3. **Night**: sun below horizon → all covers to *Night Position* (respects manual override)
 4. **Active** (daytime, someone home), decided **per cover**:
    1. a linked contact sensor is open → *Contact Open Position*
    2. not awake → no movement
-   3. **summer + daylight**:
-      - hot (`threshold + buffer`) → sun-facing facade to *Summer Position (Sun-Facing Facade)*, others to *Summer Position (Non Sun-Facing)*
-      - cool enough (`threshold - buffer`) → *Neutral Position*
+   3. **summer + daylight** (follows the sun):
+      - hot (`threshold + buffer`) → the sun-facing facade goes to *Summer Position (Sun-Facing Facade)*; every other facade goes to *Neutral Position* (stays open)
+      - cool enough (`threshold - buffer`) → all facades to *Neutral Position*
       - in between → **hold** (no movement)
-   4. **winter + daylight**:
-      - solar gain needed (`threshold - buffer`) → *Winter Day Position (Solar Gains)*
-      - otherwise → *Winter Day Position (No Solar Gains Needed)*
+   4. **winter + daylight** (follows the sun):
+      - solar gain needed (`threshold - buffer`) → the sun-facing facade goes to *Winter Day Position (Solar Gains)*; every other facade goes to *Winter Day Position (Insulating / No Gains)*
+      - otherwise → all facades to *Winter Day Position (Insulating / No Gains)*
+
+Only the facade currently exposed to the sun is shaded (summer) or opened for gains (winter);
+the other facades are never closed against the heat nor left losing heat in winter. When **no
+facade group** is configured, the blueprint cannot tell which side faces the sun, so it falls
+back to applying the sun-facing behavior to **all** managed covers.
 
 ### Stateless anti-oscillation
 
@@ -214,11 +220,11 @@ sun-facing for shading (safety fallback).
 ### North/South House (common setup)
 
 - Configure only `North-Facing Covers` and `South-Facing Covers`; leave east/west empty
-- Suggested start: summer non-sun `75`, summer sun-facing `25`, winter gains `100`, winter no gains `50`
+- Suggested start: neutral `100`, summer sun-facing `25`, winter gains `100`, winter insulating `50`
 
 ### Aggressive Summer Shading
 
-- Summer non-sun: `50`
+- Neutral: `100`
 - Summer sun-facing: `0` or `25`
 - Indoor hot temp: lower value (e.g. `23.5`)
 
@@ -235,6 +241,8 @@ If you used the previous version, re-import the blueprint and update your automa
   *Night Position* (set `0` to close at night, the previous default behavior).
 - **Replaced** `Contact Sensors` + `Covers For Contact Opening` by **Cover ↔ Contact Sensor
   Links**: define one entry per cover with its own sensors (see the example above).
+- **Removed** `Summer Position (Non Sun-Facing)`: in summer heat the non-sun facades now go to
+  *Neutral Position* (open) instead of a partial-close position. Tune *Neutral Position* if needed.
 
 Bug fixes included in v2:
 
@@ -242,6 +250,11 @@ Bug fixes included in v2:
 - The night position is reachable without configuring an awake entity (safety branches run
   before the awake gate).
 - Comfort actions can no longer be blocked indefinitely (the priority helper is gone).
+- Thermal modes now **follow the sun**: only the exposed facade is shaded in summer / opened for
+  gains in winter, instead of moving every cover. Other facades stay open (summer) or insulated
+  (winter).
+- Night closing **respects manual override**: opening a cover manually in the evening is no longer
+  reverted immediately.
 
 ## Troubleshooting
 
