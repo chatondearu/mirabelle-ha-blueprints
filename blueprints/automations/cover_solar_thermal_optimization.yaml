@@ -721,26 +721,36 @@ variables:
 
   # --- Sun-facing facade selection ---
   sun_azimuth: "{{ state_attr('sun.sun', 'azimuth') | float(0) }}"
+  # A vertical facade is lit when the sun is within 90 degrees of its outward
+  # normal, so each facade is exposed over roughly 180 degrees of azimuth, not a
+  # narrow 90 degree quadrant. Several facades can therefore be lit at once
+  # (for example east and south in the morning), and every lit group contributes
+  # its covers. When no orientation groups are configured the sun direction
+  # cannot be resolved per facade, so all covers are treated as sun-facing.
   sun_facing_cover_entity_list: >
     {% if not has_oriented_groups %}
       {{ cover_entities }}
-    {% elif sun_azimuth >= 45 and sun_azimuth < 135 %}
-      {{ east_cover_entities }}
-    {% elif sun_azimuth >= 135 and sun_azimuth < 225 %}
-      {{ south_cover_entities }}
-    {% elif sun_azimuth >= 225 and sun_azimuth < 315 %}
-      {{ west_cover_entities }}
     {% else %}
-      {{ north_cover_entities }}
+      {% set az = sun_azimuth %}
+      {% set north_lit = (az < 90) or (az >= 270) %}
+      {% set east_lit = (az >= 0) and (az < 180) %}
+      {% set south_lit = (az >= 90) and (az < 270) %}
+      {% set west_lit = (az >= 180) and (az < 360) %}
+      {% set ns = namespace(ids=[]) %}
+      {% if north_lit %}{% set ns.ids = ns.ids + north_cover_entities %}{% endif %}
+      {% if east_lit %}{% set ns.ids = ns.ids + east_cover_entities %}{% endif %}
+      {% if south_lit %}{% set ns.ids = ns.ids + south_cover_entities %}{% endif %}
+      {% if west_lit %}{% set ns.ids = ns.ids + west_cover_entities %}{% endif %}
+      {{ ns.ids | unique | list }}
     {% endif %}
+  # Resolve the lit-facade covers against the managed cover list. When oriented
+  # groups exist but none is currently lit, the result is intentionally empty so
+  # nothing is shaded. There is no fallback to "shade every cover", which used to
+  # force all covers to the sun-facing position whenever the sun pointed at a
+  # facade that has no covers (e.g. east/west on a north-south house).
   active_sun_facing_cover_ids: >
     {% set base_ids = expand(sun_facing_cover_entity_list) | map(attribute='entity_id') | list %}
-    {% set selected = expand(cover_entities) | selectattr('entity_id', 'in', base_ids) | map(attribute='entity_id') | list %}
-    {% if has_oriented_groups and (selected | count == 0) %}
-      {{ expand(cover_entities) | map(attribute='entity_id') | list }}
-    {% else %}
-      {{ selected }}
-    {% endif %}
+    {{ expand(cover_entities) | selectattr('entity_id', 'in', base_ids) | map(attribute='entity_id') | list }}
 
   # --- Per-cover contact opening ---
   contact_open_cover_ids: >
