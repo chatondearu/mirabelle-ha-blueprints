@@ -451,6 +451,13 @@ variables:
   has_color_lights: "{{ color_light_entities | count > 0 }}"
   has_white_lights: "{{ white_light_entities | count > 0 }}"
   has_any_lights: "{{ all_light_entities | count > 0 }}"
+  any_light_on: >
+    {{
+      expand(all_light_entities)
+      | selectattr('state', 'eq', 'on')
+      | list
+      | count > 0
+    }}
   has_illuminance_sensor: >
     {{
       illuminance_sensor_entity is string
@@ -581,9 +588,12 @@ action:
               - condition: template
                 value_template: >
                   {{
-                    effective_mode == 'off'
-                    or home_required_blocked
-                    or not zone_occupied
+                    any_light_on
+                    and (
+                      effective_mode == 'off'
+                      or home_required_blocked
+                      or not zone_occupied
+                    )
                   }}
             sequence:
               - service: light.turn_off
@@ -667,23 +677,30 @@ action:
                   }}
             sequence:
               - repeat:
-                  for_each: "{{ color_light_entities }}"
+                  for_each: "{{ all_light_entities }}"
                   sequence:
-                    - service: light.turn_on
-                      target:
-                        entity_id: "{{ repeat.item }}"
-                      data:
-                        color_temp_kelvin: "{{ day_kelvin | int }}"
-                        brightness_pct: "{{ day_brightness_pct | int }}"
-                        transition: "{{ transition_seconds }}"
-              - repeat:
-                  for_each: "{{ white_light_entities }}"
-                  sequence:
-                    - service: light.turn_on
-                      target:
-                        entity_id: "{{ repeat.item }}"
-                      data:
-                        color_temp_kelvin: "{{ day_kelvin | int }}"
-                        brightness_pct: "{{ day_brightness_pct | int }}"
-                        transition: "{{ transition_seconds }}"
+                    - variables:
+                        supports_color_temp: >
+                          {{
+                            'color_temp'
+                            in (state_attr(repeat.item, 'supported_color_modes') or [])
+                          }}
+                    - if:
+                        - condition: template
+                          value_template: "{{ supports_color_temp }}"
+                      then:
+                        - service: light.turn_on
+                          target:
+                            entity_id: "{{ repeat.item }}"
+                          data:
+                            color_temp_kelvin: "{{ day_kelvin | int }}"
+                            brightness_pct: "{{ day_brightness_pct | int }}"
+                            transition: "{{ transition_seconds }}"
+                      else:
+                        - service: light.turn_on
+                          target:
+                            entity_id: "{{ repeat.item }}"
+                          data:
+                            brightness_pct: "{{ day_brightness_pct | int }}"
+                            transition: "{{ transition_seconds }}"
         default: []
