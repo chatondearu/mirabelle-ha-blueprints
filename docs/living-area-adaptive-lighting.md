@@ -238,6 +238,12 @@ One automation instance for an open living + dining area:
 
 ## Changelog
 
+### 1.1.3
+
+- Fix companion helper script: use the `base64_encode` template filter (the previous `b64encode` did not exist and aborted the script).
+- Quote the `off` option so the generated `input_select` exposes `off` as a string instead of the YAML boolean `false`.
+- Reload via `homeassistant.reload_all` so newly written helpers are picked up (`reload_core_config` did not load them, causing a false failure notification).
+
 ### 1.1.2
 
 - Remove helper package write from automation (fixes setup validation error); use companion script only.

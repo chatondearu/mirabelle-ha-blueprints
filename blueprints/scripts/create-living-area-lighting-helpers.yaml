@@ -67,7 +67,7 @@ script:
                 - auto
                 - day
                 - night
-                - off
+                - "off"
               initial: auto
               icon: mdi:lightbulb-auto
           input_boolean:
@@ -76,7 +76,7 @@ script:
               initial: false
               icon: mdi:hand-back-right-off
           {%- endset %}
-          {{ pkg | b64encode }}
+          {{ pkg | base64_encode }}
     - if:
         - condition: template
           value_template: "{{ mode_exists and hold_exists }}"
@@ -88,7 +88,7 @@ script:
             package_filename: "{{ package_filename_resolved | string }}"
             content_b64: "{{ package_b64 | string }}"
           continue_on_error: true
-        - service: homeassistant.reload_core_config
+        - service: homeassistant.reload_all
           continue_on_error: true
         - delay:
             seconds: 5
