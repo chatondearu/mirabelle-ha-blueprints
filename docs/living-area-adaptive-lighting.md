@@ -238,6 +238,10 @@ One automation instance for an open living + dining area:
 
 ## Changelog
 
+### 1.1.5
+
+- Fix the companion helper script blueprint structure: the script body (`sequence`, `mode`) was wrapped in an extra `script:` key, which made Home Assistant reject script creation with `extra keys not allowed @ data['script']`. Move them to the top level as required for script blueprints.
+
 ### 1.1.4
 
 - Fix the companion helper script package template: use a literal block scalar (`|`) instead of a folded one (`>`). The folded scalar collapsed the comment line and `input_select:` onto a single line, producing an invalid package file that Home Assistant refused to load.
