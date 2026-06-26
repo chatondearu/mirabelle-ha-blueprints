@@ -15,6 +15,12 @@ COVER = "cover.test"
 PERSON = "person.test"
 ALARM = "alarm_control_panel.test"
 ALARM_MIRROR = "alarm_control_panel.test_mirror"
+CLIMATE = "climate.test_split"
+ROOM_TEMPERATURE = "sensor.test_room_temperature"
+INPUT_NUMBER_COMFORT = "input_number.test_comfort"
+INPUT_NUMBER_ECO = "input_number.test_eco"
+INPUT_SELECT_SEASON = "input_select.test_season_mode"
+INPUT_SELECT_HVAC = "input_select.test_hvac_active"
 
 AUTOMATION_INPUTS: dict[str, dict[str, Any]] = {
     "presence_based_lighting.yaml": {
@@ -47,6 +53,23 @@ AUTOMATION_INPUTS: dict[str, dict[str, Any]] = {
         "time_triggers": [],
         "sun_triggers": [],
         "custom_triggers": [],
+    },
+    "hvac-season-manager.yaml": {
+        "season_mode_helper": INPUT_SELECT_SEASON,
+        "hvac_active_helper": INPUT_SELECT_HVAC,
+        "comfort_helper": INPUT_NUMBER_COMFORT,
+        "eco_helper": INPUT_NUMBER_ECO,
+    },
+    "reversible-split-thermostat.yaml": {
+        "climate_entity": CLIMATE,
+        "room_temperature_sensor": ROOM_TEMPERATURE,
+        "hvac_active_helper": INPUT_SELECT_HVAC,
+        "comfort_helper": INPUT_NUMBER_COMFORT,
+        "eco_helper": INPUT_NUMBER_ECO,
+        "schedulers": [],
+        "persons": [],
+        "windows": [],
+        "presence_delay": 0,
     },
 }
 

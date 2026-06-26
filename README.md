@@ -19,6 +19,8 @@ A collection of custom blueprints for Home Assistant.
 - [[CDA] 🛋️ Living Area Adaptive Lighting](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fliving-area-adaptive-lighting.yaml)
 - [[CDA] 🪟 Cover Control](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_control.yaml)
 - [[CDA] 🌞 Smart Cover Solar & Thermal Optimization](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_solar_thermal_optimization.yaml)
+- [[CDA] 🔁 HVAC Season Manager](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fhvac-season-manager.yaml)
+- [[CDA] 🌡️ Reversible Split Thermostat](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Freversible-split-thermostat.yaml)
 - [[CDA] 🪟 Blind Cover Template](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_cover.yaml)
 - [[CDA] 🪟 Blind State Tracker](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_state_tracker.yaml)
 - [Keypad Frient (KEPZB-110) for Alarmo by Darktoinon (FR/EN)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Ffrient_keypad_with_alarmo.yaml)
@@ -48,6 +50,8 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/living-area-adaptive-lighting.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_control.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_solar_thermal_optimization.yaml
+https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/hvac-season-manager.yaml
+https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/reversible-split-thermostat.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_cover.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_state_tracker.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/frient_keypad_with_alarmo.yaml
@@ -152,6 +156,20 @@ Automatically optimize cover positions using weather, sun azimuth, facade orient
 
 [View Documentation](docs/cover_solar_thermal_optimization.md)
 
+### HVAC Season Manager
+
+[CDA] 🔁 HVAC Season Manager
+Single source of truth for a reversible heat pump (PAC): resolves a season mode (off/heat/cool/auto, with outdoor-based auto switching) into one shared mode helper read by every split, so they can never heat and cool at the same time.
+
+[View Documentation](docs/reversible-split-thermostat.md)
+
+### Reversible Split Thermostat
+
+[CDA] 🌡️ Reversible Split Thermostat
+Per-room thermostat for a reversible split on a shared PAC. Applies the global mode, picks comfort/eco from schedule and presence (away offset inverted in cooling), and idles the split on open windows, target reached, or outdoor thresholds (with heat frost protection).
+
+[View Documentation](docs/reversible-split-thermostat.md)
+
 ### Blind Cover Template
 
 [CDA] 🪟 Blind Cover Template
@@ -188,6 +206,8 @@ mirabelle-ha-blueprints/
 │   │   ├── living-area-adaptive-lighting.yaml
 │   │   ├── cover_control.yaml
 │   │   ├── cover_solar_thermal_optimization.yaml
+│   │   ├── hvac-season-manager.yaml
+│   │   ├── reversible-split-thermostat.yaml
 │   │   ├── cover_cover.yaml
 │   │   ├── cover_state_tracker.yaml
 │   │   └── frient_keypad_with_alarmo.yaml
@@ -203,6 +223,7 @@ mirabelle-ha-blueprints/
 │   ├── presence_based_lighting.md
 │   ├── living-area-adaptive-lighting.md
 │   ├── cover_solar_thermal_optimization.md
+│   ├── reversible-split-thermostat.md
 │   ├── blind_states.md
 │   └── cover_generator.md
 └── README.md

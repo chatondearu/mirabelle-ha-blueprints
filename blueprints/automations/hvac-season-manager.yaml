@@ -1,0 +1,240 @@
+blueprint:
+  homeassistant:
+    min_version: 2025.5.3
+  name: "[CDA] 🔁 HVAC Season Manager"
+  description: >
+    Single source of truth for a reversible heat pump (PAC) shared by several
+    splits. Resolves a user-facing season mode (off / heat / cool / auto) into a
+    single resolved mode helper that every split thermostat reads. Because all
+    splits follow this one helper, they can never run heat and cool at the same
+    time. In auto mode the resolved mode is derived from the outdoor temperature
+    with hysteresis. On each heat <-> cool transition the comfort and eco
+    setpoint helpers are reset to the season defaults configured below.
+  domain: automation
+  source_url: https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/hvac-season-manager.yaml
+  input:
+    helpers_section:
+      name: Mode Helpers
+      icon: mdi:hvac
+      description: The user control and the resolved output read by each split.
+      input:
+        season_mode_helper:
+          name: Season Mode Helper (user)
+          description: >
+            input_select you control, with options: off, heat, cool, auto.
+          selector:
+            entity:
+              domain: input_select
+        hvac_active_helper:
+          name: Resolved Mode Helper (output)
+          description: >
+            input_select written by this automation, with options: off, heat,
+            cool. Every split thermostat must read this exact helper.
+          selector:
+            entity:
+              domain: input_select
+    auto_section:
+      name: Auto Switching
+      icon: mdi:thermostat-auto
+      description: Outdoor based heat/cool selection when season mode is "auto".
+      input:
+        outdoor_temperature:
+          name: Outdoor Temperature Sensor
+          description: >
+            Optional sensor used only when season mode is "auto". Leave empty to
+            keep the current resolved mode while in auto.
+          default: ""
+          selector:
+            entity:
+              domain: sensor
+        auto_heat_below:
+          name: Auto Heat Below
+          description: >
+            In auto mode, switch to heat when the outdoor temperature is at or
+            below this value.
+          default: 16
+          selector:
+            number:
+              min: -10
+              max: 30
+              step: 0.5
+              unit_of_measurement: "°C"
+        auto_cool_above:
+          name: Auto Cool Above
+          description: >
+            In auto mode, switch to cool when the outdoor temperature is at or
+            above this value. Keep a wide gap with "Auto Heat Below" to avoid
+            mode flapping (the PAC dislikes frequent reversals).
+          default: 24
+          selector:
+            number:
+              min: 0
+              max: 40
+              step: 0.5
+              unit_of_measurement: "°C"
+    setpoints_section:
+      name: Seasonal Setpoint Defaults
+      icon: mdi:thermometer-lines
+      description: >
+        Comfort and eco helpers are reset to these defaults on every heat <-> cool
+        transition. Disable below to keep your manual values across seasons.
+      input:
+        comfort_helper:
+          name: Comfort Setpoint Helper
+          description: input_number used by the splits for the comfort target.
+          selector:
+            entity:
+              domain: input_number
+        eco_helper:
+          name: Eco Setpoint Helper
+          description: input_number used by the splits for the eco target.
+          selector:
+            entity:
+              domain: input_number
+        apply_seasonal_defaults:
+          name: Apply Seasonal Defaults
+          description: >
+            When enabled, write the season defaults into the comfort and eco
+            helpers on each heat <-> cool transition.
+          default: true
+          selector:
+            boolean: {}
+        heat_comfort_default:
+          name: Heat — Comfort Default
+          default: 19
+          selector:
+            number:
+              min: 5
+              max: 30
+              step: 0.5
+              unit_of_measurement: "°C"
+        heat_eco_default:
+          name: Heat — Eco Default
+          default: 17.5
+          selector:
+            number:
+              min: 5
+              max: 30
+              step: 0.5
+              unit_of_measurement: "°C"
+        cool_comfort_default:
+          name: Cool — Comfort Default
+          default: 25
+          selector:
+            number:
+              min: 16
+              max: 32
+              step: 0.5
+              unit_of_measurement: "°C"
+        cool_eco_default:
+          name: Cool — Eco Default
+          default: 27
+          selector:
+            number:
+              min: 16
+              max: 32
+              step: 0.5
+              unit_of_measurement: "°C"
+
+mode: single
+
+trigger_variables:
+  outdoor_temperature_input: !input outdoor_temperature
+
+trigger:
+  - platform: state
+    entity_id: !input season_mode_helper
+  - platform: template
+    value_template: >
+      {% if outdoor_temperature_input | length > 0 %}
+        {{ states(outdoor_temperature_input) }}
+      {% else %}
+        none
+      {% endif %}
+  - platform: homeassistant
+    event: start
+
+variables:
+  season_mode_helper: !input season_mode_helper
+  hvac_active_helper: !input hvac_active_helper
+  outdoor_temperature: !input outdoor_temperature
+  auto_heat_below: !input auto_heat_below
+  auto_cool_above: !input auto_cool_above
+  comfort_helper: !input comfort_helper
+  eco_helper: !input eco_helper
+  apply_seasonal_defaults: !input apply_seasonal_defaults
+  heat_comfort_default: !input heat_comfort_default
+  heat_eco_default: !input heat_eco_default
+  cool_comfort_default: !input cool_comfort_default
+  cool_eco_default: !input cool_eco_default
+  prev_active: "{{ states(hvac_active_helper) }}"
+  has_outdoor: >
+    {{ outdoor_temperature | length > 0 and has_value(outdoor_temperature) }}
+  outdoor_temp: >
+    {{ states(outdoor_temperature) | float(0) if has_outdoor else 0 }}
+  season_mode: "{{ states(season_mode_helper) }}"
+  resolved: >
+    {% if season_mode in ['off', 'heat', 'cool'] %}
+      {{ season_mode }}
+    {% elif season_mode == 'auto' %}
+      {% if has_outdoor %}
+        {% if outdoor_temp <= (auto_heat_below | float(16)) %}
+          heat
+        {% elif outdoor_temp >= (auto_cool_above | float(24)) %}
+          cool
+        {% else %}
+          {{ prev_active if prev_active in ['heat', 'cool'] else 'heat' }}
+        {% endif %}
+      {% else %}
+        {{ prev_active if prev_active in ['heat', 'cool'] else 'off' }}
+      {% endif %}
+    {% else %}
+      off
+    {% endif %}
+  resolved_mode: "{{ resolved | trim }}"
+  mode_changed: "{{ resolved_mode != prev_active }}"
+
+action:
+  - choose:
+      # Resolved mode changed: update the shared helper, then optionally reset
+      # comfort/eco to the new season defaults on a heat <-> cool transition.
+      - conditions:
+          - condition: template
+            value_template: "{{ mode_changed }}"
+        sequence:
+          - service: input_select.select_option
+            target:
+              entity_id: !input hvac_active_helper
+            data:
+              option: "{{ resolved_mode }}"
+          - if:
+              - condition: template
+                value_template: >
+                  {{ apply_seasonal_defaults and resolved_mode == 'heat' }}
+            then:
+              - service: input_number.set_value
+                target:
+                  entity_id: !input comfort_helper
+                data:
+                  value: "{{ heat_comfort_default }}"
+              - service: input_number.set_value
+                target:
+                  entity_id: !input eco_helper
+                data:
+                  value: "{{ heat_eco_default }}"
+          - if:
+              - condition: template
+                value_template: >
+                  {{ apply_seasonal_defaults and resolved_mode == 'cool' }}
+            then:
+              - service: input_number.set_value
+                target:
+                  entity_id: !input comfort_helper
+                data:
+                  value: "{{ cool_comfort_default }}"
+              - service: input_number.set_value
+                target:
+                  entity_id: !input eco_helper
+                data:
+                  value: "{{ cool_eco_default }}"
+    default: []

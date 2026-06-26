@@ -1,0 +1,364 @@
+blueprint:
+  homeassistant:
+    min_version: 2025.5.3
+  name: "[CDA] 🌡️ Reversible Split Thermostat"
+  description: >
+    Per-room thermostat for a reversible split connected to a shared heat pump
+    (PAC). One instance per split. The global heat/cool/off mode comes from a
+    single resolved mode helper (see the [CDA] HVAC Season Manager blueprint):
+    this automation only applies that mode, it never decides heat vs cool, so
+    every split always runs the same mode and the PAC is never asked to heat and
+    cool at once.
+
+    For its room it picks the comfort or eco setpoint from the schedule and
+    presence, applies an away offset (subtracted in heat, added in cool), and
+    idles the split (off, with optional heat frost protection) when a window is
+    open, the target is already reached, or the outdoor temperature makes
+    conditioning useless.
+  domain: automation
+  source_url: https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/reversible-split-thermostat.yaml
+  input:
+    climate_section:
+      name: Split
+      icon: mdi:air-conditioner
+      input:
+        climate_entity:
+          name: Split (climate)
+          description: The reversible split to control for this room.
+          selector:
+            entity:
+              domain: climate
+        room_temperature_sensor:
+          name: Room Temperature Sensor
+          description: Temperature sensor used to evaluate this room.
+          selector:
+            entity:
+              domain: sensor
+    mode_section:
+      name: Global Mode
+      icon: mdi:hvac
+      input:
+        hvac_active_helper:
+          name: Resolved Mode Helper
+          description: >
+            input_select (options: off, heat, cool) written by the HVAC Season
+            Manager. Use the same helper for every split so they stay in sync.
+          selector:
+            entity:
+              domain: input_select
+    setpoints_section:
+      name: Setpoints
+      icon: mdi:thermometer
+      description: >
+        Two shared helpers. Their meaning follows the active mode: in heat, eco is
+        lower than comfort; in cool, eco is higher than comfort. The Season
+        Manager can reset their values on each season change.
+      input:
+        comfort_helper:
+          name: Comfort Setpoint Helper
+          selector:
+            entity:
+              domain: input_number
+        eco_helper:
+          name: Eco Setpoint Helper
+          selector:
+            entity:
+              domain: input_number
+    schedule_section:
+      name: Schedule & Presence
+      icon: mdi:calendar-clock
+      input:
+        schedulers:
+          name: Comfort Schedules
+          description: >
+            Optional schedule entities. Comfort is used while any schedule is on,
+            otherwise eco. When empty, comfort is used at all times.
+          default: []
+          selector:
+            entity:
+              domain: schedule
+              multiple: true
+        persons:
+          name: Persons
+          description: >
+            Optional person entities. When set and nobody is home, the away
+            offset is applied.
+          default: []
+          selector:
+            entity:
+              domain: person
+              multiple: true
+        vacation_boolean:
+          name: Vacation / Away Toggle
+          description: >
+            Optional input_boolean. When on, the away offset is applied
+            regardless of presence.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+        away_offset:
+          name: Away Offset
+          description: >
+            Degrees applied when away. Subtracted from the target in heat, added
+            in cool.
+          default: 3
+          selector:
+            number:
+              min: 0
+              max: 10
+              step: 0.5
+              unit_of_measurement: "°C"
+        presence_delay:
+          name: Presence Delay
+          description: >
+            Seconds the presence state must be stable before reacting, to avoid
+            reacting to brief comings and goings.
+          default: 120
+          selector:
+            number:
+              min: 0
+              max: 1800
+              unit_of_measurement: seconds
+    safety_section:
+      name: Idle & Safety
+      icon: mdi:shield-home
+      input:
+        windows:
+          name: Window / Door Sensors
+          description: >
+            Optional opening sensors. While any is open, the split is turned off.
+          default: []
+          selector:
+            entity:
+              domain: binary_sensor
+              multiple: true
+        off_if_target_reached:
+          name: Off If Target Reached
+          description: >
+            Turn the split off when the room already reached the target (room >=
+            target in heat, room <= target in cool).
+          default: true
+          selector:
+            boolean: {}
+        frost_protection_temp:
+          name: Frost Protection (heat)
+          description: >
+            In heat mode, keep this minimum target instead of turning fully off
+            when idle and the room drops to or below this value. Set to 0 to
+            disable.
+          default: 7
+          selector:
+            number:
+              min: 0
+              max: 15
+              step: 0.5
+              unit_of_measurement: "°C"
+        outdoor_temperature:
+          name: Outdoor Temperature Sensor
+          description: Optional sensor used for the seasonal idle thresholds below.
+          default: ""
+          selector:
+            entity:
+              domain: sensor
+        heat_outdoor_threshold:
+          name: Heat — Outdoor Above Idle
+          description: >
+            In heat mode, do not heat when the outdoor temperature is at or above
+            this value.
+          default: 20
+          selector:
+            number:
+              min: 0
+              max: 40
+              step: 0.5
+              unit_of_measurement: "°C"
+        cool_outdoor_threshold:
+          name: Cool — Outdoor Below Idle
+          description: >
+            In cool mode, do not cool when the outdoor temperature is at or below
+            this value.
+          default: 18
+          selector:
+            number:
+              min: 0
+              max: 40
+              step: 0.5
+              unit_of_measurement: "°C"
+
+mode: restart
+
+trigger_variables:
+  schedulers_input: !input schedulers
+  persons_input: !input persons
+  windows_input: !input windows
+  outdoor_temperature_input: !input outdoor_temperature
+  vacation_boolean_input: !input vacation_boolean
+
+trigger:
+  - platform: state
+    entity_id: !input hvac_active_helper
+  - platform: state
+    entity_id: !input comfort_helper
+  - platform: state
+    entity_id: !input eco_helper
+  - platform: state
+    entity_id: !input room_temperature_sensor
+  - platform: state
+    entity_id: !input climate_entity
+    to: ~
+  - platform: template
+    value_template: >
+      {% if schedulers_input | count > 0 %}
+        {{ expand(schedulers_input) | map(attribute='state') | join('|') }}
+      {% else %}
+        none
+      {% endif %}
+  - platform: template
+    value_template: >
+      {% if persons_input | count > 0 %}
+        {{ expand(persons_input) | selectattr('state', 'eq', 'home') | list | count > 0 }}
+      {% else %}
+        none
+      {% endif %}
+    for:
+      seconds: !input presence_delay
+  - platform: template
+    value_template: >
+      {% if windows_input | count > 0 %}
+        {{ expand(windows_input) | selectattr('state', 'eq', 'on') | list | count > 0 }}
+      {% else %}
+        none
+      {% endif %}
+  - platform: template
+    value_template: >
+      {% if outdoor_temperature_input | length > 0 %}
+        {{ states(outdoor_temperature_input) }}
+      {% else %}
+        none
+      {% endif %}
+  - platform: template
+    value_template: >
+      {% if vacation_boolean_input | length > 0 %}
+        {{ states(vacation_boolean_input) }}
+      {% else %}
+        none
+      {% endif %}
+  - platform: homeassistant
+    event: start
+
+variables:
+  climate_entity: !input climate_entity
+  room_temperature_sensor: !input room_temperature_sensor
+  hvac_active_helper: !input hvac_active_helper
+  comfort_helper: !input comfort_helper
+  eco_helper: !input eco_helper
+  schedulers: !input schedulers
+  persons: !input persons
+  vacation_boolean: !input vacation_boolean
+  away_offset: !input away_offset
+  windows: !input windows
+  off_if_target_reached: !input off_if_target_reached
+  frost_protection_temp: !input frost_protection_temp
+  outdoor_temperature: !input outdoor_temperature
+  heat_outdoor_threshold: !input heat_outdoor_threshold
+  cool_outdoor_threshold: !input cool_outdoor_threshold
+  mode: "{{ states(hvac_active_helper) | trim }}"
+  is_heat: "{{ mode == 'heat' }}"
+  is_cool: "{{ mode == 'cool' }}"
+  room_available: "{{ has_value(room_temperature_sensor) }}"
+  room_temp: >
+    {{ states(room_temperature_sensor) | float(0) if room_available else 0 }}
+  comfort: "{{ states(comfort_helper) | float(20) }}"
+  eco: "{{ states(eco_helper) | float(17) }}"
+  comfort_active: >
+    {{ schedulers | count == 0
+       or (expand(schedulers) | selectattr('state', 'eq', 'on') | list | count > 0) }}
+  someone_home: >
+    {{ persons | count > 0
+       and (expand(persons) | selectattr('state', 'eq', 'home') | list | count > 0) }}
+  vacation_on: >
+    {{ vacation_boolean | length > 0 and is_state(vacation_boolean, 'on') }}
+  away: "{{ (persons | count > 0 and not someone_home) or vacation_on }}"
+  base_target: "{{ comfort if comfort_active else eco }}"
+  target_raw: >
+    {% set offset = away_offset | float(0) if away else 0 %}
+    {% if is_cool %}
+      {{ base_target | float(0) + offset }}
+    {% else %}
+      {{ base_target | float(0) - offset }}
+    {% endif %}
+  min_temp: "{{ state_attr(climate_entity, 'min_temp') | float(7) }}"
+  max_temp: "{{ state_attr(climate_entity, 'max_temp') | float(35) }}"
+  target: >
+    {{ [[target_raw | float(0), min_temp] | max, max_temp] | min | round(1) }}
+  window_open: >
+    {{ windows | count > 0
+       and (expand(windows) | selectattr('state', 'eq', 'on') | list | count > 0) }}
+  has_outdoor: >
+    {{ outdoor_temperature | length > 0 and has_value(outdoor_temperature) }}
+  outdoor_temp: >
+    {{ states(outdoor_temperature) | float(0) if has_outdoor else 0 }}
+  outdoor_block: >
+    {% if is_heat and has_outdoor %}
+      {{ outdoor_temp >= (heat_outdoor_threshold | float(20)) }}
+    {% elif is_cool and has_outdoor %}
+      {{ outdoor_temp <= (cool_outdoor_threshold | float(18)) }}
+    {% else %}
+      {{ false }}
+    {% endif %}
+  target_reached: >
+    {% if not off_if_target_reached or not room_available %}
+      {{ false }}
+    {% elif is_heat %}
+      {{ room_temp >= target | float(0) }}
+    {% elif is_cool %}
+      {{ room_temp <= target | float(0) }}
+    {% else %}
+      {{ false }}
+    {% endif %}
+  should_idle: "{{ window_open or outdoor_block or target_reached }}"
+  frost_active: >
+    {{ is_heat
+       and (frost_protection_temp | float(0)) > 0
+       and room_available
+       and room_temp <= (frost_protection_temp | float(0))
+       and not window_open }}
+
+action:
+  - choose:
+      # Global mode is off (or unknown): the split must be off.
+      - conditions:
+          - condition: template
+            value_template: "{{ mode not in ['heat', 'cool'] }}"
+        sequence:
+          - service: climate.turn_off
+            target:
+              entity_id: !input climate_entity
+      # Conditioning not needed for this room: idle the split.
+      - conditions:
+          - condition: template
+            value_template: "{{ should_idle }}"
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ frost_active }}"
+            then:
+              - service: climate.set_temperature
+                target:
+                  entity_id: !input climate_entity
+                data:
+                  hvac_mode: heat
+                  temperature: !input frost_protection_temp
+            else:
+              - service: climate.turn_off
+                target:
+                  entity_id: !input climate_entity
+    # Conditioning needed: apply the global mode with the room target.
+    default:
+      - service: climate.set_temperature
+        target:
+          entity_id: !input climate_entity
+        data:
+          hvac_mode: "{{ mode }}"
+          temperature: "{{ target }}"

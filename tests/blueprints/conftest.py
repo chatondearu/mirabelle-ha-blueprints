@@ -36,6 +36,26 @@ def common_entities() -> dict[str, tuple[str, dict[str, Any] | None]]:
         "alarm_control_panel.test_mirror": ("disarmed", {}),
         "input_datetime.test_schedule": ("2025-01-01", {}),
         "sun.sun": ("above_horizon", {"elevation": 45}),
+        "climate.test_split": (
+            "off",
+            {
+                "hvac_modes": ["off", "heat", "cool"],
+                "min_temp": 7,
+                "max_temp": 35,
+                "current_temperature": 20,
+            },
+        ),
+        "sensor.test_room_temperature": ("20", {}),
+        "input_number.test_comfort": ("20", {}),
+        "input_number.test_eco": ("18", {}),
+        "input_select.test_season_mode": (
+            "auto",
+            {"options": ["off", "heat", "cool", "auto"]},
+        ),
+        "input_select.test_hvac_active": (
+            "heat",
+            {"options": ["off", "heat", "cool"]},
+        ),
     }
 
 
