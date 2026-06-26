@@ -214,6 +214,45 @@ blueprint:
               max: 40
               step: 0.5
               unit_of_measurement: "°C"
+    tuning_section:
+      name: Compressor Protection & Tuning
+      icon: mdi:engine
+      input:
+        min_run_time:
+          name: Minimum Run Time
+          description: >
+            Once started, keep the split on at least this long before it may be
+            turned off because the target is reached (anti short-cycle, protects
+            the compressor). 0 disables. An open window or a global Off still stop
+            it immediately.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 1800
+              unit_of_measurement: seconds
+        adaptive_boost:
+          name: Adaptive Boost
+          description: >
+            Reduce the boost offset progressively as the room approaches the
+            target, for a soft landing and less overshoot. When off, the full
+            boost offset is applied until the split is stopped.
+          default: true
+          selector:
+            boolean: {}
+        adaptive_boost_span:
+          name: Adaptive Boost Span
+          description: >
+            Distance from the target over which the boost ramps from full to
+            zero. Full boost applies while the room is farther than this from the
+            target. Only used when Adaptive Boost is on.
+          default: 2
+          selector:
+            number:
+              min: 0.5
+              max: 6
+              step: 0.5
+              unit_of_measurement: "°C"
 
 mode: restart
 
@@ -294,6 +333,9 @@ variables:
   outdoor_temperature: !input outdoor_temperature
   heat_outdoor_threshold: !input heat_outdoor_threshold
   cool_outdoor_threshold: !input cool_outdoor_threshold
+  min_run_time: !input min_run_time
+  adaptive_boost: !input adaptive_boost
+  adaptive_boost_span: !input adaptive_boost_span
   mode: "{{ states(hvac_active_helper) | trim }}"
   is_heat: "{{ mode == 'heat' }}"
   is_cool: "{{ mode == 'cool' }}"
@@ -323,15 +365,29 @@ variables:
   max_temp: "{{ state_attr(climate_entity, 'max_temp') | float(35) }}"
   target: >
     {{ [[target_raw | float(0), min_temp] | max, max_temp] | min | round(1) }}
-  drive_target_raw: >
-    {% if room_sensor_control %}
-      {% if is_cool %}
-        {{ target | float(0) - (boost_offset | float(0)) }}
-      {% else %}
-        {{ target | float(0) + (boost_offset | float(0)) }}
-      {% endif %}
+  currently_active: >
+    {{ states(climate_entity) not in ['off', 'unknown', 'unavailable'] }}
+  boost_effective: >
+    {% set b = boost_offset | float(0) %}
+    {% if not room_sensor_control or b <= 0 %}
+      0
+    {% elif not adaptive_boost or not room_available %}
+      {{ b }}
     {% else %}
-      {{ target }}
+      {% set span = [adaptive_boost_span | float(0), 0.1] | max %}
+      {% if is_cool %}
+        {% set error = room_temp - (target | float(0)) %}
+      {% else %}
+        {% set error = (target | float(0)) - room_temp %}
+      {% endif %}
+      {% set ratio = [[error / span, 1] | min, 0] | max %}
+      {{ (b * ratio) | round(2) }}
+    {% endif %}
+  drive_target_raw: >
+    {% if is_cool %}
+      {{ target | float(0) - (boost_effective | float(0)) }}
+    {% else %}
+      {{ target | float(0) + (boost_effective | float(0)) }}
     {% endif %}
   drive_target: >
     {{ [[drive_target_raw | float(0), min_temp] | max, max_temp] | min | round(1) }}
@@ -350,8 +406,13 @@ variables:
     {% else %}
       {{ false }}
     {% endif %}
-  currently_active: >
-    {{ states(climate_entity) not in ['off', 'unknown', 'unavailable'] }}
+  run_elapsed: >
+    {{ (as_timestamp(now()) - as_timestamp(states[climate_entity].last_changed))
+       | int(0) if currently_active else 0 }}
+  min_run_block: >
+    {{ currently_active
+       and (min_run_time | int(0)) > 0
+       and run_elapsed < (min_run_time | int(0)) }}
   hyst: "{{ cut_hysteresis | float(0) }}"
   demand: >
     {% if not room_available %}
@@ -376,7 +437,9 @@ variables:
       {{ false }}
     {% endif %}
   should_idle: >
-    {{ window_open or outdoor_block or (room_sensor_control and not demand) }}
+    {{ window_open
+       or outdoor_block
+       or (room_sensor_control and not demand and not min_run_block) }}
   frost_active: >
     {{ is_heat
        and (frost_protection_temp | float(0)) > 0

@@ -147,6 +147,9 @@ cool around a single threshold. Keep a wide gap between the two values.
 | Outdoor Temperature Sensor | — | Optional, for the seasonal idle thresholds below. |
 | Heat — Outdoor Above Idle | 20 °C | In heat, do not heat at/above this outdoor temperature. |
 | Cool — Outdoor Below Idle | 18 °C | In cool, do not cool at/below this outdoor temperature. |
+| Minimum Run Time | 0 s | Keep the split on at least this long after starting before stopping it on target reached (anti short-cycle). 0 disables. Window open / global Off still stop it immediately. |
+| Adaptive Boost | true | Reduce the boost as the room approaches the target (soft landing, less overshoot). |
+| Adaptive Boost Span | 2 °C | Distance from target over which the boost ramps from full to zero. |
 
 ## How the target is computed
 
@@ -177,6 +180,20 @@ internal sensor is unreliable (it sits inside the unit and reads the blown air):
 
 Set **Boost Offset** to 0 to keep the exact target while still cutting on the
 room sensor, or disable **Room Sensor Control** to let the split self-regulate.
+
+### Compressor protection
+
+- **Adaptive Boost** (on by default): the boost shrinks linearly as the room
+  gets within **Adaptive Boost Span** of the target. Far from target the split
+  runs at `target ± boost`; near the target it drives close to the plain target,
+  so it slows down before stopping instead of overshooting.
+- **Minimum Run Time**: after the split starts, it stays on at least this long
+  before it can be stopped because the target is reached. This avoids rapid
+  on/off cycles that wear the compressor. While held on near the target, the
+  adaptive boost is already near zero, so the room does not overshoot much. An
+  open window or a global Off still stop the split immediately. Re-evaluation
+  happens on sensor/helper changes, so the actual stop occurs at the first update
+  after the minimum run time has elapsed.
 
 ## Example: a 5-split house
 
