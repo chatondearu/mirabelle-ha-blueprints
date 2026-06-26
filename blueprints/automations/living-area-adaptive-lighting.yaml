@@ -548,9 +548,9 @@ variables:
     {% endif %}
   use_night_profile: >
     {% if effective_mode == 'night' %}
-      true
+      {{ true }}
     {% elif effective_mode == 'day' %}
-      false
+      {{ false }}
     {% else %}
       {{ is_night }}
     {% endif %}
@@ -673,7 +673,7 @@ action:
                       target:
                         entity_id: "{{ repeat.item }}"
                       data:
-                        kelvin: "{{ day_kelvin | int }}"
+                        color_temp_kelvin: "{{ day_kelvin | int }}"
                         brightness_pct: "{{ day_brightness_pct | int }}"
                         transition: "{{ transition_seconds }}"
               - repeat:
@@ -683,7 +683,7 @@ action:
                       target:
                         entity_id: "{{ repeat.item }}"
                       data:
-                        kelvin: "{{ day_kelvin | int }}"
+                        color_temp_kelvin: "{{ day_kelvin | int }}"
                         brightness_pct: "{{ day_brightness_pct | int }}"
                         transition: "{{ transition_seconds }}"
         default: []
