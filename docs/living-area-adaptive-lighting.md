@@ -238,6 +238,10 @@ One automation instance for an open living + dining area:
 
 ## Changelog
 
+### 1.1.6
+
+- Fix lights never turning on during the day: `is_time_night` and `lux_needs_light` emitted the literal string `false` instead of a boolean. As a result `is_night` became the truthy string `"false"`, which short-circuited `need_artificial_light` and made both the day and night branches evaluate to false. Emit real booleans via `{{ false }}`.
+
 ### 1.1.5
 
 - Fix the companion helper script blueprint structure: the script body (`sequence`, `mode`) was wrapped in an extra `script:` key, which made Home Assistant reject script creation with `extra keys not allowed @ data['script']`. Move them to the top level as required for script blueprints.

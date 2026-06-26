@@ -507,7 +507,7 @@ variables:
         {{ now_time >= night_start_input }}
       {% endif %}
     {% else %}
-      false
+      {{ false }}
     {% endif %}
   is_night: "{{ (not is_sun_up) or is_time_night }}"
   cover_open_factor: >
@@ -531,7 +531,7 @@ variables:
     {% if has_illuminance_sensor %}
       {{ current_lux < lux_dark }}
     {% else %}
-      false
+      {{ false }}
     {% endif %}
   covers_need_light: >
     {{ has_covers and (cover_closed_factor | float(0) >= cover_shade_threshold | float(0)) }}
