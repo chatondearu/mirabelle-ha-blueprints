@@ -120,6 +120,46 @@ blueprint:
               min: 0
               max: 1800
               unit_of_measurement: seconds
+    night_section:
+      name: Night / Sleep Override
+      icon: mdi:bed
+      description: >
+        Optional, ideal for bedrooms. While the night schedule is on, a dedicated
+        night setpoint is used instead of comfort/eco (e.g. 21 in summer, 17 in
+        winter at night, eco during the day). Leave empty to disable.
+      input:
+        night_schedule:
+          name: Night Schedule
+          description: >
+            Optional schedule entities. The night override is active while any of
+            them is on (e.g. a bedtime schedule).
+          default: []
+          selector:
+            entity:
+              domain: schedule
+              multiple: true
+        night_setpoint_helper:
+          name: Night Setpoint Helper
+          description: >
+            input_number used as the night target. Preferred way: the HVAC Season
+            Manager can reset it per season (heat vs cool). Leave empty to use the
+            fixed fallback below.
+          default: ""
+          selector:
+            entity:
+              domain: input_number
+        night_setpoint:
+          name: Night Setpoint (fixed fallback)
+          description: >
+            Fixed night target used only when no Night Setpoint Helper is set.
+            0 disables the night override (not seasonal).
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 32
+              step: 0.5
+              unit_of_measurement: "°C"
     safety_section:
       name: Idle & Safety
       icon: mdi:shield-home
@@ -262,6 +302,8 @@ trigger_variables:
   windows_input: !input windows
   outdoor_temperature_input: !input outdoor_temperature
   vacation_boolean_input: !input vacation_boolean
+  night_schedule_input: !input night_schedule
+  night_setpoint_helper_input: !input night_setpoint_helper
 
 trigger:
   - platform: state
@@ -312,6 +354,20 @@ trigger:
       {% else %}
         none
       {% endif %}
+  - platform: template
+    value_template: >
+      {% if night_schedule_input | count > 0 %}
+        {{ expand(night_schedule_input) | map(attribute='state') | join('|') }}
+      {% else %}
+        none
+      {% endif %}
+  - platform: template
+    value_template: >
+      {% if night_setpoint_helper_input | length > 0 %}
+        {{ states(night_setpoint_helper_input) }}
+      {% else %}
+        none
+      {% endif %}
   - platform: homeassistant
     event: start
 
@@ -326,6 +382,9 @@ variables:
   vacation_boolean: !input vacation_boolean
   away_offset: !input away_offset
   windows: !input windows
+  night_schedule: !input night_schedule
+  night_setpoint_helper: !input night_setpoint_helper
+  night_setpoint: !input night_setpoint
   room_sensor_control: !input room_sensor_control
   boost_offset: !input boost_offset
   cut_hysteresis: !input cut_hysteresis
@@ -353,7 +412,19 @@ variables:
   vacation_on: >
     {{ vacation_boolean | length > 0 and is_state(vacation_boolean, 'on') }}
   away: "{{ (persons | count > 0 and not someone_home) or vacation_on }}"
-  base_target: "{{ comfort if comfort_active else eco }}"
+  night_schedule_on: >
+    {{ night_schedule | count > 0
+       and (expand(night_schedule) | selectattr('state', 'eq', 'on') | list | count > 0) }}
+  night_helper_set: >
+    {{ night_setpoint_helper | length > 0 and has_value(night_setpoint_helper) }}
+  night_value: >
+    {{ states(night_setpoint_helper) | float(0) if night_helper_set
+       else (night_setpoint | float(0)) }}
+  night_active: >
+    {{ night_schedule_on
+       and (night_helper_set or (night_setpoint | float(0)) > 0) }}
+  base_target: >
+    {{ night_value if night_active else (comfort if comfort_active else eco) }}
   target_raw: >
     {% set offset = away_offset | float(0) if away else 0 %}
     {% if is_cool %}

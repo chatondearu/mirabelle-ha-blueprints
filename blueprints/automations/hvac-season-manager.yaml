@@ -91,6 +91,16 @@ blueprint:
           selector:
             entity:
               domain: input_number
+        night_helper:
+          name: Night Setpoint Helper
+          description: >
+            Optional input_number used by bedrooms for the night target. Reset to
+            the season defaults below on each heat <-> cool transition. Leave empty
+            if you do not use a night override.
+          default: ""
+          selector:
+            entity:
+              domain: input_number
         apply_seasonal_defaults:
           name: Apply Seasonal Defaults
           description: >
@@ -135,6 +145,24 @@ blueprint:
               max: 32
               step: 0.5
               unit_of_measurement: "°C"
+        heat_night_default:
+          name: Heat — Night Default
+          default: 17
+          selector:
+            number:
+              min: 5
+              max: 30
+              step: 0.5
+              unit_of_measurement: "°C"
+        cool_night_default:
+          name: Cool — Night Default
+          default: 21
+          selector:
+            number:
+              min: 16
+              max: 32
+              step: 0.5
+              unit_of_measurement: "°C"
 
 mode: single
 
@@ -162,11 +190,15 @@ variables:
   auto_cool_above: !input auto_cool_above
   comfort_helper: !input comfort_helper
   eco_helper: !input eco_helper
+  night_helper: !input night_helper
   apply_seasonal_defaults: !input apply_seasonal_defaults
   heat_comfort_default: !input heat_comfort_default
   heat_eco_default: !input heat_eco_default
   cool_comfort_default: !input cool_comfort_default
   cool_eco_default: !input cool_eco_default
+  heat_night_default: !input heat_night_default
+  cool_night_default: !input cool_night_default
+  night_helper_set: "{{ night_helper | length > 0 }}"
   prev_active: "{{ states(hvac_active_helper) }}"
   has_outdoor: >
     {{ outdoor_temperature | length > 0 and has_value(outdoor_temperature) }}
@@ -222,6 +254,15 @@ action:
                   entity_id: !input eco_helper
                 data:
                   value: "{{ heat_eco_default }}"
+              - if:
+                  - condition: template
+                    value_template: "{{ night_helper_set }}"
+                then:
+                  - service: input_number.set_value
+                    target:
+                      entity_id: !input night_helper
+                    data:
+                      value: "{{ heat_night_default }}"
           - if:
               - condition: template
                 value_template: >
@@ -237,4 +278,13 @@ action:
                   entity_id: !input eco_helper
                 data:
                   value: "{{ cool_eco_default }}"
+              - if:
+                  - condition: template
+                    value_template: "{{ night_helper_set }}"
+                then:
+                  - service: input_number.set_value
+                    target:
+                      entity_id: !input night_helper
+                    data:
+                      value: "{{ cool_night_default }}"
     default: []

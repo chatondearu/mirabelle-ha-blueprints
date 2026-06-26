@@ -53,6 +53,7 @@ package below into `configuration.yaml` (or a package file) and restart.
 | `input_select.climate_hvac_active` | Dropdown | `off`, `heat`, `cool` | Resolved mode, written by the Season Manager. |
 | `input_number.climate_comfort_thermostat` | Number | min 5, max 32, step 0.5 | Comfort setpoint (shared). |
 | `input_number.climate_eco_thermostat` | Number | min 5, max 32, step 0.5 | Eco setpoint (shared). |
+| `input_number.climate_night_thermostat` | Number | min 5, max 32, step 0.5 | Optional night setpoint for bedrooms (shared). |
 
 ```yaml
 # Example package: config/packages/cda_climate_helpers.yaml
@@ -88,6 +89,13 @@ input_number:
     step: 0.5
     unit_of_measurement: "°C"
     icon: mdi:leaf
+  climate_night_thermostat:
+    name: Night Thermostat
+    min: 5
+    max: 32
+    step: 0.5
+    unit_of_measurement: "°C"
+    icon: mdi:bed
 ```
 
 > The comfort and eco helpers are shared between seasons. Their meaning follows
@@ -119,8 +127,10 @@ Then:
 | Comfort Setpoint Helper | — | `input_number` rewritten on season change. |
 | Eco Setpoint Helper | — | `input_number` rewritten on season change. |
 | Apply Seasonal Defaults | true | Reset comfort/eco on each heat ↔ cool transition. |
+| Night Setpoint Helper | — | Optional `input_number` for bedrooms, also reset on season change. |
 | Heat — Comfort / Eco Default | 19 / 17.5 °C | Values written when switching to heat. |
 | Cool — Comfort / Eco Default | 25 / 27 °C | Values written when switching to cool. |
+| Heat / Cool — Night Default | 17 / 21 °C | Night helper values written on each transition. |
 
 **Auto with hysteresis:** between *Auto Heat Below* and *Auto Cool Above* the
 resolved mode is unchanged, which prevents the PAC from flapping between heat and
@@ -139,6 +149,9 @@ cool around a single threshold. Keep a wide gap between the two values.
 | Vacation / Away Toggle | — | Optional `input_boolean`; on = apply away offset. |
 | Away Offset | 3 °C | Subtracted from target in heat, added in cool. |
 | Presence Delay | 120 s | Stability delay before reacting to presence changes. |
+| Night Schedule | [] | While any is on, the night setpoint overrides comfort/eco. |
+| Night Setpoint Helper | — | `input_number` for the night target (preferred; seasonal via the Season Manager). |
+| Night Setpoint (fixed fallback) | 0 | Fixed night target when no helper is set. 0 disables. |
 | Window / Door Sensors | [] | While any is open, the split is turned off. |
 | Room Sensor Control (bang-bang) | true | Trust the room sensor: drive the split beyond the target to heat/cool hard, then fully stop it once the room reaches the target. Off = the split self-regulates at the plain target. |
 | Boost Offset | 2 °C | Degrees added (heat) / subtracted (cool) to the split target while conditioning, to overcome an inaccurate internal sensor. 0 = drive at target. |
@@ -153,8 +166,10 @@ cool around a single threshold. Keep a wide gap between the two values.
 
 ## How the target is computed
 
-1. **Comfort or eco**: comfort while a schedule is active (or always if no
-   schedule), otherwise eco.
+1. **Night override** (optional): while a night schedule is on and a night
+   setpoint is configured, the night setpoint is used and takes priority over
+   comfort/eco. Otherwise, **comfort or eco**: comfort while a schedule is active
+   (or always if no schedule), otherwise eco.
 2. **Away offset**: when nobody is home (or vacation is on), the target is
    lowered in heat and raised in cool by the away offset.
 3. **Idle (off)**: if a window is open, or the outdoor temperature makes
@@ -194,6 +209,24 @@ room sensor, or disable **Room Sensor Control** to let the split self-regulate.
   open window or a global Off still stop the split immediately. Re-evaluation
   happens on sensor/helper changes, so the actual stop occurs at the first update
   after the minimum run time has elapsed.
+
+### Bedroom recipe (night setpoint)
+
+To get "eco during the day, a dedicated night temperature in the evening/night"
+in a bedroom (e.g. 21 °C in summer, 17 °C in winter at night):
+
+1. Create the optional `input_number.climate_night_thermostat` helper and assign
+   it as the **Night Setpoint Helper** in the HVAC Season Manager (heat night 17,
+   cool night 21 by default).
+2. In the bedroom thermostat instance, set:
+   - **Night Schedule** = your bedtime schedule (e.g. `schedule.period_active_bedtime`).
+   - **Night Setpoint Helper** = `input_number.climate_night_thermostat`.
+   - **Comfort Schedules** = the same bedtime schedule (so the daytime base is
+     eco; the night override replaces it during bedtime anyway).
+
+Result: during the day the bedroom follows eco; during the bedtime schedule it
+targets the seasonal night value. Living areas leave the night fields empty and
+keep their comfort/eco behavior.
 
 ## Example: a 5-split house
 
