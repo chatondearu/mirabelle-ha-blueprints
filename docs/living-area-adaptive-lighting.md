@@ -238,6 +238,10 @@ One automation instance for an open living + dining area:
 
 ## Changelog
 
+### 1.1.4
+
+- Fix the companion helper script package template: use a literal block scalar (`|`) instead of a folded one (`>`). The folded scalar collapsed the comment line and `input_select:` onto a single line, producing an invalid package file that Home Assistant refused to load.
+
 ### 1.1.3
 
 - Fix companion helper script: use the `base64_encode` template filter (the previous `b64encode` did not exist and aborted the script).
