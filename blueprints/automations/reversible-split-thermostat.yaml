@@ -133,14 +133,43 @@ blueprint:
             entity:
               domain: binary_sensor
               multiple: true
-        off_if_target_reached:
-          name: Off If Target Reached
+        room_sensor_control:
+          name: Room Sensor Control (bang-bang)
           description: >
-            Turn the split off when the room already reached the target (room >=
-            target in heat, room <= target in cool).
+            Trust the room sensor instead of the split internal sensor. While the
+            room needs conditioning, the split is driven beyond the target (see
+            Boost Offset) to force full power, then turned fully off once the room
+            sensor reaches the target. When disabled, the split keeps the plain
+            target and regulates itself.
           default: true
           selector:
             boolean: {}
+        boost_offset:
+          name: Boost Offset
+          description: >
+            Degrees added (heat) or subtracted (cool) to the split target while
+            conditioning, to overcome an inaccurate internal sensor and heat/cool
+            hard. Only used when Room Sensor Control is on. 0 = drive at target.
+          default: 2
+          selector:
+            number:
+              min: 0
+              max: 6
+              step: 0.5
+              unit_of_measurement: "°C"
+        cut_hysteresis:
+          name: Cut Hysteresis
+          description: >
+            Deadband around the target to avoid rapid on/off (protects the PAC).
+            With Room Sensor Control on, the split restarts only after the room
+            drops this far below target (heat) or rises this far above (cool).
+          default: 0.3
+          selector:
+            number:
+              min: 0
+              max: 3
+              step: 0.1
+              unit_of_measurement: "°C"
         frost_protection_temp:
           name: Frost Protection (heat)
           description: >
@@ -258,7 +287,9 @@ variables:
   vacation_boolean: !input vacation_boolean
   away_offset: !input away_offset
   windows: !input windows
-  off_if_target_reached: !input off_if_target_reached
+  room_sensor_control: !input room_sensor_control
+  boost_offset: !input boost_offset
+  cut_hysteresis: !input cut_hysteresis
   frost_protection_temp: !input frost_protection_temp
   outdoor_temperature: !input outdoor_temperature
   heat_outdoor_threshold: !input heat_outdoor_threshold
@@ -292,6 +323,18 @@ variables:
   max_temp: "{{ state_attr(climate_entity, 'max_temp') | float(35) }}"
   target: >
     {{ [[target_raw | float(0), min_temp] | max, max_temp] | min | round(1) }}
+  drive_target_raw: >
+    {% if room_sensor_control %}
+      {% if is_cool %}
+        {{ target | float(0) - (boost_offset | float(0)) }}
+      {% else %}
+        {{ target | float(0) + (boost_offset | float(0)) }}
+      {% endif %}
+    {% else %}
+      {{ target }}
+    {% endif %}
+  drive_target: >
+    {{ [[drive_target_raw | float(0), min_temp] | max, max_temp] | min | round(1) }}
   window_open: >
     {{ windows | count > 0
        and (expand(windows) | selectattr('state', 'eq', 'on') | list | count > 0) }}
@@ -307,17 +350,33 @@ variables:
     {% else %}
       {{ false }}
     {% endif %}
-  target_reached: >
-    {% if not off_if_target_reached or not room_available %}
-      {{ false }}
+  currently_active: >
+    {{ states(climate_entity) not in ['off', 'unknown', 'unavailable'] }}
+  hyst: "{{ cut_hysteresis | float(0) }}"
+  demand: >
+    {% if not room_available %}
+      {{ true }}
     {% elif is_heat %}
-      {{ room_temp >= target | float(0) }}
+      {% if room_temp <= (target | float(0)) - hyst %}
+        {{ true }}
+      {% elif room_temp >= (target | float(0)) %}
+        {{ false }}
+      {% else %}
+        {{ currently_active }}
+      {% endif %}
     {% elif is_cool %}
-      {{ room_temp <= target | float(0) }}
+      {% if room_temp >= (target | float(0)) + hyst %}
+        {{ true }}
+      {% elif room_temp <= (target | float(0)) %}
+        {{ false }}
+      {% else %}
+        {{ currently_active }}
+      {% endif %}
     {% else %}
       {{ false }}
     {% endif %}
-  should_idle: "{{ window_open or outdoor_block or target_reached }}"
+  should_idle: >
+    {{ window_open or outdoor_block or (room_sensor_control and not demand) }}
   frost_active: >
     {{ is_heat
        and (frost_protection_temp | float(0)) > 0
@@ -354,11 +413,12 @@ action:
               - service: climate.turn_off
                 target:
                   entity_id: !input climate_entity
-    # Conditioning needed: apply the global mode with the room target.
+    # Conditioning needed: apply the global mode with the room target (boosted
+    # beyond the target when room sensor control is enabled).
     default:
       - service: climate.set_temperature
         target:
           entity_id: !input climate_entity
         data:
           hvac_mode: "{{ mode }}"
-          temperature: "{{ target }}"
+          temperature: "{{ drive_target }}"

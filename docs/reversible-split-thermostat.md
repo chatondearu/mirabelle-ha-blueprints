@@ -140,7 +140,9 @@ cool around a single threshold. Keep a wide gap between the two values.
 | Away Offset | 3 °C | Subtracted from target in heat, added in cool. |
 | Presence Delay | 120 s | Stability delay before reacting to presence changes. |
 | Window / Door Sensors | [] | While any is open, the split is turned off. |
-| Off If Target Reached | true | Off when room ≥ target (heat) or room ≤ target (cool). |
+| Room Sensor Control (bang-bang) | true | Trust the room sensor: drive the split beyond the target to heat/cool hard, then fully stop it once the room reaches the target. Off = the split self-regulates at the plain target. |
+| Boost Offset | 2 °C | Degrees added (heat) / subtracted (cool) to the split target while conditioning, to overcome an inaccurate internal sensor. 0 = drive at target. |
+| Cut Hysteresis | 0.3 °C | Deadband to avoid rapid on/off (protects the PAC). Restart only after dropping this far below target (heat) or rising above (cool). |
 | Frost Protection (heat) | 7 °C | In heat, keep this minimum instead of full off when idle. 0 disables. |
 | Outdoor Temperature Sensor | — | Optional, for the seasonal idle thresholds below. |
 | Heat — Outdoor Above Idle | 20 °C | In heat, do not heat at/above this outdoor temperature. |
@@ -152,11 +154,29 @@ cool around a single threshold. Keep a wide gap between the two values.
    schedule), otherwise eco.
 2. **Away offset**: when nobody is home (or vacation is on), the target is
    lowered in heat and raised in cool by the away offset.
-3. **Idle (off)**: if a window is open, the target is already reached, or the
-   outdoor temperature makes conditioning useless, the split is turned off — with
-   heat frost protection kept if configured.
-4. Otherwise the split is set to the global mode with the computed target,
-   clamped to the split `min_temp` / `max_temp`.
+3. **Idle (off)**: if a window is open, or the outdoor temperature makes
+   conditioning useless, or (with Room Sensor Control on) the room reached the
+   target, the split is turned off — with heat frost protection kept if
+   configured.
+4. Otherwise the split is set to the global mode. With **Room Sensor Control**
+   on, the setpoint is pushed beyond the target by the **Boost Offset** to force
+   full-power operation (the room sensor, not the split internal sensor, decides
+   when to stop). With it off, the plain target is used and the split regulates
+   itself. The setpoint is clamped to the split `min_temp` / `max_temp`.
+
+### Bang-bang control (Room Sensor Control)
+
+This reproduces the behavior of advanced heating blueprints for splits whose
+internal sensor is unreliable (it sits inside the unit and reads the blown air):
+
+- **Heat**: while the room sensor is below target, the split runs at
+  `target + boost` so it heats hard; it is turned fully off once the room sensor
+  reaches the target, and restarts only after dropping `cut_hysteresis` below it.
+- **Cool**: symmetric — the split runs at `target - boost` while the room is
+  above target, and stops once the room sensor reaches the target.
+
+Set **Boost Offset** to 0 to keep the exact target while still cutting on the
+room sensor, or disable **Room Sensor Control** to let the split self-regulate.
 
 ## Example: a 5-split house
 
