@@ -58,6 +58,16 @@ Inputs are grouped into collapsible sections in the UI.
 - **All Managed Covers** (required): all covers controlled by the automation
 - **North / East / South / West-Facing Covers** (optional): facade groups. If none is
   configured, all covers are treated as one group.
+- **South Facade Azimuth** (default `180`): compass bearing of your south facade on the same
+  `0-360` scale as the Home Assistant sun azimuth and the Forecast.Solar integration
+  (`0` = North, `90` = East, `180` = South, `270` = West). Set it to your real orientation when
+  the house is not aligned to true north/south; the other facade normals are derived from it
+  (east = south − 90, west = south + 90, north = south + 180). Tip: if you use Forecast.Solar,
+  reuse the azimuth configured for a roof slope that shares its facade with your covers.
+- **Facade Exposure Half-Angle** (default `75`): how far (in degrees) the sun may be from a
+  facade normal while still counting as lighting that facade. `90` lights a facade across its
+  full geometric range; lower values (e.g. `70`-`80`) stop shading earlier at grazing angles,
+  which suits a house that only has north and south facades.
 
 ### Presence & Awake
 
@@ -205,15 +215,31 @@ Version 2 removes the external priority/latch helpers. Stability is achieved wit
 
 ## Orientation Mapping
 
-The sun-facing facade is inferred using `sun.sun` azimuth:
+Each facade has an outward normal derived from **South Facade Azimuth** (`S`):
 
-- East: `45° <= azimuth < 135°`
-- South: `135° <= azimuth < 225°`
-- West: `225° <= azimuth < 315°`
-- North: all other azimuth values
+- South normal: `S` (default `180`)
+- North normal: `S + 180`
+- East normal: `S - 90`
+- West normal: `S + 90`
 
-If a facade group is empty for the current sun azimuth, all managed covers are treated as
-sun-facing for shading (safety fallback).
+A facade is considered **lit** when the angular distance between the `sun.sun` azimuth and that
+facade's normal is within **Facade Exposure Half-Angle** (default `75°`, with proper `0/360`
+wrap-around). Because this is an angular distance, **several facades can be lit at once** (for
+example east and south in the morning): every lit facade group contributes its covers to the
+sun-facing set.
+
+There is **no "shade everything" fallback**. If oriented groups are configured but the currently
+lit facade has no covers (for example east/west on a north-south house), nothing is shaded on that
+direction; the other facades stay at the Neutral position. Only when **no** facade group at all is
+configured does the blueprint treat every managed cover as sun-facing (it cannot resolve a side).
+
+### Worked example: a house rotated ~45°
+
+If your covers' south facade actually faces south-east, set **South Facade Azimuth** to `135`.
+The blueprint then derives north `315`, east `45`, west `225`. Late afternoon with the sun at
+azimuth `276°` (west-north-west), the south facade (`135 ± 75 = 60°…210°`) is no longer lit, so
+south covers open, while the north facade (`315 ± 75 = 240°…30°`) is lit, so north covers shade —
+matching the real sun path instead of assuming a true north/south alignment.
 
 ## Example Profiles
 
@@ -264,7 +290,9 @@ Bug fixes included in v2:
   - if Awake Entity is set, check awake state (`on` or `home`); if Awake Schedule is set, check `on`; otherwise behavior follows daylight
   - verify optional sensor availability (outdoor/weather, indoor, wind)
 - **A cover never moves**: ensure it exposes `current_position` (the blueprint skips covers without it)
-- **Unexpected facade selection**: verify facade groups and current `sun.sun` azimuth
+- **Unexpected facade selection**: verify facade groups, the current `sun.sun` azimuth, and that
+  **South Facade Azimuth** matches your real orientation; widen/narrow **Facade Exposure
+  Half-Angle** if shading starts/stops too early or too late
 - **Position service errors**: ensure the cover integration supports `cover.set_cover_position`
 - **Too frequent movements**: increase `Minimum Position Delta` and/or `Minimum Action Interval (Minutes)`, or raise the hysteresis buffer
 - **Contact opening does nothing**: verify the cover in the link is part of *All Managed Covers* and that its linked sensors report `on` when open
