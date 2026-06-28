@@ -91,8 +91,10 @@ If the zone is **not** occupied, lights are turned off after the delay.
 | Illuminance Sensor | Optional lux sensor | empty |
 | Lux Dark Threshold | Below this: need light (lx) | `80` |
 | Lux Bright Threshold | Above this: suppress day lighting (lx) | `120` |
-| Night Start (Fallback) | Optional time for night without lux | empty |
-| Day Start (Fallback) | Optional day window start without lux | empty |
+| Night Start | Time the night window begins; empty = sunset | empty |
+| Night End (Day Start) | Time the night window ends; empty = sunrise | empty |
+
+The night window now drives the day/night profile selection regardless of the lux sensor: leave both empty to follow the sun, or pin one/both to fixed times (handy in winter to keep day starting at the same hour). When only one is set, the other falls back to the corresponding sun time.
 
 Use **Lux Dark** lower than **Lux Bright** to avoid flicker when lux hovers near a single threshold.
 
@@ -112,8 +114,24 @@ Average **closed** amount uses `100 - current_position` (Home Assistant: 0 = clo
 | Night Hue Base | Base hue (blue ~235) | `235` |
 | Night Hue Spread | Per-lamp hue variation ± | `15` |
 | Night Saturation | Saturation % | `85` |
-| Night Brightness (Color) | % | `40` |
-| Night Brightness (White) | % | `15` |
+| Night Brightness (Color) | % (ramp floor when ramp enabled) | `40` |
+| Night Brightness (White) | % (ramp floor when ramp enabled) | `15` |
+| Night Brightness Ramp | Start bright at night start, fade to the values above | `false` |
+| Night Brightness Start (Ramp) | Starting % at night start when ramp is on | `70` |
+| Night Dim Until | Time the ramp reaches its minimum | `00:00:00` |
+
+When **Night Brightness Ramp** is on, night brightness starts at **Night Brightness Start** at night start and linearly fades down to **Night Brightness (Color/White)** by **Night Dim Until** (midnight by default), then stays at the floor for the rest of the night.
+
+### Day/Night transition
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| Progressive Transition | Blend night↔day across a sun elevation band | `false` |
+| Transition Elevation Low | Sun elevation where transition starts (night side) | `-6` |
+| Transition Elevation High | Sun elevation where transition completes (day) | `6` |
+| Transition Warm Kelvin | Warmest color temperature at the horizon (golden hour) | `2200` |
+
+When enabled (auto mode only), instead of switching abruptly at sunrise/sunset, all capable lamps blend from a warm **Transition Warm Kelvin** at the horizon up to the day color temperature, with brightness interpolated from the night to the day level, recreating outdoor light. Below the low elevation the night (blue) profile applies; above the high elevation the day profile applies.
 
 ### Day profile
 
@@ -135,7 +153,11 @@ Average **closed** amount uses `100 - current_position` (Home Assistant: 0 = clo
 | Hold Helper Display Name | Friendly name for hold toggle | `Living Area Lighting Hold` |
 | Manual Mode Helper Override | Use an existing `input_select` instead of auto id | empty |
 | Manual Hold Helper Override | Use an existing `input_boolean` instead of auto id | empty |
+| Manual Override Hold | Pause the automation after a manual light change | `false` |
+| Manual Override Duration | How long to stay paused (minutes) | `30` |
 | Light Transition | Seconds | `3` |
+
+When **Manual Override Hold** is on, turning on at least one light of the group by hand (UI, app or voice) pauses the automation for **Manual Override Duration**, so it neither changes nor turns off the lights during that window. Detection uses the change context user, so physical/Zigbee switch actions may not be recognized as manual.
 
 With default settings, the automation expects:
 
@@ -237,6 +259,13 @@ One automation instance for an open living + dining area:
 - As a fallback, create helpers in the UI and set **Manual Mode Helper Override** / **Manual Hold Helper Override**.
 
 ## Changelog
+
+### 1.2.0
+
+- Add an optional **progressive day/night transition** that recreates outdoor light: lamps blend from a warm golden-hour color temperature near the horizon up to daylight across a configurable sun elevation band (and the reverse at sunset).
+- The **night window** (Night Start / Night End) now defines the day/night profile selection regardless of the lux sensor, defaulting to sun times — set fixed times to control it yourself (useful in winter).
+- Add an optional **night brightness ramp**: start bright at night start and fade down to the night brightness floor by a configurable time (midnight by default).
+- Add an optional **manual override hold**: turning on a light by hand pauses the automation for a configurable duration.
 
 ### 1.1.6
 

@@ -5,9 +5,12 @@ blueprint:
   description: >
     Adaptive day and night lighting for living areas using computed profiles.
     Night mode applies per-lamp blue starlight variation on color lights and dim
-    white lights. Day mode warms color temperature over time and adjusts brightness
-    from illuminance and cover shading. Uses zone occupancy sensors with optional
-    person home constraints.
+    white lights, with an optional brightness ramp that fades down to midnight.
+    Day mode warms color temperature over time and adjusts brightness from
+    illuminance and cover shading. An optional progressive transition recreates
+    outdoor light around sunrise/sunset, the night window can be pinned to fixed
+    times (default sun), and a manual override can pause the automation after a
+    hand control. Uses zone occupancy sensors with optional person home constraints.
   domain: automation
   source_url: https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/living-area-adaptive-lighting.yaml
   input:
@@ -110,18 +113,19 @@ blueprint:
               max: 2000
               unit_of_measurement: lx
         night_start:
-          name: Night Start (Fallback)
+          name: Night Start
           description: >
-            Optional time when night profile is allowed without lux sensor (HH:MM:SS).
-            Leave empty to rely on sun below horizon only.
+            Time when the night window begins (HH:MM:SS). Leave empty to use the
+            sun (sunset). Set a fixed time to define night yourself, handy in winter.
           default: ""
           selector:
             time: {}
         day_start:
-          name: Day Start (Fallback)
+          name: Night End (Day Start)
           description: >
-            Optional time when day profile is preferred without lux sensor (HH:MM:SS).
-            Leave empty to rely on sun above horizon only.
+            Time when the night window ends and day begins (HH:MM:SS). Leave empty
+            to use the sun (sunrise). Set a fixed time to keep day starting at the
+            same hour year round.
           default: ""
           selector:
             time: {}
@@ -198,6 +202,33 @@ blueprint:
               min: 1
               max: 100
               unit_of_measurement: "%"
+        night_dim_enabled:
+          name: Night Brightness Ramp
+          description: >
+            When enabled, night brightness starts high at night start and ramps
+            down to the values above by the "Night Dim Until" time.
+          default: false
+          selector:
+            boolean: {}
+        night_brightness_high:
+          name: Night Brightness Start (Ramp)
+          description: >
+            Starting brightness percent at night start when the ramp is enabled.
+            Should be higher than the night brightness values above.
+          default: 70
+          selector:
+            number:
+              min: 1
+              max: 100
+              unit_of_measurement: "%"
+        night_dim_until:
+          name: Night Dim Until
+          description: >
+            Time when the night brightness ramp reaches its minimum (HH:MM:SS).
+            Default is midnight.
+          default: "00:00:00"
+          selector:
+            time: {}
     day_profile_section:
       name: Day Profile
       icon: mdi:white-balance-sunny
@@ -247,6 +278,57 @@ blueprint:
             number:
               min: 0
               max: 1000
+              unit_of_measurement: K
+    transition_section:
+      name: Day/Night Transition
+      icon: mdi:weather-sunset
+      description: >
+        Optional progressive transition around sunrise/sunset that recreates
+        outdoor light (warm golden hour blending into daylight).
+      input:
+        progressive_transition:
+          name: Progressive Transition
+          description: >
+            When enabled, instead of switching abruptly at sunrise/sunset, the
+            lights blend gradually across a sun elevation band: warm and dim near
+            the horizon, brighter and cooler as the sun climbs (and the reverse at
+            sunset). Below the band the night profile applies, above it the day
+            profile applies.
+          default: false
+          selector:
+            boolean: {}
+        transition_elevation_low:
+          name: Transition Elevation Low
+          description: >
+            Sun elevation (degrees) at which the transition starts on the night
+            side. Around -6 matches civil twilight.
+          default: -6
+          selector:
+            number:
+              min: -18
+              max: 10
+              unit_of_measurement: "°"
+        transition_elevation_high:
+          name: Transition Elevation High
+          description: >
+            Sun elevation (degrees) at which the transition completes into the day
+            profile.
+          default: 6
+          selector:
+            number:
+              min: -10
+              max: 30
+              unit_of_measurement: "°"
+        transition_warm_kelvin:
+          name: Transition Warm Kelvin
+          description: >
+            Warmest color temperature at the horizon during the transition (golden
+            hour). Blends up to the day color temperature as the sun rises.
+          default: 2200
+          selector:
+            number:
+              min: 1500
+              max: 4000
               unit_of_measurement: K
     control_section:
       name: Manual Control
@@ -301,6 +383,26 @@ blueprint:
           selector:
             entity:
               domain: input_boolean
+        manual_override_enabled:
+          name: Manual Override Hold
+          description: >
+            When enabled, turning on at least one light of the group by hand
+            (UI, app or voice) pauses the automation for the duration below, so it
+            does not change or turn the lights off. Note: physical/Zigbee switch
+            actions may not be detected as manual.
+          default: false
+          selector:
+            boolean: {}
+        manual_override_minutes:
+          name: Manual Override Duration
+          description: >
+            How long the automation stays paused after a manual light change.
+          default: 30
+          selector:
+            number:
+              min: 1
+              max: 1440
+              unit_of_measurement: minutes
         transition_seconds:
           name: Light Transition
           description: Transition time in seconds for light changes.
@@ -325,6 +427,8 @@ trigger_variables:
   control_hold_helper_name_input: !input control_hold_helper_name
   presence_persons_input: !input presence_persons
   cover_entities_input: !input covers
+  color_lights_input: !input color_lights
+  white_lights_input: !input white_lights
 
 trigger:
   - platform: state
@@ -367,6 +471,14 @@ trigger:
     minutes: "/15"
   - platform: template
     value_template: >
+      {% set group_lights = color_lights_input + white_lights_input %}
+      {% if group_lights | count > 0 %}
+        {{ expand(group_lights) | map(attribute='state') | join('|') }}
+      {% else %}
+        none
+      {% endif %}
+  - platform: template
+    value_template: >
       {% if manual_mode_helper_input | length > 0 %}
         {{ states(manual_mode_helper_input) }}
       {% elif create_dashboard_helpers_input %}
@@ -407,6 +519,15 @@ variables:
   day_brightness_min: !input day_brightness_min
   day_brightness_max: !input day_brightness_max
   cover_kelvin_warm_shift: !input cover_kelvin_warm_shift
+  night_dim_enabled: !input night_dim_enabled
+  night_brightness_high: !input night_brightness_high
+  night_dim_until_input: !input night_dim_until
+  progressive_transition: !input progressive_transition
+  transition_elevation_low: !input transition_elevation_low
+  transition_elevation_high: !input transition_elevation_high
+  transition_warm_kelvin: !input transition_warm_kelvin
+  manual_override_enabled: !input manual_override_enabled
+  manual_override_minutes: !input manual_override_minutes
   manual_mode_helper: !input manual_mode_helper
   manual_hold_helper: !input manual_hold_helper
   create_dashboard_helpers: !input create_dashboard_helpers
@@ -498,18 +619,23 @@ variables:
     {% endif %}
   sun_elevation: "{{ state_attr('sun.sun', 'elevation') | float(0) }}"
   is_sun_up: "{{ is_state('sun.sun', 'above_horizon') }}"
-  is_time_night: >
-    {% if night_start_input is string and night_start_input | length > 0 %}
-      {% set now_time = now().strftime('%H:%M:%S') %}
-      {% if day_start_input is string and day_start_input | length > 0 %}
-        {{ now_time >= night_start_input or now_time < day_start_input }}
-      {% else %}
-        {{ now_time >= night_start_input }}
-      {% endif %}
+  has_night_start: "{{ night_start_input is string and night_start_input | length > 0 }}"
+  has_night_end: "{{ day_start_input is string and day_start_input | length > 0 }}"
+  is_night: >
+    {% if not has_night_start and not has_night_end %}
+      {{ not is_sun_up }}
     {% else %}
-      {{ false }}
+      {% set t = now().strftime('%H:%M:%S') %}
+      {% set sunset_tod = as_local(as_datetime(state_attr('sun.sun', 'next_setting'))).strftime('%H:%M:%S') %}
+      {% set sunrise_tod = as_local(as_datetime(state_attr('sun.sun', 'next_rising'))).strftime('%H:%M:%S') %}
+      {% set start = night_start_input if has_night_start else sunset_tod %}
+      {% set end = day_start_input if has_night_end else sunrise_tod %}
+      {% if start <= end %}
+        {{ start <= t and t < end }}
+      {% else %}
+        {{ t >= start or t < end }}
+      {% endif %}
     {% endif %}
-  is_night: "{{ (not is_sun_up) or is_time_night }}"
   cover_open_factor: >
     {% if has_covers %}
       {% set positions = expand(cover_entities) | map(attribute='attributes.current_position') | reject('none') | list %}
@@ -577,11 +703,72 @@ variables:
     {% endif %}
     {% set cover_boost = (cover_closed_factor | float(0) / 100) * (day_brightness_max - day_brightness_min) * 0.35 %}
     {{ [[lux_brightness + cover_boost, day_brightness_max] | min, day_brightness_min] | max | round(0) | int }}
+  night_dim_factor: >
+    {% if not night_dim_enabled %}
+      {{ 0.0 }}
+    {% else %}
+      {% set now_ts = as_timestamp(now()) %}
+      {% set start_tod = night_start_input if has_night_start
+                         else as_local(as_datetime(state_attr('sun.sun', 'next_setting'))).strftime('%H:%M:%S') %}
+      {% set start_ts = as_timestamp(today_at(start_tod)) %}
+      {% if start_ts > now_ts %}{% set start_ts = start_ts - 86400 %}{% endif %}
+      {% set until_ts = as_timestamp(today_at(night_dim_until_input)) %}
+      {% if until_ts <= start_ts %}{% set until_ts = until_ts + 86400 %}{% endif %}
+      {% if now_ts <= start_ts %}
+        {{ 1.0 }}
+      {% elif now_ts >= until_ts %}
+        {{ 0.0 }}
+      {% else %}
+        {{ (1.0 - (now_ts - start_ts) / (until_ts - start_ts)) | round(3) }}
+      {% endif %}
+    {% endif %}
+  transition_progress: >
+    {% set lo = transition_elevation_low | float(-6) %}
+    {% set hi = transition_elevation_high | float(6) %}
+    {% set e = sun_elevation | float(0) %}
+    {% if hi <= lo %}
+      {{ 1.0 }}
+    {% else %}
+      {{ [[(e - lo) / (hi - lo), 1.0] | min, 0.0] | max | round(3) }}
+    {% endif %}
+  transition_active: >
+    {{
+      progressive_transition
+      and effective_mode == 'auto'
+      and (sun_elevation | float(0) > (transition_elevation_low | float(-6)))
+      and (sun_elevation | float(0) < (transition_elevation_high | float(6)))
+    }}
+  transition_kelvin: >
+    {% set p = transition_progress | float(0) %}
+    {% set warm = transition_warm_kelvin | float(2200) %}
+    {{ (warm + (day_kelvin | float(0) - warm) * p) | round(0) | int }}
+  transition_brightness_pct: >
+    {% set p = transition_progress | float(0) %}
+    {% set nb = night_brightness_color | float(40) %}
+    {% set db = day_brightness_pct | float(100) %}
+    {{ [[(nb + (db - nb) * p) | round(0) | int, 100] | min, 1] | max }}
+  manual_override_active: >
+    {% if not manual_override_enabled %}
+      {{ false }}
+    {% else %}
+      {% set win = (manual_override_minutes | float(30)) * 60 %}
+      {% set ns = namespace(active=false) %}
+      {% for e in all_light_entities %}
+        {% set s = states[e] %}
+        {% if s is not none and s.state == 'on'
+              and s.context is not none and s.context.user_id is not none
+              and (now() - s.last_changed).total_seconds() < win %}
+          {% set ns.active = true %}
+        {% endif %}
+      {% endfor %}
+      {{ ns.active }}
+    {% endif %}
 
 action:
   - if:
       - condition: template
-        value_template: "{{ not manual_hold_active and has_any_lights }}"
+        value_template: >
+          {{ not manual_hold_active and not manual_override_active and has_any_lights }}
     then:
       - choose:
           - conditions:
@@ -609,6 +796,7 @@ action:
                     and not home_required_blocked
                     and need_artificial_light
                     and use_night_profile
+                    and not transition_active
                   }}
             sequence:
               - repeat:
@@ -631,12 +819,16 @@ action:
                           {% endif %}
                         sat_offset: "{{ (seed_sum | int(0)) % 11 - 5 }}"
                         brightness_offset: "{{ (seed_sum | int(0)) % 15 - 7 }}"
+                        night_base_color: >
+                          {{ (night_brightness_color | float(0))
+                             + ((night_brightness_high | float(0)) - (night_brightness_color | float(0)))
+                             * (night_dim_factor | float(0)) }}
                         lamp_hue: >
                           {{ ((night_hue_base | int(0)) + (hue_offset | int(0)) + 360) % 360 }}
                         lamp_sat: >
                           {{ [[(night_saturation | int(0)) + (sat_offset | int(0)), 100] | min, 0] | max }}
                         lamp_brightness_pct: >
-                          {{ [[(night_brightness_color | int(0)) + (brightness_offset | int(0)), 100] | min, 1] | max }}
+                          {{ [[(night_base_color | round(0) | int) + (brightness_offset | int(0)), 100] | min, 1] | max }}
                     - service: light.turn_on
                       target:
                         entity_id: "{{ repeat.item }}"
@@ -658,8 +850,12 @@ action:
                           {% endfor %}
                           {{ ns.v }}
                         brightness_offset: "{{ (seed_sum | int(0)) % 9 - 4 }}"
+                        night_base_white: >
+                          {{ (night_brightness_white | float(0))
+                             + ((night_brightness_high | float(0)) - (night_brightness_white | float(0)))
+                             * (night_dim_factor | float(0)) }}
                         lamp_brightness_pct: >
-                          {{ [[(night_brightness_white | int(0)) + (brightness_offset | int(0)), 100] | min, 1] | max }}
+                          {{ [[(night_base_white | round(0) | int) + (brightness_offset | int(0)), 100] | min, 1] | max }}
                     - service: light.turn_on
                       target:
                         entity_id: "{{ repeat.item }}"
@@ -673,7 +869,45 @@ action:
                     zone_occupied
                     and not home_required_blocked
                     and need_artificial_light
+                    and transition_active
+                  }}
+            sequence:
+              - repeat:
+                  for_each: "{{ all_light_entities }}"
+                  sequence:
+                    - variables:
+                        supports_color_temp: >
+                          {{
+                            'color_temp'
+                            in (state_attr(repeat.item, 'supported_color_modes') or [])
+                          }}
+                    - if:
+                        - condition: template
+                          value_template: "{{ supports_color_temp }}"
+                      then:
+                        - service: light.turn_on
+                          target:
+                            entity_id: "{{ repeat.item }}"
+                          data:
+                            color_temp_kelvin: "{{ transition_kelvin | int }}"
+                            brightness_pct: "{{ transition_brightness_pct | int }}"
+                            transition: "{{ transition_seconds }}"
+                      else:
+                        - service: light.turn_on
+                          target:
+                            entity_id: "{{ repeat.item }}"
+                          data:
+                            brightness_pct: "{{ transition_brightness_pct | int }}"
+                            transition: "{{ transition_seconds }}"
+          - conditions:
+              - condition: template
+                value_template: >
+                  {{
+                    zone_occupied
+                    and not home_required_blocked
+                    and need_artificial_light
                     and not use_night_profile
+                    and not transition_active
                   }}
             sequence:
               - repeat:
