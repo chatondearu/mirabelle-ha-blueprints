@@ -76,6 +76,8 @@ interface OrphanEntity {
   platform: string
   reason: OrphanReason
   config_entry_id: string | null
+  config_entry_state: string | null
+  config_entry_title: string | null
   disabled_by: string | null
   hidden_by: string | null
   name: string | null
@@ -218,10 +220,13 @@ function classifyEntity(
   configEntryById: Map<string, ConfigEntry>,
   stateById: Map<string, HassState>,
 ): OrphanEntity | null {
+  const entryInfo = entry.config_entry_id ? configEntryById.get(entry.config_entry_id) : undefined
   const base = {
     entity_id: entry.entity_id,
     platform: entry.platform,
     config_entry_id: entry.config_entry_id,
+    config_entry_state: entryInfo?.state ?? null,
+    config_entry_title: entryInfo?.title ?? null,
     disabled_by: entry.disabled_by,
     hidden_by: entry.hidden_by,
     name: entry.name ?? entry.original_name,
@@ -254,7 +259,6 @@ function classifyEntity(
 
   // 3. Registered but no live state at all -> not currently provided.
   if (!liveState) {
-    const entryInfo = entry.config_entry_id ? configEntryById.get(entry.config_entry_id) : undefined
     const context = entryInfo
       ? `integration "${entryInfo.domain}" (state: ${entryInfo.state})`
       : `platform "${entry.platform}"`
@@ -317,10 +321,38 @@ async function main() {
   })
 
   if (OUTPUT_JSON) {
+    // Per config entry: how many of its registered entities are orphan. When
+    // every entity of an entry is orphan, the integration instance is dead.
+    const totalByEntry = new Map<string, number>()
+    for (const entry of registry) {
+      if (entry.config_entry_id) {
+        totalByEntry.set(entry.config_entry_id, (totalByEntry.get(entry.config_entry_id) ?? 0) + 1)
+      }
+    }
+    const orphanByEntry = new Map<string, number>()
+    for (const orphan of orphans) {
+      if (orphan.config_entry_id) {
+        orphanByEntry.set(orphan.config_entry_id, (orphanByEntry.get(orphan.config_entry_id) ?? 0) + 1)
+      }
+    }
+    const configEntriesSummary = configEntries
+      .filter(entry => orphanByEntry.has(entry.entry_id))
+      .map(entry => ({
+        entry_id: entry.entry_id,
+        domain: entry.domain,
+        title: entry.title,
+        state: entry.state,
+        registered_entities: totalByEntry.get(entry.entry_id) ?? 0,
+        orphan_entities: orphanByEntry.get(entry.entry_id) ?? 0,
+        all_orphan: (totalByEntry.get(entry.entry_id) ?? 0) === (orphanByEntry.get(entry.entry_id) ?? 0),
+      }))
+      .sort((a, b) => b.orphan_entities - a.orphan_entities)
+
     console.log(JSON.stringify({
       generated_at: new Date().toISOString(),
       total_registered: registry.length,
       total_orphans: orphans.length,
+      config_entries_summary: configEntriesSummary,
       orphans,
     }, null, 2))
     return
