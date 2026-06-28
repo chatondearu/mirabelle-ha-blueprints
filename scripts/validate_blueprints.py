@@ -24,6 +24,7 @@ EXPECTED_BLUEPRINTS = [
     "automations/frient_keypad_with_alarmo.yaml",
     "automations/hvac-season-manager.yaml",
     "automations/living-area-adaptive-lighting.yaml",
+    "automations/nfc-disarm.yaml",
     "automations/presence_based_lighting.yaml",
     "automations/reversible-split-thermostat.yaml",
     "automations/scheduled_bell_sound.yaml",

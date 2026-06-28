@@ -30,6 +30,12 @@ AUTOMATION_INPUTS: dict[str, dict[str, Any]] = {
         "telegram_chat_id": "-1001234567890",
         "default_camera": "camera.test",
     },
+    "nfc-disarm.yaml": {
+        "alarm_entity": ALARM,
+        "allowed_tag_ids": "test-tag-1, test-tag-2",
+        "disarm_code": "1234",
+        "notify_service": "notify.mobile_app_test",
+    },
     "presence_based_lighting.yaml": {
         "presence_sensor": BINARY_SENSOR,
         "light_entity": LIGHT,

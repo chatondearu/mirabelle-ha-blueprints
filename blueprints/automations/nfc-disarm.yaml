@@ -1,0 +1,105 @@
+blueprint:
+  homeassistant:
+    min_version: 2025.5.3
+  name: "[CDA] 🏷️ NFC Tag → Disarm Alarm"
+  description: >
+    Disarm an alarm panel (e.g. Alarmo) when an authorized NFC tag is scanned
+    with the Home Assistant Companion app (or a fixed NFC reader). Give each
+    person their own tag without needing multiple keypad codes.
+
+    The automation supplies the disarm code itself, so a tag works as a physical
+    "key": keep it secure, because a lost tag can disarm the alarm (remove it
+    from the authorized list to revoke it).
+
+    Register a tag first by scanning it once with the Companion app
+    (Settings → Tags), then paste its tag ID(s) below.
+  domain: automation
+  input:
+    core:
+      name: Core
+      icon: mdi:shield-home
+      input:
+        alarm_entity:
+          name: Alarm Panel (source of truth)
+          description: The panel to disarm (e.g. Alarmo).
+          default: alarm_control_panel.alarmo
+          selector:
+            entity:
+              domain: alarm_control_panel
+        allowed_tag_ids:
+          name: Authorized NFC Tag IDs
+          description: >
+            One or more registered tag IDs allowed to disarm, comma-separated
+            (e.g. `a1b2c3d4-..., e5f6g7h8-...`). Scan a tag once with the
+            Companion app to register it and read its ID under Settings → Tags.
+          default: ""
+          selector:
+            text:
+        disarm_code:
+          name: Disarm Code (optional)
+          description: >
+            Code sent when disarming. Leave empty only if the panel does not
+            require a code to disarm.
+          default: ""
+          selector:
+            text:
+              type: password
+    feedback:
+      name: Feedback (optional)
+      icon: mdi:bell
+      input:
+        notify_service:
+          name: Notify Service(s) (optional)
+          description: >
+            Optional notify service(s), comma-separated (e.g.
+            `notify.mobile_app_pixel_7_pro`). Each receives a short "disarmed
+            via NFC" confirmation. Leave empty to skip.
+          default: ""
+          selector:
+            text:
+
+mode: single
+
+trigger:
+  - platform: event
+    event_type: tag_scanned
+
+variables:
+  alarm_entity: !input alarm_entity
+  allowed_tag_ids: !input allowed_tag_ids
+  disarm_code: !input disarm_code
+  notify_service: !input notify_service
+  # Support one or several comma-separated tag IDs / notify services.
+  allowed_tags: >-
+    {{ allowed_tag_ids.split(',') | map('trim') | reject('eq', '') | list }}
+  notify_services: >-
+    {{ notify_service.split(',') | map('trim') | reject('eq', '') | list }}
+
+condition:
+  # Only react to authorized tags.
+  - "{{ trigger.event.data.tag_id in allowed_tags }}"
+
+action:
+  - if:
+      - "{{ disarm_code != '' }}"
+    then:
+      - service: alarm_control_panel.alarm_disarm
+        target:
+          entity_id: !input alarm_entity
+        data:
+          code: "{{ disarm_code }}"
+    else:
+      - service: alarm_control_panel.alarm_disarm
+        target:
+          entity_id: !input alarm_entity
+  - repeat:
+      for_each: "{{ notify_services }}"
+      sequence:
+        - service: "{{ repeat.item }}"
+          continue_on_error: true
+          data:
+            title: "🔓 Alarm disarmed"
+            message: "Disarmed via NFC tag ({{ trigger.event.data.tag_id }})"
+            data:
+              tag: cda_alarm_response
+              channel: alarm
