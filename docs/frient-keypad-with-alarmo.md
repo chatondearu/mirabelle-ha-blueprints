@@ -4,9 +4,9 @@ Bridge a **Frient KEPZB-110** Zigbee keypad (integrated via **ZHA**) with an
 **Alarmo** central — or any other `alarm_control_panel` — used as the single
 source of truth.
 
-> Original blueprint by **Darktoinon** (Home Assistant community forum),
-> adapted and maintained in this repository. This blueprint intentionally keeps
-> its original name without the `[CDA]` prefix.
+> Originally based on a community blueprint by **Darktoinon** (Home Assistant
+> forum), now adapted and maintained in this repository under the `[CDA]`
+> naming convention.
 
 ## How it works
 

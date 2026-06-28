@@ -24,7 +24,7 @@ A collection of custom blueprints for Home Assistant.
 - [[CDA] 🌡️ Reversible Split Thermostat](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Freversible-split-thermostat.yaml)
 - [[CDA] 🪟 Blind Cover Template](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_cover.yaml)
 - [[CDA] 🪟 Blind State Tracker](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_state_tracker.yaml)
-- [Keypad Frient (KEPZB-110) for Alarmo (FR/EN)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Ffrient_keypad_with_alarmo.yaml)
+- [[CDA] 🔢 Keypad Frient (KEPZB-110) for Alarmo (FR/EN)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Ffrient_keypad_with_alarmo.yaml)
 
 #### Scripts
 
@@ -193,11 +193,11 @@ Track the state of a blind controlled by a single switch.
 
 ### Keypad Frient for Alarmo
 
-Keypad Frient (KEPZB-110) for Alarmo (FR/EN)
+[CDA] 🔢 Keypad Frient (KEPZB-110) for Alarmo (FR/EN)
 
 Bridge a Frient KEPZB-110 keypad (via ZHA) with an Alarmo central used as the single source of truth: the keypad forwards codes to Alarmo (which validates PINs/RFID), Alarmo state changes are mirrored onto the Frient panel, and optional best-effort feedback updates the keypad LEDs. English and French UI strings.
 
-Original blueprint by Darktoinon (Home Assistant community forum), adapted and maintained here. It intentionally does not use the `[CDA]` name prefix, so it is excluded from `pnpm run install-blueprints` (that script only processes names starting with `[CDA]`). Use the import links above or install it manually.
+Originally based on a community blueprint by Darktoinon (Home Assistant forum), now adapted and maintained here under the `[CDA]` naming convention.
 
 [View Documentation](docs/frient-keypad-with-alarmo.md)
 

@@ -1,7 +1,7 @@
 blueprint:
   homeassistant:
     min_version: 2025.5.3
-  name: Keypad Frient (KEPZB-110) for Alarmo (FR/EN)
+  name: "[CDA] 🔢 Keypad Frient (KEPZB-110) for Alarmo (FR/EN)"
   description: >
     Bridge a Frient KEPZB-110 Zigbee keypad (via ZHA) with an Alarmo central
     (or any other alarm_control_panel) used as the single source of truth.

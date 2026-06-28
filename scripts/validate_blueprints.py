@@ -13,9 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 BLUEPRINTS_DIR = REPO_ROOT / "blueprints"
 
 # Third-party blueprints in this repo (no [CDA] prefix required).
-THIRD_PARTY_BLUEPRINTS = {
-    "automations/frient_keypad_with_alarmo.yaml",
-}
+THIRD_PARTY_BLUEPRINTS: set[str] = set()
 
 EXPECTED_BLUEPRINTS = [
     "automations/alarm-response.yaml",

@@ -53,7 +53,7 @@ pytest packages/cover-manager/tests/test_config_flow.py -q
 | **Behavior** (trigger → assert services) | `presence_based_lighting` (on only), `play_sound_with_volume_control`, `set_cover_position`, `cover_control`, `scheduled_bell_sound`, `create_schedule` |
 | **Smoke only (v1)** | `cover_solar_thermal_optimization`, `living-area-adaptive-lighting`, `frient_keypad_with_alarmo`, `cover_state_tracker`, `cover_cover`, `create-living-area-lighting-helpers` |
 
-Third-party blueprint `frient_keypad_with_alarmo.yaml` is exempt from the `[CDA]` name prefix but must include `blueprint.homeassistant.min_version`.
+All blueprints must use the `[CDA]` name prefix and include `blueprint.homeassistant.min_version`.
 
 ## Custom integrations
 
