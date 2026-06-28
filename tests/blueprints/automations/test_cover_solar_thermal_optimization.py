@@ -79,6 +79,47 @@ async def test_contact_open_moves_only_linked_cover(hass: HomeAssistant) -> None
 
 
 @pytest.mark.behavior
+async def test_contact_open_overrides_night_closing(hass: HomeAssistant) -> None:
+    """At night, opening a linked sensor reopens its cover instead of closing it."""
+    # Sun below horizon -> night mode would normally close everything to 0.
+    # Opening the bay-window contact must reopen only that cover.
+    seed_entities(
+        hass,
+        {
+            "sun.sun": ("below_horizon", {"azimuth": 0.0, "elevation": -20}),
+            PERSON: ("home", {}),
+            BAY: ("closed", {"current_position": 0}),
+            DOOR: ("closed", {"current_position": 0}),
+            BAY_CONTACT: ("off", {}),
+        },
+    )
+    await hass.async_block_till_done()
+
+    set_position = async_mock_service(hass, "cover", "set_cover_position")
+
+    await async_load_automation_blueprint(
+        hass,
+        FILENAME,
+        {
+            "covers": [BAY, DOOR],
+            "presence_persons": [PERSON],
+            "night_position": "0",
+            "contact_open_position": "100",
+            "cover_contact_links": [
+                {"cover": BAY, "sensors": [BAY_CONTACT]},
+            ],
+        },
+    )
+
+    seed_entities(hass, {BAY_CONTACT: ("on", {})})
+    await hass.async_block_till_done()
+
+    positions = _requested_positions(set_position)
+    assert positions.get(BAY) == 100
+    assert DOOR not in positions
+
+
+@pytest.mark.behavior
 async def test_away_closes_all_covers(hass: HomeAssistant) -> None:
     """When nobody is home, every managed cover is closed."""
     seed_entities(

@@ -862,12 +862,16 @@ variables:
         {% set target = 0 %}
       {% elif cover_mode == 'wind' %}
         {% set target = wind_position %}
+      {% elif cid in contact_open_cover_ids %}
+        {# An open door/window opens its own cover even at night, so the room
+           stays usable (e.g. stepping out to the garden) without the night
+           closing fighting the manual/contact action. Only away and wind, the
+           true safety branches, still win over an open contact. #}
+        {% set target = contact_open_position %}
       {% elif cover_mode == 'night' %}
         {% set target = night_position %}
       {% elif cover_mode == 'active' %}
-        {% if cid in contact_open_cover_ids %}
-          {% set target = contact_open_position %}
-        {% elif not is_awake %}
+        {% if not is_awake %}
           {% set target = none %}
         {% elif is_summer %}
           {% if summer_hot %}
@@ -906,8 +910,10 @@ action:
             target_position: "{{ repeat.item[1] | int }}"
             current_position: "{{ state_attr(repeat.item[0], 'current_position') }}"
             # Only true safety (away/wind) and contact opening bypass comfort
-            # filtering. Night closing respects manual override so an evening
-            # manual open is not immediately reverted.
+            # filtering. Contact opening is forced in any mode (including night)
+            # so an open door/window reopens its cover immediately. Plain night
+            # closing still respects manual override, so an evening manual open
+            # is not reverted before the override window expires.
             forced_move: >
               {{
                 cover_mode in ['away', 'wind']

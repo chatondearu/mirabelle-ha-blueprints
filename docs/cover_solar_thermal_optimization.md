@@ -105,8 +105,10 @@ cover_contact_links:
       - binary_sensor.french_door_right
 ```
 
-Contact opening overrides comfort logic and ignores manual override / anti-wear filtering, but
-stays **below** the global safety branches (away / wind / night). It also applies regardless of
+Contact opening overrides comfort logic and ignores manual override / anti-wear filtering. It
+also overrides **night** closing, so opening a linked door/window reopens its cover even after
+dark (for example to step out into the garden) without the automation immediately closing it
+again. It stays **below** only the true safety branches (away / wind), and applies regardless of
 the awake state (an open door implies presence).
 
 ### Night & Wind Safety
@@ -185,15 +187,17 @@ applies each target through one loop (a cover absent from the target map is left
 1. **Away** (safety): nobody home and *Close When Away* enabled → all covers to `0`
    (if *Close When Away* is disabled, nothing happens)
 2. **Wind** (safety): wind above threshold → all covers to *Position With High Wind*
-3. **Night**: sun below horizon → all covers to *Night Position* (respects manual override)
-4. **Active** (daytime, someone home), decided **per cover**:
-   1. a linked contact sensor is open → *Contact Open Position*
-   2. not awake → no movement
-   3. **summer + daylight** (follows the sun):
+3. **Contact open** (any mode except away/wind, including night): a cover with a linked
+   contact sensor open → *Contact Open Position*. This lets you bypass night closing simply
+   by opening the door/window.
+4. **Night**: sun below horizon → remaining covers to *Night Position* (respects manual override)
+5. **Active** (daytime, someone home), decided **per cover**:
+   1. not awake → no movement
+   2. **summer + daylight** (follows the sun):
       - hot (`threshold + buffer`) → the sun-facing facade goes to *Summer Position (Sun-Facing Facade)*; every other facade goes to *Neutral Position* (stays open)
       - cool enough (`threshold - buffer`) → all facades to *Neutral Position*
       - in between → **hold** (no movement)
-   4. **winter + daylight** (follows the sun):
+   3. **winter + daylight** (follows the sun):
       - solar gain needed (`threshold - buffer`) → the sun-facing facade goes to *Winter Day Position (Solar Gains)*; every other facade goes to *Winter Day Position (Insulating / No Gains)*
       - otherwise → all facades to *Winter Day Position (Insulating / No Gains)*
 
@@ -281,6 +285,8 @@ Bug fixes included in v2:
   (winter).
 - Night closing **respects manual override**: opening a cover manually in the evening is no longer
   reverted immediately.
+- **Contact opening now overrides night closing**: opening a linked door/window reopens its cover
+  even after dark, so you can step outside at night without the automation closing it back.
 
 ## Troubleshooting
 
