@@ -28,6 +28,7 @@
     "version": "git add -A src",
     "postversion": "git push && git push --tags",
     "test-connection": "ts-node scripts/test-connection.ts",
+    "find-orphan-entities": "ts-node scripts/find-orphan-entities.ts",
     "update-automations": "ts-node scripts/update-automations.ts",
     "install-blueprints": "ts-node scripts/install-blueprints.ts",
     "build": "pnpm -r build",

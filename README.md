@@ -312,6 +312,23 @@ The script will:
 
 Note: Only blueprints with names starting with "[CDA]" will be installed.
 
+### Finding Orphan Entities
+
+To list entities that are still registered in Home Assistant but should no longer
+exist (ghost entities left behind after removing a device or integration):
+
+1. Make sure you have configured your `.env` file as described above
+2. Run the script:
+  ```bash
+   pnpm run find-orphan-entities
+  ```
+  Add `-- --json` for machine-readable output (e.g. `pnpm run find-orphan-entities -- --json > orphans.json`).
+
+The script cross-references the entity registry (WebSocket API), the config
+entries, and the current states (REST API), then groups the results by
+confidence. See [docs/find-orphan-entities.md](docs/find-orphan-entities.md) for
+details. Always review the list before deleting anything.
+
 Available environment variables:
 
 - `HA_URL`: Home Assistant URL (default: [http://supervisor/core](http://supervisor/core))
