@@ -23,6 +23,13 @@ INPUT_SELECT_SEASON = "input_select.test_season_mode"
 INPUT_SELECT_HVAC = "input_select.test_hvac_active"
 
 AUTOMATION_INPUTS: dict[str, dict[str, Any]] = {
+    "alarm-response.yaml": {
+        "alarm_entity": ALARM,
+        "sirens": ["siren.test"],
+        "mobile_notify_service": "notify.mobile_app_test",
+        "telegram_chat_id": "-1001234567890",
+        "default_camera": "camera.test",
+    },
     "presence_based_lighting.yaml": {
         "presence_sensor": BINARY_SENSOR,
         "light_entity": LIGHT,

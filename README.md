@@ -14,6 +14,7 @@ A collection of custom blueprints for Home Assistant.
 
 #### Automations
 
+- [[CDA] 🚨 Alarm Response](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Falarm-response.yaml)
 - [[CDA] 🔔 Scheduled Bell Sound](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fscheduled_bell_sound.yaml)
 - [[CDA] 💡 Presence Based Lighting](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fpresence_based_lighting.yaml)
 - [[CDA] 🛋️ Living Area Adaptive Lighting](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fliving-area-adaptive-lighting.yaml)
@@ -45,6 +46,7 @@ If the quick links don't work, you can manually import the blueprints:
 #### Automations
 
 ```
+https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/alarm-response.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/scheduled_bell_sound.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/presence_based_lighting.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/living-area-adaptive-lighting.yaml
@@ -101,6 +103,13 @@ See [Cover Manager Installation Guide](packages/cover-manager/INSTALLATION.md) f
 See [Imeon Energy API Installation Guide](packages/imeon_energy_api/INSTALLATION.md) for detailed instructions.
 
 ## Available Blueprints
+
+### Alarm Response
+
+[CDA] 🚨 Alarm Response
+Reliable response when an alarm panel (e.g. Alarmo) is triggered: sirens, a critical actionable phone notification with one-tap Disarm/Silence, and a Telegram alert with a camera snapshot mapped to the triggered sensor. Optional opt-in light show and TTS hooks.
+
+[View Documentation](docs/alarm-response.md)
 
 ### Scheduled Bell Sound
 

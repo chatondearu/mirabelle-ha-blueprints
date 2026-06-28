@@ -1,0 +1,376 @@
+blueprint:
+  homeassistant:
+    min_version: 2025.5.3
+  name: "[CDA] 🚨 Alarm Response"
+  description: >
+    Reliable response when an alarm panel (e.g. Alarmo) is triggered: sound the
+    siren(s), send a critical actionable phone notification with one-tap
+    Disarm/Silence, and send a Telegram alert with a snapshot of the camera
+    that matches the triggered sensor.
+
+    Actions run in priority order with continue_on_error so a camera/Telegram
+    failure never prevents the siren or the phone notification. Optional,
+    disabled-by-default "theatrical" hooks (light show + TTS) are provided for a
+    later, fun iteration without touching the reliable core.
+  domain: automation
+  input:
+    core:
+      name: Alarm source
+      icon: mdi:shield-home
+      input:
+        alarm_entity:
+          name: Alarm Panel (source of truth)
+          description: The panel whose `triggered` state starts the response (e.g. Alarmo).
+          default: alarm_control_panel.alarmo
+          selector:
+            entity:
+              domain: alarm_control_panel
+        disarm_code:
+          name: Disarm Code (optional)
+          description: >
+            Code sent when disarming from the notification. Leave empty if the
+            panel does not require a code to disarm.
+          default: ""
+          selector:
+            text:
+              type: password
+    sirens_section:
+      name: Sirens
+      icon: mdi:bullhorn
+      input:
+        sirens:
+          name: Sirens
+          description: Siren entities to turn on when triggered and off when cleared.
+          default: []
+          selector:
+            entity:
+              domain: siren
+              multiple: true
+    mobile:
+      name: Phone notification
+      icon: mdi:cellphone-message
+      input:
+        mobile_notify_service:
+          name: Mobile Notify Service
+          description: >
+            The notify service of your phone, e.g. `notify.pixel_7_pro`. It
+            receives a critical, actionable notification with Disarm/Silence
+            buttons. Leave empty to skip.
+          default: ""
+          selector:
+            text:
+        notification_tag:
+          name: Notification Tag
+          description: Tag used to update/clear the notification (keeps a single alert).
+          default: cda_alarm_response
+          selector:
+            text:
+    telegram:
+      name: Telegram alert
+      icon: mdi:send
+      input:
+        telegram_chat_id:
+          name: Telegram Chat ID
+          description: Target chat/group id (e.g. a family group). Leave empty to skip Telegram.
+          default: ""
+          selector:
+            text:
+        telegram_message_thread_id:
+          name: Telegram Thread ID (optional)
+          description: Topic/thread id inside the group. Leave empty for the general thread.
+          default: ""
+          selector:
+            text:
+        enable_telegram_photo:
+          name: Send Camera Snapshot to Telegram
+          description: Attach a snapshot of the matching camera (best-effort).
+          default: true
+          selector:
+            boolean:
+        snapshot_path:
+          name: Snapshot File Path
+          description: >
+            Where the snapshot is saved before sending. The folder must be in
+            `allowlist_external_dirs` (e.g. `/config/www/...` or `/media/...`).
+          default: /config/www/alarm/last_trigger.jpg
+          selector:
+            text:
+    cameras:
+      name: Cameras
+      icon: mdi:cctv
+      input:
+        default_camera:
+          name: Default Camera
+          description: Camera used when no sensor mapping matches the triggered sensor.
+          default: ""
+          selector:
+            entity:
+              domain: camera
+        sensor_camera_map:
+          name: Sensor -> Camera Mapping
+          description: >
+            Map a triggering sensor to the camera that films it, e.g.
+            `binary_sensor.living_room_motion: camera.living_room`.
+          default: {}
+          selector:
+            object:
+    theatrical:
+      name: Theatrical hooks (optional, off by default)
+      icon: mdi:movie-open
+      input:
+        enable_light_show:
+          name: Enable Light Show
+          default: false
+          selector:
+            boolean:
+        light_show_targets:
+          name: Light Show Lights
+          default: {}
+          selector:
+            target:
+              entity:
+                domain: light
+        enable_tts:
+          name: Enable Voice Message (TTS)
+          default: false
+          selector:
+            boolean:
+        tts_media_players:
+          name: TTS Media Players
+          default: []
+          selector:
+            entity:
+              domain: media_player
+              multiple: true
+        tts_message:
+          name: Voice Message
+          default: "You are being recorded. The authorities have been notified."
+          selector:
+            text:
+              multiline: true
+
+mode: queued
+max: 10
+
+trigger:
+  - platform: state
+    entity_id: !input alarm_entity
+    to: triggered
+    id: alarm_triggered
+  - platform: state
+    entity_id: !input alarm_entity
+    to: disarmed
+    id: alarm_cleared
+  - platform: event
+    event_type: mobile_app_notification_action
+    id: notif_action
+
+variables:
+  alarm_entity: !input alarm_entity
+  sirens: !input sirens
+  mobile_notify_service: !input mobile_notify_service
+  notification_tag: !input notification_tag
+  telegram_chat_id: !input telegram_chat_id
+  telegram_message_thread_id: !input telegram_message_thread_id
+  enable_telegram_photo: !input enable_telegram_photo
+  snapshot_path: !input snapshot_path
+  default_camera: !input default_camera
+  sensor_camera_map: !input sensor_camera_map
+  disarm_code: !input disarm_code
+  enable_light_show: !input enable_light_show
+  enable_tts: !input enable_tts
+  tts_message: !input tts_message
+  # Sensor that caused the trigger (Alarmo exposes open_sensors as a dict).
+  triggered_sensor: >-
+    {% set opened = state_attr(alarm_entity, 'open_sensors') %}
+    {{ (opened.keys() | list | first) if opened else '' }}
+  triggered_sensor_name: >-
+    {{ state_attr(triggered_sensor, 'friendly_name') or triggered_sensor or 'unknown sensor' }}
+  target_camera: >-
+    {{ sensor_camera_map.get(triggered_sensor, default_camera) if sensor_camera_map else default_camera }}
+
+action:
+  - choose:
+      # ===================== ALARM TRIGGERED =====================
+      - conditions:
+          - condition: trigger
+            id: alarm_triggered
+        sequence:
+          # 1) Sirens first — highest priority, no dependencies.
+          - if:
+              - "{{ sirens | count > 0 }}"
+            then:
+              - service: siren.turn_on
+                continue_on_error: true
+                target:
+                  entity_id: "{{ sirens }}"
+
+          # 2) Critical, actionable phone notification (works in silent mode).
+          - if:
+              - "{{ mobile_notify_service != '' }}"
+            then:
+              - service: "{{ mobile_notify_service }}"
+                continue_on_error: true
+                data:
+                  title: "🚨 Alarm triggered"
+                  message: "Triggered by: {{ triggered_sensor_name }}"
+                  data:
+                    tag: "{{ notification_tag }}"
+                    channel: alarm
+                    importance: high
+                    priority: high
+                    ttl: 0
+                    sticky: true
+                    persistent: true
+                    color: "#f44336"
+                    push:
+                      sound:
+                        name: default
+                        critical: 1
+                        volume: 1.0
+                    actions:
+                      - action: CDA_ALARM_DISARM
+                        title: Disarm
+                      - action: CDA_ALARM_SILENCE
+                        title: Silence
+
+          # 3) Telegram text alert — guaranteed (no media dependency).
+          - if:
+              - "{{ telegram_chat_id != '' }}"
+            then:
+              - if:
+                  - "{{ telegram_message_thread_id != '' }}"
+                then:
+                  - service: telegram_bot.send_message
+                    continue_on_error: true
+                    data:
+                      target: "{{ telegram_chat_id | int }}"
+                      message_thread_id: "{{ telegram_message_thread_id | int }}"
+                      title: "🚨 Alarm triggered"
+                      message: "Triggered by: {{ triggered_sensor_name }}"
+                else:
+                  - service: telegram_bot.send_message
+                    continue_on_error: true
+                    data:
+                      target: "{{ telegram_chat_id | int }}"
+                      title: "🚨 Alarm triggered"
+                      message: "Triggered by: {{ triggered_sensor_name }}"
+
+          # 4) Camera snapshot + Telegram photo — best-effort.
+          - if:
+              - "{{ telegram_chat_id != '' and enable_telegram_photo and target_camera != '' }}"
+            then:
+              - service: camera.snapshot
+                continue_on_error: true
+                target:
+                  entity_id: "{{ target_camera }}"
+                data:
+                  filename: "{{ snapshot_path }}"
+              - delay:
+                  seconds: 1
+              - if:
+                  - "{{ telegram_message_thread_id != '' }}"
+                then:
+                  - service: telegram_bot.send_photo
+                    continue_on_error: true
+                    data:
+                      target: "{{ telegram_chat_id | int }}"
+                      message_thread_id: "{{ telegram_message_thread_id | int }}"
+                      file: "{{ snapshot_path }}"
+                      caption: "🚨 {{ triggered_sensor_name }}"
+                else:
+                  - service: telegram_bot.send_photo
+                    continue_on_error: true
+                    data:
+                      target: "{{ telegram_chat_id | int }}"
+                      file: "{{ snapshot_path }}"
+                      caption: "🚨 {{ triggered_sensor_name }}"
+
+          # 5) Optional theatrical light show (opt-in).
+          - if:
+              - "{{ enable_light_show }}"
+            then:
+              - repeat:
+                  count: 5
+                  sequence:
+                    - service: light.turn_on
+                      continue_on_error: true
+                      target: !input light_show_targets
+                      data:
+                        color_name: red
+                        brightness_pct: 100
+                    - delay:
+                        milliseconds: 500
+                    - service: light.turn_off
+                      continue_on_error: true
+                      target: !input light_show_targets
+                    - delay:
+                        milliseconds: 300
+
+          # 6) Optional voice message (opt-in).
+          - if:
+              - "{{ enable_tts }}"
+            then:
+              - service: tts.speak
+                continue_on_error: true
+                target:
+                  entity_id: tts.google_en_com
+                data:
+                  cache: true
+                  media_player_entity_id: !input tts_media_players
+                  message: "{{ tts_message }}"
+
+      # ===================== ALARM CLEARED =====================
+      - conditions:
+          - condition: trigger
+            id: alarm_cleared
+        sequence:
+          - if:
+              - "{{ sirens | count > 0 }}"
+            then:
+              - service: siren.turn_off
+                continue_on_error: true
+                target:
+                  entity_id: "{{ sirens }}"
+          # Clear the phone notification.
+          - if:
+              - "{{ mobile_notify_service != '' }}"
+            then:
+              - service: "{{ mobile_notify_service }}"
+                continue_on_error: true
+                data:
+                  message: clear_notification
+                  data:
+                    tag: "{{ notification_tag }}"
+
+      # ===================== NOTIFICATION ACTION =====================
+      - conditions:
+          - condition: trigger
+            id: notif_action
+        sequence:
+          - choose:
+              - conditions:
+                  - "{{ trigger.event.data.action == 'CDA_ALARM_DISARM' }}"
+                sequence:
+                  - if:
+                      - "{{ disarm_code != '' }}"
+                    then:
+                      - service: alarm_control_panel.alarm_disarm
+                        target:
+                          entity_id: !input alarm_entity
+                        data:
+                          code: "{{ disarm_code }}"
+                    else:
+                      - service: alarm_control_panel.alarm_disarm
+                        target:
+                          entity_id: !input alarm_entity
+              - conditions:
+                  - "{{ trigger.event.data.action == 'CDA_ALARM_SILENCE' }}"
+                sequence:
+                  - if:
+                      - "{{ sirens | count > 0 }}"
+                    then:
+                      - service: siren.turn_off
+                        continue_on_error: true
+                        target:
+                          entity_id: "{{ sirens }}"

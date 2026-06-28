@@ -18,6 +18,7 @@ THIRD_PARTY_BLUEPRINTS = {
 }
 
 EXPECTED_BLUEPRINTS = [
+    "automations/alarm-response.yaml",
     "automations/cover_control.yaml",
     "automations/cover_cover.yaml",
     "automations/cover_solar_thermal_optimization.yaml",
