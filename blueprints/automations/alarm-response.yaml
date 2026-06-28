@@ -40,12 +40,40 @@ blueprint:
       input:
         sirens:
           name: Sirens
-          description: Siren entities to turn on when triggered and off when cleared.
+          description: >
+            Siren entities to turn on when triggered and off when cleared. Each
+            siren is triggered independently, so a faulty or unavailable siren
+            can never abort the rest of the response (notifications, Telegram).
           default: []
           selector:
             entity:
               domain: siren
               multiple: true
+        siren_duration:
+          name: Siren Duration (seconds)
+          description: >
+            How long each siren should sound, in seconds. Use a value at least
+            as long as your expected response time so the siren keeps sounding
+            until you disarm (disarming turns it off early). Set 0 to use the
+            device default (some Zigbee sirens stop after a short built-in
+            warning when no duration is provided). Only applied to sirens that
+            support a duration.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 3600
+              unit_of_measurement: s
+              mode: box
+        siren_tone:
+          name: Siren Tone (optional)
+          description: >
+            Tone to play, for sirens that support tones (e.g. Frient: Burglar,
+            Fire, Emergency, Police Panic). Leave empty to use the device
+            default. Ignored by sirens that do not support tones.
+          default: ""
+          selector:
+            text:
     mobile:
       name: Phone notification
       icon: mdi:cellphone-message
@@ -169,6 +197,8 @@ trigger:
 variables:
   alarm_entity: !input alarm_entity
   sirens: !input sirens
+  siren_duration: !input siren_duration
+  siren_tone: !input siren_tone
   mobile_notify_service: !input mobile_notify_service
   # Support one or several comma-separated notify services.
   mobile_services: >-
@@ -200,14 +230,23 @@ action:
           - condition: trigger
             id: alarm_triggered
         sequence:
-          # 1) Sirens first — highest priority, no dependencies.
-          - if:
-              - "{{ sirens | count > 0 }}"
-            then:
-              - service: siren.turn_on
-                continue_on_error: true
-                target:
-                  entity_id: "{{ sirens }}"
+          # 1) Sirens first — highest priority. Each siren is triggered
+          #    independently with continue_on_error so a faulty/unavailable
+          #    siren can never abort the rest of the response (notifications).
+          - repeat:
+              for_each: "{{ sirens }}"
+              sequence:
+                - variables:
+                    siren_call_data: >-
+                      {% set d = {} %}
+                      {%- if (siren_duration | int(0)) > 0 %}{% set d = dict(d, duration=(siren_duration | int)) %}{% endif %}
+                      {%- if siren_tone %}{% set d = dict(d, tone=siren_tone) %}{% endif %}
+                      {{- d }}
+                - service: siren.turn_on
+                  continue_on_error: true
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data: "{{ siren_call_data }}"
 
           # 2) Critical, actionable phone notification (works in silent mode).
           - repeat:
@@ -329,13 +368,13 @@ action:
           - condition: trigger
             id: alarm_cleared
         sequence:
-          - if:
-              - "{{ sirens | count > 0 }}"
-            then:
-              - service: siren.turn_off
-                continue_on_error: true
-                target:
-                  entity_id: "{{ sirens }}"
+          - repeat:
+              for_each: "{{ sirens }}"
+              sequence:
+                - service: siren.turn_off
+                  continue_on_error: true
+                  target:
+                    entity_id: "{{ repeat.item }}"
           # Clear the phone notification on every configured device.
           - repeat:
               for_each: "{{ mobile_services }}"
@@ -371,10 +410,10 @@ action:
               - conditions:
                   - "{{ trigger.event.data.action == 'CDA_ALARM_SILENCE' }}"
                 sequence:
-                  - if:
-                      - "{{ sirens | count > 0 }}"
-                    then:
-                      - service: siren.turn_off
-                        continue_on_error: true
-                        target:
-                          entity_id: "{{ sirens }}"
+                  - repeat:
+                      for_each: "{{ sirens }}"
+                      sequence:
+                        - service: siren.turn_off
+                          continue_on_error: true
+                          target:
+                            entity_id: "{{ repeat.item }}"

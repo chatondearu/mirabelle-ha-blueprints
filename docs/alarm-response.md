@@ -6,7 +6,9 @@ notification** with one-tap **Disarm/Silence**, and send a **Telegram alert
 with a camera snapshot** of the room where the triggering sensor is located.
 
 Actions run in priority order and use `continue_on_error`, so a camera or
-Telegram failure never prevents the siren or the phone notification.
+Telegram failure never prevents the siren or the phone notification. Each siren
+is triggered **independently**, so a faulty or unavailable siren can never abort
+the rest of the response (notifications, Telegram).
 
 ## Why this design
 
@@ -44,7 +46,9 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 | --- | --- | --- |
 | Alarm Panel | Panel whose `triggered` state starts the response | `alarm_control_panel.alarmo` |
 | Disarm Code | Code used by the Disarm action (leave empty if none) | `""` |
-| Sirens | Siren entities turned on/off | `[]` |
+| Sirens | Siren entities turned on/off (each triggered independently) | `[]` |
+| Siren Duration (seconds) | How long each siren sounds; use a long value so it keeps sounding until disarm. `0` = device default (some Zigbee sirens stop after a short built-in warning). Applied only to sirens that support a duration. | `0` |
+| Siren Tone | Tone for sirens that support tones (e.g. Frient: `Burglar`, `Fire`, `Emergency`). Empty = device default. | `""` |
 | Mobile Notify Service(s) | One or more, comma-separated, e.g. `notify.pixel_7_pro, notify.pixel_6a` | `""` |
 | Notification Tag | Tag to update/clear the alert | `cda_alarm_response` |
 | Telegram Chat ID | Target chat/group id | `""` |
@@ -82,6 +86,8 @@ handled by the same automation via the `mobile_app_notification_action` event.
 | Symptom | Check |
 | --- | --- |
 | No siren | Confirm the `sirens` entities and that the panel really reaches `triggered`. |
+| Siren stops after a few seconds | Set **Siren Duration** to a value at least as long as your response time; some Zigbee sirens stop after a short built-in warning when no duration is sent. |
+| One siren breaks the response | Each siren now fires independently with `continue_on_error`; remove any entity that errors (e.g. a camera that does not support a siren). |
 | No phone alert | Verify the exact `notify.*` service name; test it from Developer Tools → Actions. |
 | No Telegram photo | Snapshot folder must be in `allowlist_external_dirs`; the text alert is sent regardless. |
 | Wrong camera | Add/adjust the sensor → camera mapping; set a default camera. |
@@ -89,5 +95,8 @@ handled by the same automation via the `mobile_app_notification_action` event.
 
 ## Changelog
 
+- Per-siren triggering with `continue_on_error` (a faulty siren no longer aborts
+  notifications), plus configurable **Siren Duration** and **Siren Tone** so the
+  siren sounds continuously until disarm.
 - Initial version: siren, critical actionable phone notification, Telegram text
   + best-effort snapshot, sensor → camera mapping, opt-in light show and TTS.
