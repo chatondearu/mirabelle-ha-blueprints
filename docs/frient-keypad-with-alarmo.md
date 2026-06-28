@@ -48,7 +48,7 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 | Frient Panel Disarm Code | Code sent to the Frient panel (leave empty if none) | `""` |
 | Default Code for Mirrored Alarm | Fallback code for Alarmo when the keypad sends none | `""` |
 | Enable Keypad LED/Buzzer Feedback | Push status back to the keypad (experimental) | `false` |
-| Keypad IAS ACE Endpoint | Zigbee endpoint of the IAS ACE cluster | `1` |
+| Keypad IAS ACE Endpoint | Zigbee endpoint of the IAS ACE cluster (44 on the KEPZB-110) | `44` |
 
 ### Finding the IAS ACE endpoint
 

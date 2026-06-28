@@ -91,11 +91,11 @@ blueprint:
         keypad_endpoint:
           name: Keypad IAS ACE Endpoint
           description: >
-            Zigbee endpoint of the IAS ACE cluster on the keypad. Usually 1.
-            Find it in Settings > Devices > your keypad > ZHA device info
-            (Manage Zigbee device > Clusters).
-            Endpoint Zigbee du cluster IAS ACE du clavier (généralement 1).
-          default: 1
+            Zigbee endpoint of the IAS ACE cluster on the keypad. On the
+            KEPZB-110 this is typically 44 (visible in the zha_event
+            `endpoint_id`). Adjust if your device differs.
+            Endpoint Zigbee du cluster IAS ACE du clavier (44 sur le KEPZB-110).
+          default: 44
           selector:
             number:
               min: 1
@@ -138,10 +138,11 @@ action:
             id: keypad_event
         sequence:
           # Code typed on the keypad, falling back to the configured default.
+          # ZHA exposes arm_mode/code under `params` (with `args` left empty).
           - variables:
-              keypad_arm_mode: "{{ trigger.event.data.args.arm_mode | default(-1) | int(-1) }}"
+              keypad_arm_mode: "{{ trigger.event.data.params.arm_mode | default(-1) | int(-1) }}"
               keypad_code: >-
-                {% set c = trigger.event.data.args.code | default('') %}
+                {% set c = trigger.event.data.params.code | default('') %}
                 {{ c if c != '' else mirror_default_pin }}
           - choose:
               # arm_mode 0 = disarm
