@@ -45,7 +45,7 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 | Alarm Panel | Panel whose `triggered` state starts the response | `alarm_control_panel.alarmo` |
 | Disarm Code | Code used by the Disarm action (leave empty if none) | `""` |
 | Sirens | Siren entities turned on/off | `[]` |
-| Mobile Notify Service | e.g. `notify.pixel_7_pro` | `""` |
+| Mobile Notify Service(s) | One or more, comma-separated, e.g. `notify.pixel_7_pro, notify.pixel_6a` | `""` |
 | Notification Tag | Tag to update/clear the alert | `cda_alarm_response` |
 | Telegram Chat ID | Target chat/group id | `""` |
 | Telegram Thread ID | Topic/thread id (optional) | `""` |

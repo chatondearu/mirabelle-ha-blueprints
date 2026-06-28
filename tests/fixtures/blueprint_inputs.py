@@ -26,7 +26,7 @@ AUTOMATION_INPUTS: dict[str, dict[str, Any]] = {
     "alarm-response.yaml": {
         "alarm_entity": ALARM,
         "sirens": ["siren.test"],
-        "mobile_notify_service": "notify.mobile_app_test",
+        "mobile_notify_service": "notify.mobile_app_test, notify.mobile_app_test2",
         "telegram_chat_id": "-1001234567890",
         "default_camera": "camera.test",
     },

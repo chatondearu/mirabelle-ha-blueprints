@@ -51,11 +51,12 @@ blueprint:
       icon: mdi:cellphone-message
       input:
         mobile_notify_service:
-          name: Mobile Notify Service
+          name: Mobile Notify Service(s)
           description: >
-            The notify service of your phone, e.g. `notify.pixel_7_pro`. It
-            receives a critical, actionable notification with Disarm/Silence
-            buttons. Leave empty to skip.
+            One or more phone notify services, comma-separated, e.g.
+            `notify.pixel_7_pro, notify.pixel_6a`. Each receives a critical,
+            actionable notification with Disarm/Silence buttons. Leave empty to
+            skip.
           default: ""
           selector:
             text:
@@ -169,6 +170,9 @@ variables:
   alarm_entity: !input alarm_entity
   sirens: !input sirens
   mobile_notify_service: !input mobile_notify_service
+  # Support one or several comma-separated notify services.
+  mobile_services: >-
+    {{ mobile_notify_service.split(',') | map('trim') | reject('eq', '') | list }}
   notification_tag: !input notification_tag
   telegram_chat_id: !input telegram_chat_id
   telegram_message_thread_id: !input telegram_message_thread_id
@@ -206,33 +210,33 @@ action:
                   entity_id: "{{ sirens }}"
 
           # 2) Critical, actionable phone notification (works in silent mode).
-          - if:
-              - "{{ mobile_notify_service != '' }}"
-            then:
-              - service: "{{ mobile_notify_service }}"
-                continue_on_error: true
-                data:
-                  title: "🚨 Alarm triggered"
-                  message: "Triggered by: {{ triggered_sensor_name }}"
+          - repeat:
+              for_each: "{{ mobile_services }}"
+              sequence:
+                - service: "{{ repeat.item }}"
+                  continue_on_error: true
                   data:
-                    tag: "{{ notification_tag }}"
-                    channel: alarm
-                    importance: high
-                    priority: high
-                    ttl: 0
-                    sticky: true
-                    persistent: true
-                    color: "#f44336"
-                    push:
-                      sound:
-                        name: default
-                        critical: 1
-                        volume: 1.0
-                    actions:
-                      - action: CDA_ALARM_DISARM
-                        title: Disarm
-                      - action: CDA_ALARM_SILENCE
-                        title: Silence
+                    title: "🚨 Alarm triggered"
+                    message: "Triggered by: {{ triggered_sensor_name }}"
+                    data:
+                      tag: "{{ notification_tag }}"
+                      channel: alarm
+                      importance: high
+                      priority: high
+                      ttl: 0
+                      sticky: true
+                      persistent: true
+                      color: "#f44336"
+                      push:
+                        sound:
+                          name: default
+                          critical: 1
+                          volume: 1.0
+                      actions:
+                        - action: CDA_ALARM_DISARM
+                          title: Disarm
+                        - action: CDA_ALARM_SILENCE
+                          title: Silence
 
           # 3) Telegram text alert — guaranteed (no media dependency).
           - if:
@@ -332,16 +336,16 @@ action:
                 continue_on_error: true
                 target:
                   entity_id: "{{ sirens }}"
-          # Clear the phone notification.
-          - if:
-              - "{{ mobile_notify_service != '' }}"
-            then:
-              - service: "{{ mobile_notify_service }}"
-                continue_on_error: true
-                data:
-                  message: clear_notification
+          # Clear the phone notification on every configured device.
+          - repeat:
+              for_each: "{{ mobile_services }}"
+              sequence:
+                - service: "{{ repeat.item }}"
+                  continue_on_error: true
                   data:
-                    tag: "{{ notification_tag }}"
+                    message: clear_notification
+                    data:
+                      tag: "{{ notification_tag }}"
 
       # ===================== NOTIFICATION ACTION =====================
       - conditions:
