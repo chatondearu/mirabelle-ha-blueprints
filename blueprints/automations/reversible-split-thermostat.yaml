@@ -293,6 +293,21 @@ blueprint:
               max: 6
               step: 0.5
               unit_of_measurement: "°C"
+        approach_max_delta:
+          name: Max Approach Delta
+          description: >
+            Limits how aggressively the split is driven when the room is far from
+            the target. The setpoint sent to the split will stay within this many
+            degrees of the current room temperature (below the room in cool, above
+            in heat), but never overshoot the logical target. Applied after the
+            boost offset. 0 disables.
+          default: 2
+          selector:
+            number:
+              min: 0
+              max: 6
+              step: 0.5
+              unit_of_measurement: "°C"
 
 mode: restart
 
@@ -395,6 +410,7 @@ variables:
   min_run_time: !input min_run_time
   adaptive_boost: !input adaptive_boost
   adaptive_boost_span: !input adaptive_boost_span
+  approach_max_delta: !input approach_max_delta
   mode: "{{ states(hvac_active_helper) | trim }}"
   is_heat: "{{ mode == 'heat' }}"
   is_cool: "{{ mode == 'cool' }}"
@@ -460,30 +476,6 @@ variables:
     {% else %}
       {{ target | float(0) + (boost_effective | float(0)) }}
     {% endif %}
-  drive_target: >
-    {{ [[drive_target_raw | float(0), min_temp] | max, max_temp] | min | round(1) }}
-  window_open: >
-    {{ windows | count > 0
-       and (expand(windows) | selectattr('state', 'eq', 'on') | list | count > 0) }}
-  has_outdoor: >
-    {{ outdoor_temperature | length > 0 and has_value(outdoor_temperature) }}
-  outdoor_temp: >
-    {{ states(outdoor_temperature) | float(0) if has_outdoor else 0 }}
-  outdoor_block: >
-    {% if is_heat and has_outdoor %}
-      {{ outdoor_temp >= (heat_outdoor_threshold | float(20)) }}
-    {% elif is_cool and has_outdoor %}
-      {{ outdoor_temp <= (cool_outdoor_threshold | float(18)) }}
-    {% else %}
-      {{ false }}
-    {% endif %}
-  run_elapsed: >
-    {{ (as_timestamp(now()) - as_timestamp(states[climate_entity].last_changed))
-       | int(0) if currently_active else 0 }}
-  min_run_block: >
-    {{ currently_active
-       and (min_run_time | int(0)) > 0
-       and run_elapsed < (min_run_time | int(0)) }}
   hyst: "{{ cut_hysteresis | float(0) }}"
   demand: >
     {% if not room_available %}
@@ -507,6 +499,43 @@ variables:
     {% else %}
       {{ false }}
     {% endif %}
+  drive_target_capped: >
+    {% set raw = drive_target_raw | float(0) %}
+    {% set delta = approach_max_delta | float(0) %}
+    {% set tgt = target | float(0) %}
+    {% if delta <= 0 or not room_available or not demand %}
+      {{ raw }}
+    {% elif is_cool %}
+      {{ [[raw, (room_temp | float(0)) - delta] | max, tgt] | min }}
+    {% elif is_heat %}
+      {{ [[raw, (room_temp | float(0)) + delta] | min, tgt] | max }}
+    {% else %}
+      {{ raw }}
+    {% endif %}
+  drive_target: >
+    {{ [[drive_target_capped | float(0), min_temp] | max, max_temp] | min | round(1) }}
+  window_open: >
+    {{ windows | count > 0
+       and (expand(windows) | selectattr('state', 'eq', 'on') | list | count > 0) }}
+  has_outdoor: >
+    {{ outdoor_temperature | length > 0 and has_value(outdoor_temperature) }}
+  outdoor_temp: >
+    {{ states(outdoor_temperature) | float(0) if has_outdoor else 0 }}
+  outdoor_block: >
+    {% if is_heat and has_outdoor %}
+      {{ outdoor_temp >= (heat_outdoor_threshold | float(20)) }}
+    {% elif is_cool and has_outdoor %}
+      {{ outdoor_temp <= (cool_outdoor_threshold | float(18)) }}
+    {% else %}
+      {{ false }}
+    {% endif %}
+  run_elapsed: >
+    {{ (as_timestamp(now()) - as_timestamp(states[climate_entity].last_changed))
+       | int(0) if currently_active else 0 }}
+  min_run_block: >
+    {{ currently_active
+       and (min_run_time | int(0)) > 0
+       and run_elapsed < (min_run_time | int(0)) }}
   should_idle: >
     {{ window_open
        or outdoor_block

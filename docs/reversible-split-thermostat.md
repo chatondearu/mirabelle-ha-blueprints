@@ -163,6 +163,7 @@ cool around a single threshold. Keep a wide gap between the two values.
 | Minimum Run Time | 0 s | Keep the split on at least this long after starting before stopping it on target reached (anti short-cycle). 0 disables. Window open / global Off still stop it immediately. |
 | Adaptive Boost | true | Reduce the boost as the room approaches the target (soft landing, less overshoot). |
 | Adaptive Boost Span | 2 °C | Distance from target over which the boost ramps from full to zero. |
+| Max Approach Delta | 2 °C | Limits how far the split setpoint may be from the current room temperature when conditioning (below the room in cool, above in heat). Never overshoots the logical target. Applied after boost. 0 disables. |
 
 ## How the target is computed
 
@@ -180,7 +181,9 @@ cool around a single threshold. Keep a wide gap between the two values.
    on, the setpoint is pushed beyond the target by the **Boost Offset** to force
    full-power operation (the room sensor, not the split internal sensor, decides
    when to stop). With it off, the plain target is used and the split regulates
-   itself. The setpoint is clamped to the split `min_temp` / `max_temp`.
+   itself. **Max Approach Delta** may then soften that drive when the room is far
+   from the target (see below). The setpoint is clamped to the split `min_temp` /
+   `max_temp`.
 
 ### Bang-bang control (Room Sensor Control)
 
@@ -195,6 +198,25 @@ internal sensor is unreliable (it sits inside the unit and reads the blown air):
 
 Set **Boost Offset** to 0 to keep the exact target while still cutting on the
 room sensor, or disable **Room Sensor Control** to let the split self-regulate.
+
+### Gradual approach (Max Approach Delta)
+
+When the room is far from the logical target, driving the split at
+`target ± boost` can overwork the PAC and waste energy. **Max Approach Delta**
+(default 2 °C) caps the setpoint sent to the split so it stays within that many
+degrees of the **current room temperature**, without crossing the logical target:
+
+- **Cool**: `drive = max(drive_raw, room − delta)`, capped at `target`.
+- **Heat**: `drive = min(drive_raw, room + delta)`, floored at `target`.
+
+The cap applies only when the room sensor is available and conditioning is
+active. Set to **0** to disable. As the room temperature moves toward the
+target, each automation re-run allows a lower (cool) or higher (heat) setpoint —
+a natural ramp with no extra timer.
+
+This runs **after** boost (including adaptive boost) and does not change comfort,
+eco, away, or night targets. When the room is already within `delta` of the
+target, boost behaves as before.
 
 ### Compressor protection
 
