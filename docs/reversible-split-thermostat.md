@@ -164,6 +164,7 @@ cool around a single threshold. Keep a wide gap between the two values.
 | Adaptive Boost | true | Reduce the boost as the room approaches the target (soft landing, less overshoot). |
 | Adaptive Boost Span | 2 °C | Distance from target over which the boost ramps from full to zero. |
 | Max Approach Delta | 2 °C | Limits how far the split setpoint may be from the current room temperature when conditioning (below the room in cool, above in heat). Never overshoots the logical target. Applied after boost. 0 disables. |
+| Sync Zigbee Occupied Setpoints | true | For ZHA splits (Atlantic / Fujitsu), also writes the device `occupied_*` Zigbee setpoint to match the command sent to the split. Prevents internal drift after IR remote use. Auto-skipped for non-ZHA climates. |
 
 ## How the target is computed
 
@@ -214,9 +215,25 @@ active. Set to **0** to disable. As the room temperature moves toward the
 target, each automation re-run allows a lower (cool) or higher (heat) setpoint —
 a natural ramp with no extra timer.
 
-This runs **after** boost (including adaptive boost) and does not change comfort,
-eco, away, or night targets. When the room is already within `delta` of the
-target, boost behaves as before.
+Near the target, adaptive boost and max approach delta work together. When the
+room is already within `delta` of the target, boost behaves as before.
+
+### ZHA occupied setpoint sync
+
+Atlantic / Fujitsu splits on **ZHA** store separate **occupied** cooling and
+heating setpoints on the device. They cannot be deleted, but if they drift from
+Home Assistant — for example after using the **IR remote** — the split may keep
+an old internal value.
+
+When **Sync Zigbee Occupied Setpoints** is enabled (default), each temperature
+command also writes the matching Zigbee attribute before `climate.set_temperature`:
+
+- **Cool**: attribute 17 (`occupied_cooling_setpoint`) = `drive_target`
+- **Heat**: attribute 18 (`occupied_heating_setpoint`) = `drive_target`
+
+The write is skipped automatically when the climate entity is not a ZHA device.
+Use the optional [[CDA] 🔄 Sync Zigbee Split Occupied Setpoints](sync-zigbee-split-setpoints.md)
+script only for a manual full-house resync.
 
 ### Compressor protection
 
@@ -273,6 +290,11 @@ One Season Manager plus five thermostat automations, all sharing
   heat ↔ cool transition. Disable *Apply Seasonal Defaults* to keep manual values.
 - **A split never turns on**: it may be idling because the target is reached or
   the outdoor threshold blocks it; verify the room sensor and thresholds.
+- **Split ignores automation after using the IR remote**: the device may still
+  use an old internal `occupied_*` Zigbee setpoint. Re-import the thermostat
+  blueprint ( **Sync Zigbee Occupied Setpoints** is on by default ) or run the
+  [[CDA] 🔄 Sync Zigbee Split Occupied Setpoints](sync-zigbee-split-setpoints.md)
+  script once to recover.
 - **Nothing happens at all**: make sure `input_select.climate_season_mode` is not
   `off` and that the resolved helper has the expected options.
 

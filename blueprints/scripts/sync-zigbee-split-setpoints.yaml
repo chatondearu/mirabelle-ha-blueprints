@@ -1,0 +1,164 @@
+blueprint:
+  homeassistant:
+    min_version: 2025.5.3
+  name: "[CDA] 🔄 Sync Zigbee Split Occupied Setpoints"
+  description: >
+    Atlantic / Fujitsu ZHA splits keep occupied heating and cooling setpoints on
+    the device (Zigbee Thermostat cluster). They cannot be deleted, but when
+    they drift from Home Assistant — for example after using the IR remote — the
+    split may ignore automation commands. This script overwrites those occupied
+    setpoints and re-applies the matching HA climate target.
+  domain: script
+  source_url: https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/sync-zigbee-split-setpoints.yaml
+  input:
+    climate_entities:
+      name: Split climate entities
+      description: Reversible splits to resync (ZHA / Atlantic Fujitsu adapter).
+      selector:
+        entity:
+          domain: climate
+          multiple: true
+    hvac_active_helper:
+      name: Resolved HVAC mode helper
+      description: Same input_select used by the split thermostat automations (off / heat / cool).
+      selector:
+        entity:
+          domain: input_select
+    comfort_helper:
+      name: Comfort setpoint helper
+      selector:
+        entity:
+          domain: input_number
+    eco_helper:
+      name: Eco setpoint helper
+      selector:
+        entity:
+          domain: input_number
+    use_eco:
+      name: Use eco setpoint
+      description: When off, the comfort helper is written to the device. When on, eco is used.
+      default: false
+      selector:
+        boolean: {}
+    thermostat_automations:
+      name: Thermostat automations (optional)
+      description: >
+        Optional split thermostat automations to trigger before the Zigbee write.
+        Useful to reuse the full blueprint target logic (schedules, boost, etc.).
+      default: []
+      selector:
+        entity:
+          domain: automation
+          multiple: true
+    delay_after_automation:
+      name: Delay after automation trigger
+      description: Seconds to wait after triggering thermostat automations before the Zigbee write.
+      default: 2
+      selector:
+        number:
+          min: 0
+          max: 30
+          unit_of_measurement: seconds
+
+variables:
+  climate_entities: !input climate_entities
+  hvac_active_helper: !input hvac_active_helper
+  comfort_helper: !input comfort_helper
+  eco_helper: !input eco_helper
+  use_eco: !input use_eco
+  thermostat_automations: !input thermostat_automations
+  delay_after_automation: !input delay_after_automation
+  hvac_mode: "{{ states(hvac_active_helper) | trim }}"
+  target: >
+    {{ states(eco_helper if use_eco else comfort_helper) | float(0) | round(1) }}
+  setpoint_raw: "{{ (target | float(0) * 100) | int }}"
+
+sequence:
+  - if:
+      - condition: template
+        value_template: "{{ thermostat_automations | count > 0 }}"
+    then:
+      - repeat:
+          for_each: "{{ thermostat_automations }}"
+          sequence:
+            - service: automation.trigger
+              target:
+                entity_id: "{{ repeat.item }}"
+              data:
+                skip_condition: true
+      - delay:
+          seconds: "{{ delay_after_automation | int(0) }}"
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ hvac_mode == 'cool' }}"
+        sequence:
+          - repeat:
+              for_each: "{{ climate_entities }}"
+              sequence:
+                - variables:
+                    climate_id: "{{ repeat.item }}"
+                    ieee: >-
+                      {% set dev = device_id(repeat.item) %}
+                      {% set ns = namespace(ieee='') %}
+                      {% for ident in device_attr(dev, 'identifiers') %}
+                        {% if ident[0] == 'zha' %}
+                          {% set ns.ieee = ident[1] %}
+                        {% endif %}
+                      {% endfor %}
+                      {{ ns.ieee }}
+                - condition: template
+                  value_template: "{{ ieee | length > 0 }}"
+                - service: zha.set_zigbee_cluster_attribute
+                  data:
+                    ieee: "{{ ieee }}"
+                    endpoint_id: 1
+                    cluster_id: 513
+                    cluster_type: in
+                    attribute: 17
+                    value: "{{ setpoint_raw }}"
+                - service: climate.set_temperature
+                  target:
+                    entity_id: "{{ climate_id }}"
+                  data:
+                    hvac_mode: cool
+                    temperature: "{{ target }}"
+      - conditions:
+          - condition: template
+            value_template: "{{ hvac_mode == 'heat' }}"
+        sequence:
+          - repeat:
+              for_each: "{{ climate_entities }}"
+              sequence:
+                - variables:
+                    climate_id: "{{ repeat.item }}"
+                    ieee: >-
+                      {% set dev = device_id(repeat.item) %}
+                      {% set ns = namespace(ieee='') %}
+                      {% for ident in device_attr(dev, 'identifiers') %}
+                        {% if ident[0] == 'zha' %}
+                          {% set ns.ieee = ident[1] %}
+                        {% endif %}
+                      {% endfor %}
+                      {{ ns.ieee }}
+                - condition: template
+                  value_template: "{{ ieee | length > 0 }}"
+                - service: zha.set_zigbee_cluster_attribute
+                  data:
+                    ieee: "{{ ieee }}"
+                    endpoint_id: 1
+                    cluster_id: 513
+                    cluster_type: in
+                    attribute: 18
+                    value: "{{ setpoint_raw }}"
+                - service: climate.set_temperature
+                  target:
+                    entity_id: "{{ climate_id }}"
+                  data:
+                    hvac_mode: heat
+                    temperature: "{{ target }}"
+    default:
+      - stop: "Resolved HVAC mode is off; nothing to sync."
+
+mode: parallel
+icon: mdi:sync

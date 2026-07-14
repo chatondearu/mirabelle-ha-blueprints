@@ -32,6 +32,7 @@ EXPECTED_BLUEPRINTS = [
     "scripts/create_schedule.yaml",
     "scripts/play_sound_with_volume_control.yaml",
     "scripts/set_cover_position.yaml",
+    "scripts/sync-zigbee-split-setpoints.yaml",
 ]
 
 
