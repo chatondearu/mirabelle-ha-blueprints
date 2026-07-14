@@ -68,6 +68,7 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scri
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/create_schedule.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/set_cover_position.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/create-living-area-lighting-helpers.yaml
+https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/sync-zigbee-split-setpoints.yaml
 ```
 
 ## Custom Components

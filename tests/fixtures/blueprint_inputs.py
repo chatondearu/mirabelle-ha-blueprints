@@ -143,6 +143,15 @@ SCRIPT_INPUTS: dict[str, dict[str, Any]] = {
         "hold_helper_name": "Living Area Lighting Hold",
         "package_filename": "cda_living_area_lighting_helpers.yaml",
     },
+    "sync-zigbee-split-setpoints.yaml": {
+        "climate_entities": [CLIMATE],
+        "hvac_active_helper": INPUT_SELECT_HVAC,
+        "comfort_helper": INPUT_NUMBER_COMFORT,
+        "eco_helper": INPUT_NUMBER_ECO,
+        "use_eco": False,
+        "thermostat_automations": [],
+        "delay_after_automation": 0,
+    },
 }
 
 

@@ -308,6 +308,17 @@ blueprint:
               max: 6
               step: 0.5
               unit_of_measurement: "°C"
+        sync_zigbee_occupied_setpoints:
+          name: Sync Zigbee Occupied Setpoints
+          description: >
+            For ZHA splits (e.g. Atlantic / Fujitsu adapter), also write the
+            device occupied cooling/heating setpoint when sending a temperature.
+            Keeps the internal Zigbee target aligned with the HA command and
+            avoids drift after using the IR remote. Ignored when the climate
+            entity is not a ZHA device. Disable only if this causes issues.
+          default: true
+          selector:
+            boolean: {}
 
 mode: restart
 
@@ -411,6 +422,7 @@ variables:
   adaptive_boost: !input adaptive_boost
   adaptive_boost_span: !input adaptive_boost_span
   approach_max_delta: !input approach_max_delta
+  sync_zigbee_occupied_setpoints: !input sync_zigbee_occupied_setpoints
   mode: "{{ states(hvac_active_helper) | trim }}"
   is_heat: "{{ mode == 'heat' }}"
   is_cool: "{{ mode == 'cool' }}"
@@ -546,6 +558,19 @@ variables:
        and room_available
        and room_temp <= (frost_protection_temp | float(0))
        and not window_open }}
+  zigbee_ieee: >-
+    {% set dev = device_id(climate_entity) %}
+    {% set ns = namespace(ieee='') %}
+    {% if dev %}
+      {% for ident in device_attr(dev, 'identifiers') %}
+        {% if ident[0] == 'zha' %}
+          {% set ns.ieee = ident[1] %}
+        {% endif %}
+      {% endfor %}
+    {% endif %}
+    {{ ns.ieee }}
+  zigbee_sync_enabled: >
+    {{ sync_zigbee_occupied_setpoints and zigbee_ieee | length > 0 }}
 
 action:
   - choose:
@@ -566,6 +591,19 @@ action:
               - condition: template
                 value_template: "{{ frost_active }}"
             then:
+              - if:
+                  - condition: template
+                    value_template: "{{ zigbee_sync_enabled }}"
+                then:
+                  - service: zha.set_zigbee_cluster_attribute
+                    continue_on_error: true
+                    data:
+                      ieee: "{{ zigbee_ieee }}"
+                      endpoint_id: 1
+                      cluster_id: 513
+                      cluster_type: in
+                      attribute: 18
+                      value: "{{ (frost_protection_temp | float(0) * 100) | int }}"
               - service: climate.set_temperature
                 target:
                   entity_id: !input climate_entity
@@ -579,6 +617,19 @@ action:
     # Conditioning needed: apply the global mode with the room target (boosted
     # beyond the target when room sensor control is enabled).
     default:
+      - if:
+          - condition: template
+            value_template: "{{ zigbee_sync_enabled }}"
+        then:
+          - service: zha.set_zigbee_cluster_attribute
+            continue_on_error: true
+            data:
+              ieee: "{{ zigbee_ieee }}"
+              endpoint_id: 1
+              cluster_id: 513
+              cluster_type: in
+              attribute: "{{ 17 if is_cool else 18 }}"
+              value: "{{ (drive_target | float(0) * 100) | int }}"
       - service: climate.set_temperature
         target:
           entity_id: !input climate_entity
