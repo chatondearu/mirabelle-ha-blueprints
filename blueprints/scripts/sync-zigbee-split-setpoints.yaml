@@ -109,6 +109,9 @@ sequence:
                       {{ ns.ieee }}
                 - condition: template
                   value_template: "{{ ieee | length > 0 }}"
+                # Write both occupied setpoints: Atlantic/Fujitsu adapters may
+                # re-report the stale opposite-mode value (~20°C heating leftover)
+                # over the active cooling setpoint after a short delay.
                 - service: zha.set_zigbee_cluster_attribute
                   data:
                     ieee: "{{ ieee }}"
@@ -116,6 +119,14 @@ sequence:
                     cluster_id: 513
                     cluster_type: in
                     attribute: 17
+                    value: "{{ setpoint_raw }}"
+                - service: zha.set_zigbee_cluster_attribute
+                  data:
+                    ieee: "{{ ieee }}"
+                    endpoint_id: 1
+                    cluster_id: 513
+                    cluster_type: in
+                    attribute: 18
                     value: "{{ setpoint_raw }}"
                 - service: climate.set_temperature
                   target:
@@ -143,6 +154,14 @@ sequence:
                       {{ ns.ieee }}
                 - condition: template
                   value_template: "{{ ieee | length > 0 }}"
+                - service: zha.set_zigbee_cluster_attribute
+                  data:
+                    ieee: "{{ ieee }}"
+                    endpoint_id: 1
+                    cluster_id: 513
+                    cluster_type: in
+                    attribute: 17
+                    value: "{{ setpoint_raw }}"
                 - service: zha.set_zigbee_cluster_attribute
                   data:
                     ieee: "{{ ieee }}"

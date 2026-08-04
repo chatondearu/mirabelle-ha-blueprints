@@ -423,12 +423,13 @@ variables:
   adaptive_boost_span: !input adaptive_boost_span
   approach_max_delta: !input approach_max_delta
   sync_zigbee_occupied_setpoints: !input sync_zigbee_occupied_setpoints
+  # Keep mode as the only cross-variable flag. Do NOT store is_heat/is_cool as
+  # separate rendered variables: HA stringifies them to "True"/"False", and the
+  # non-empty string "False" is truthy in Jinja `{% if is_cool %}` tests.
   mode: "{{ states(hvac_active_helper) | trim }}"
-  is_heat: "{{ mode == 'heat' }}"
-  is_cool: "{{ mode == 'cool' }}"
   room_available: "{{ has_value(room_temperature_sensor) }}"
   room_temp: >
-    {{ states(room_temperature_sensor) | float(0) if room_available else 0 }}
+    {{ states(room_temperature_sensor) | float(0) if has_value(room_temperature_sensor) else 0 }}
   comfort: "{{ states(comfort_helper) | float(20) }}"
   eco: "{{ states(eco_helper) | float(17) }}"
   comfort_active: >
@@ -439,23 +440,41 @@ variables:
        and (expand(persons) | selectattr('state', 'eq', 'home') | list | count > 0) }}
   vacation_on: >
     {{ vacation_boolean | length > 0 and is_state(vacation_boolean, 'on') }}
-  away: "{{ (persons | count > 0 and not someone_home) or vacation_on }}"
+  away: >
+    {{ (persons | count > 0
+        and not (expand(persons) | selectattr('state', 'eq', 'home') | list | count > 0))
+       or (vacation_boolean | length > 0 and is_state(vacation_boolean, 'on')) }}
   night_schedule_on: >
     {{ night_schedule | count > 0
        and (expand(night_schedule) | selectattr('state', 'eq', 'on') | list | count > 0) }}
   night_helper_set: >
     {{ night_setpoint_helper | length > 0 and has_value(night_setpoint_helper) }}
   night_value: >
-    {{ states(night_setpoint_helper) | float(0) if night_helper_set
+    {{ states(night_setpoint_helper) | float(0)
+       if (night_setpoint_helper | length > 0 and has_value(night_setpoint_helper))
        else (night_setpoint | float(0)) }}
   night_active: >
-    {{ night_schedule_on
-       and (night_helper_set or (night_setpoint | float(0)) > 0) }}
+    {{ night_schedule | count > 0
+       and (expand(night_schedule) | selectattr('state', 'eq', 'on') | list | count > 0)
+       and ((night_setpoint_helper | length > 0 and has_value(night_setpoint_helper))
+            or (night_setpoint | float(0)) > 0) }}
   base_target: >
-    {{ night_value if night_active else (comfort if comfort_active else eco) }}
+    {% set night_on = night_schedule | count > 0
+       and (expand(night_schedule) | selectattr('state', 'eq', 'on') | list | count > 0)
+       and ((night_setpoint_helper | length > 0 and has_value(night_setpoint_helper))
+            or (night_setpoint | float(0)) > 0) %}
+    {% set night_val = states(night_setpoint_helper) | float(0)
+       if (night_setpoint_helper | length > 0 and has_value(night_setpoint_helper))
+       else (night_setpoint | float(0)) %}
+    {% set comfort_on = schedulers | count == 0
+       or (expand(schedulers) | selectattr('state', 'eq', 'on') | list | count > 0) %}
+    {{ night_val if night_on else (comfort if comfort_on else eco) }}
   target_raw: >
-    {% set offset = away_offset | float(0) if away else 0 %}
-    {% if is_cool %}
+    {% set is_away = (persons | count > 0
+        and not (expand(persons) | selectattr('state', 'eq', 'home') | list | count > 0))
+       or (vacation_boolean | length > 0 and is_state(vacation_boolean, 'on')) %}
+    {% set offset = away_offset | float(0) if is_away else 0 %}
+    {% if mode == 'cool' %}
       {{ base_target | float(0) + offset }}
     {% else %}
       {{ base_target | float(0) - offset }}
@@ -463,101 +482,136 @@ variables:
   min_temp: "{{ state_attr(climate_entity, 'min_temp') | float(7) }}"
   max_temp: "{{ state_attr(climate_entity, 'max_temp') | float(35) }}"
   target: >
-    {{ [[target_raw | float(0), min_temp] | max, max_temp] | min | round(1) }}
+    {{ [[target_raw | float(0), min_temp | float(7)] | max, max_temp | float(35)] | min | round(1) }}
   currently_active: >
     {{ states(climate_entity) not in ['off', 'unknown', 'unavailable'] }}
   boost_effective: >
     {% set b = boost_offset | float(0) %}
+    {% set room_ok = has_value(room_temperature_sensor) %}
     {% if not room_sensor_control or b <= 0 %}
       0
-    {% elif not adaptive_boost or not room_available %}
+    {% elif not adaptive_boost or not room_ok %}
       {{ b }}
     {% else %}
       {% set span = [adaptive_boost_span | float(0), 0.1] | max %}
-      {% if is_cool %}
-        {% set error = room_temp - (target | float(0)) %}
-      {% else %}
-        {% set error = (target | float(0)) - room_temp %}
-      {% endif %}
+      {% set error = ((room_temp | float(0)) - (target | float(0)))
+         if mode == 'cool'
+         else ((target | float(0)) - (room_temp | float(0))) %}
       {% set ratio = [[error / span, 1] | min, 0] | max %}
       {{ (b * ratio) | round(2) }}
     {% endif %}
   drive_target_raw: >
-    {% if is_cool %}
+    {% if mode == 'cool' %}
       {{ target | float(0) - (boost_effective | float(0)) }}
     {% else %}
       {{ target | float(0) + (boost_effective | float(0)) }}
     {% endif %}
   hyst: "{{ cut_hysteresis | float(0) }}"
+  # demand is only for traces/debug; should_idle recomputes it natively below.
   demand: >
-    {% if not room_available %}
-      {{ true }}
-    {% elif is_heat %}
-      {% if room_temp <= (target | float(0)) - hyst %}
-        {{ true }}
-      {% elif room_temp >= (target | float(0)) %}
-        {{ false }}
-      {% else %}
-        {{ currently_active }}
-      {% endif %}
-    {% elif is_cool %}
-      {% if room_temp >= (target | float(0)) + hyst %}
-        {{ true }}
-      {% elif room_temp <= (target | float(0)) %}
-        {{ false }}
-      {% else %}
-        {{ currently_active }}
-      {% endif %}
+    {% set room_ok = has_value(room_temperature_sensor) %}
+    {% set active = states(climate_entity) not in ['off', 'unknown', 'unavailable'] %}
+    {% set h = cut_hysteresis | float(0) %}
+    {% set tgt = target | float(0) %}
+    {% set rt = room_temp | float(0) %}
+    {% if not room_ok %}
+      true
+    {% elif mode == 'heat' %}
+      {% if rt <= tgt - h %}true{% elif rt >= tgt %}false{% else %}{{ active }}{% endif %}
+    {% elif mode == 'cool' %}
+      {% if rt >= tgt + h %}true{% elif rt <= tgt %}false{% else %}{{ active }}{% endif %}
     {% else %}
-      {{ false }}
+      false
     {% endif %}
   drive_target_capped: >
     {% set raw = drive_target_raw | float(0) %}
     {% set delta = approach_max_delta | float(0) %}
     {% set tgt = target | float(0) %}
-    {% if delta <= 0 or not room_available or not demand %}
+    {% set room_ok = has_value(room_temperature_sensor) %}
+    {% set active = states(climate_entity) not in ['off', 'unknown', 'unavailable'] %}
+    {% set h = cut_hysteresis | float(0) %}
+    {% set rt = room_temp | float(0) %}
+    {% set ns = namespace(needs=false) %}
+    {% if not room_ok %}
+      {% set ns.needs = true %}
+    {% elif mode == 'heat' %}
+      {% set ns.needs = true if rt <= tgt - h else (false if rt >= tgt else active) %}
+    {% elif mode == 'cool' %}
+      {% set ns.needs = true if rt >= tgt + h else (false if rt <= tgt else active) %}
+    {% endif %}
+    {% if delta <= 0 or not room_ok or not ns.needs %}
       {{ raw }}
-    {% elif is_cool %}
-      {{ [[raw, (room_temp | float(0)) - delta] | max, tgt] | min }}
-    {% elif is_heat %}
-      {{ [[raw, (room_temp | float(0)) + delta] | min, tgt] | max }}
+    {% elif mode == 'cool' %}
+      {{ [[raw, rt - delta] | max, tgt] | min }}
+    {% elif mode == 'heat' %}
+      {{ [[raw, rt + delta] | min, tgt] | max }}
     {% else %}
       {{ raw }}
     {% endif %}
   drive_target: >
-    {{ [[drive_target_capped | float(0), min_temp] | max, max_temp] | min | round(1) }}
+    {{ [[drive_target_capped | float(0), min_temp | float(7)] | max, max_temp | float(35)] | min | round(1) }}
   window_open: >
     {{ windows | count > 0
        and (expand(windows) | selectattr('state', 'eq', 'on') | list | count > 0) }}
   has_outdoor: >
     {{ outdoor_temperature | length > 0 and has_value(outdoor_temperature) }}
   outdoor_temp: >
-    {{ states(outdoor_temperature) | float(0) if has_outdoor else 0 }}
+    {{ states(outdoor_temperature) | float(0)
+       if (outdoor_temperature | length > 0 and has_value(outdoor_temperature))
+       else 0 }}
   outdoor_block: >
-    {% if is_heat and has_outdoor %}
-      {{ outdoor_temp >= (heat_outdoor_threshold | float(20)) }}
-    {% elif is_cool and has_outdoor %}
-      {{ outdoor_temp <= (cool_outdoor_threshold | float(18)) }}
+    {% set has_out = outdoor_temperature | length > 0 and has_value(outdoor_temperature) %}
+    {% set out_t = states(outdoor_temperature) | float(0) if has_out else 0 %}
+    {% if mode == 'heat' and has_out %}
+      {{ out_t >= (heat_outdoor_threshold | float(20)) }}
+    {% elif mode == 'cool' and has_out %}
+      {{ out_t <= (cool_outdoor_threshold | float(18)) }}
     {% else %}
-      {{ false }}
+      false
     {% endif %}
   run_elapsed: >
+    {% set active = states(climate_entity) not in ['off', 'unknown', 'unavailable'] %}
     {{ (as_timestamp(now()) - as_timestamp(states[climate_entity].last_changed))
-       | int(0) if currently_active else 0 }}
+       | int(0) if active else 0 }}
   min_run_block: >
-    {{ currently_active
+    {% set active = states(climate_entity) not in ['off', 'unknown', 'unavailable'] %}
+    {{ active
        and (min_run_time | int(0)) > 0
-       and run_elapsed < (min_run_time | int(0)) }}
+       and ((as_timestamp(now()) - as_timestamp(states[climate_entity].last_changed)) | int(0))
+          < (min_run_time | int(0)) }}
   should_idle: >
-    {{ window_open
-       or outdoor_block
-       or (room_sensor_control and not demand and not min_run_block) }}
+    {% set win_open = windows | count > 0
+       and (expand(windows) | selectattr('state', 'eq', 'on') | list | count > 0) %}
+    {% set has_out = outdoor_temperature | length > 0 and has_value(outdoor_temperature) %}
+    {% set out_t = states(outdoor_temperature) | float(0) if has_out else 0 %}
+    {% set out_block = (mode == 'heat' and has_out and out_t >= (heat_outdoor_threshold | float(20)))
+       or (mode == 'cool' and has_out and out_t <= (cool_outdoor_threshold | float(18))) %}
+    {% set room_ok = has_value(room_temperature_sensor) %}
+    {% set active = states(climate_entity) not in ['off', 'unknown', 'unavailable'] %}
+    {% set h = cut_hysteresis | float(0) %}
+    {% set tgt = target | float(0) %}
+    {% set rt = room_temp | float(0) %}
+    {% set ns = namespace(needs=false) %}
+    {% if not room_ok %}
+      {% set ns.needs = true %}
+    {% elif mode == 'heat' %}
+      {% set ns.needs = true if rt <= tgt - h else (false if rt >= tgt else active) %}
+    {% elif mode == 'cool' %}
+      {% set ns.needs = true if rt >= tgt + h else (false if rt <= tgt else active) %}
+    {% endif %}
+    {% set min_block = active
+       and (min_run_time | int(0)) > 0
+       and ((as_timestamp(now()) - as_timestamp(states[climate_entity].last_changed)) | int(0))
+          < (min_run_time | int(0)) %}
+    {{ win_open or out_block or (room_sensor_control and not ns.needs and not min_block) }}
   frost_active: >
-    {{ is_heat
+    {% set win_open = windows | count > 0
+       and (expand(windows) | selectattr('state', 'eq', 'on') | list | count > 0) %}
+    {{ mode == 'heat'
        and (frost_protection_temp | float(0)) > 0
-       and room_available
-       and room_temp <= (frost_protection_temp | float(0))
-       and not window_open }}
+       and has_value(room_temperature_sensor)
+       and (room_temp | float(0)) <= (frost_protection_temp | float(0))
+       and not win_open }}
   zigbee_ieee: >-
     {% set dev = device_id(climate_entity) %}
     {% set ns = namespace(ieee='') %}
@@ -570,7 +624,8 @@ variables:
     {% endif %}
     {{ ns.ieee }}
   zigbee_sync_enabled: >
-    {{ sync_zigbee_occupied_setpoints and zigbee_ieee | length > 0 }}
+    {{ sync_zigbee_occupied_setpoints and (zigbee_ieee | length > 0) }}
+  zigbee_setpoint_raw: "{{ (drive_target | float(0) * 100) | int }}"
 
 action:
   - choose:
@@ -585,16 +640,25 @@ action:
       # Conditioning not needed for this room: idle the split.
       - conditions:
           - condition: template
-            value_template: "{{ should_idle }}"
+            # Compare as string: rendered automation vars are always strings.
+            value_template: "{{ should_idle in [true, 'True', True] }}"
         sequence:
           - if:
               - condition: template
-                value_template: "{{ frost_active }}"
+                value_template: "{{ frost_active in [true, 'True', True] }}"
             then:
+              - service: climate.set_temperature
+                target:
+                  entity_id: !input climate_entity
+                data:
+                  hvac_mode: heat
+                  temperature: !input frost_protection_temp
               - if:
                   - condition: template
-                    value_template: "{{ zigbee_sync_enabled }}"
+                    value_template: "{{ zigbee_sync_enabled in [true, 'True', True] }}"
                 then:
+                  # Keep both occupied setpoints aligned; Atlantic/Fujitsu units
+                  # may re-report the stale opposite-mode value after ~30s.
                   - service: zha.set_zigbee_cluster_attribute
                     continue_on_error: true
                     data:
@@ -604,12 +668,15 @@ action:
                       cluster_type: in
                       attribute: 18
                       value: "{{ (frost_protection_temp | float(0) * 100) | int }}"
-              - service: climate.set_temperature
-                target:
-                  entity_id: !input climate_entity
-                data:
-                  hvac_mode: heat
-                  temperature: !input frost_protection_temp
+                  - service: zha.set_zigbee_cluster_attribute
+                    continue_on_error: true
+                    data:
+                      ieee: "{{ zigbee_ieee }}"
+                      endpoint_id: 1
+                      cluster_id: 513
+                      cluster_type: in
+                      attribute: 17
+                      value: "{{ (frost_protection_temp | float(0) * 100) | int }}"
             else:
               - service: climate.turn_off
                 target:
@@ -617,10 +684,18 @@ action:
     # Conditioning needed: apply the global mode with the room target (boosted
     # beyond the target when room sensor control is enabled).
     default:
+      - service: climate.set_temperature
+        target:
+          entity_id: !input climate_entity
+        data:
+          hvac_mode: "{{ mode }}"
+          temperature: "{{ drive_target }}"
       - if:
           - condition: template
-            value_template: "{{ zigbee_sync_enabled }}"
+            value_template: "{{ zigbee_sync_enabled in [true, 'True', True] }}"
         then:
+          # Write BOTH occupied setpoints. These adapters keep a leftover heating
+          # setpoint (often 20°C) that otherwise overwrites cooling ~30s later.
           - service: zha.set_zigbee_cluster_attribute
             continue_on_error: true
             data:
@@ -628,11 +703,14 @@ action:
               endpoint_id: 1
               cluster_id: 513
               cluster_type: in
-              attribute: "{{ 17 if is_cool else 18 }}"
-              value: "{{ (drive_target | float(0) * 100) | int }}"
-      - service: climate.set_temperature
-        target:
-          entity_id: !input climate_entity
-        data:
-          hvac_mode: "{{ mode }}"
-          temperature: "{{ drive_target }}"
+              attribute: 17
+              value: "{{ zigbee_setpoint_raw }}"
+          - service: zha.set_zigbee_cluster_attribute
+            continue_on_error: true
+            data:
+              ieee: "{{ zigbee_ieee }}"
+              endpoint_id: 1
+              cluster_id: 513
+              cluster_type: in
+              attribute: 18
+              value: "{{ zigbee_setpoint_raw }}"

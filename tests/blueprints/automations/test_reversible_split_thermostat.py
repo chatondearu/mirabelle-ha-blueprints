@@ -197,3 +197,94 @@ async def test_approach_max_delta_allows_boost_when_room_is_near_target(
 
     assert len(climate_calls) == 1
     assert climate_calls[0].data["temperature"] == 23
+
+
+@pytest.mark.behavior
+async def test_cool_idles_when_room_at_or_below_target(
+    hass_with_entities: HomeAssistant,
+) -> None:
+    """With room sensor control, cool mode turns off once the room reached target."""
+    hass = hass_with_entities
+    seed_entities(
+        hass,
+        {
+            INPUT_SELECT_HVAC: ("cool", {"options": ["off", "heat", "cool"]}),
+            INPUT_NUMBER_COMFORT: ("26", {}),
+            INPUT_NUMBER_ECO: ("28", {}),
+            ROOM_TEMPERATURE: ("26.0", {}),
+            CLIMATE: (
+                "cool",
+                {
+                    "hvac_modes": ["off", "heat", "cool"],
+                    "min_temp": 16,
+                    "max_temp": 30,
+                    "temperature": 20,
+                },
+            ),
+        },
+    )
+    climate_set = async_mock_service(hass, "climate", "set_temperature")
+    climate_off = async_mock_service(hass, "climate", "turn_off")
+
+    automation_entity = await _load_split(
+        hass,
+        input_overrides={
+            "boost_offset": 1,
+            "approach_max_delta": 1,
+            "adaptive_boost": True,
+            "room_sensor_control": True,
+        },
+    )
+
+    await hass.services.async_call(
+        "automation",
+        "trigger",
+        {"entity_id": automation_entity, "skip_condition": True},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert len(climate_set) == 0
+    assert len(climate_off) == 1
+
+
+@pytest.mark.behavior
+async def test_cool_drives_when_room_above_target_plus_hysteresis(
+    hass_with_entities: HomeAssistant,
+) -> None:
+    """Cool mode must keep driving when the room is clearly above target."""
+    hass = hass_with_entities
+    seed_entities(
+        hass,
+        {
+            INPUT_SELECT_HVAC: ("cool", {"options": ["off", "heat", "cool"]}),
+            INPUT_NUMBER_COMFORT: ("26", {}),
+            ROOM_TEMPERATURE: ("26.8", {}),
+            CLIMATE: ("off", {"hvac_modes": ["off", "heat", "cool"], "min_temp": 16, "max_temp": 30}),
+        },
+    )
+    climate_calls = async_mock_service(hass, "climate", "set_temperature")
+
+    automation_entity = await _load_split(
+        hass,
+        input_overrides={
+            "boost_offset": 1,
+            "approach_max_delta": 1,
+            "adaptive_boost": False,
+            "cut_hysteresis": 0.3,
+            "room_sensor_control": True,
+        },
+    )
+
+    await hass.services.async_call(
+        "automation",
+        "trigger",
+        {"entity_id": automation_entity, "skip_condition": True},
+        blocking=True,
+    )
+    await hass.async_block_till_done()
+
+    assert len(climate_calls) == 1
+    assert climate_calls[0].data["hvac_mode"] == "cool"
+    # raw drive 25, approach max(25, 25.8)=25.8, min with target 26 → 25.8
+    assert climate_calls[0].data["temperature"] == 25.8

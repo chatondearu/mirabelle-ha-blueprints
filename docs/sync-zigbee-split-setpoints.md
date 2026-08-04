@@ -15,9 +15,10 @@ These values are **mandatory on the device**. They **cannot be deleted**, only o
 
 When they drift from Home Assistant — for example after changing the temperature with the **IR remote** — the split may keep using the old internal value (e.g. 23 °C) even though your CDA thermostat automation sends 24.8 °C.
 
-This script **resets** them by writing the comfort or eco helper to both:
+This script **resets** them by writing the comfort or eco helper to:
 
-1. the Zigbee `occupied_*` attribute (`zha.set_zigbee_cluster_attribute`)
+1. **both** Zigbee occupied attributes 17 and 18 (so a leftover heating value
+   such as 20 °C cannot overwrite cooling ~30 s later)
 2. the HA `climate.set_temperature` service
 
 ## Installation
@@ -66,7 +67,9 @@ or when migrating several splits at once.
 ## Troubleshooting
 
 - **Service fails / device asleep:** wake the split (remote or HA command), then rerun the script.
-- **Attribute write succeeds but value reverts:** check for another automation or remote use rewriting the device.
+- **Attribute write succeeds but value reverts to ~20 °C:** the device is re-reporting
+  a stale `occupied_heating_setpoint`. Re-run this script (it now writes cooling and
+  heating together) and re-import the thermostat blueprint.
 - **Non-ZHA splits:** this script only works for devices with a `zha` device identifier.
 
 Verify after running:
