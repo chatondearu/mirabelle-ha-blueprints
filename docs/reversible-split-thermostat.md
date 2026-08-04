@@ -226,10 +226,17 @@ Home Assistant — for example after using the **IR remote** — the split may k
 an old internal value.
 
 When **Sync Zigbee Occupied Setpoints** is enabled (default), each temperature
-command also writes the matching Zigbee attribute before `climate.set_temperature`:
+command also writes **both** Zigbee occupied attributes after
+`climate.set_temperature`:
 
-- **Cool**: attribute 17 (`occupied_cooling_setpoint`) = `drive_target`
-- **Heat**: attribute 18 (`occupied_heating_setpoint`) = `drive_target`
+- Attribute 17 (`occupied_cooling_setpoint`) = `drive_target`
+- Attribute 18 (`occupied_heating_setpoint`) = `drive_target`
+
+Both are written on purpose: Atlantic / Fujitsu adapters often keep a leftover
+heating setpoint (commonly 20 °C). If only the active-mode attribute is updated,
+the device can re-report that stale value ~30 seconds later and overwrite the
+cooling command — the split then blasts toward 20 °C while the comfort helper
+still shows 26 °C.
 
 The write is skipped automatically when the climate entity is not a ZHA device.
 Use the optional [[CDA] 🔄 Sync Zigbee Split Occupied Setpoints](sync-zigbee-split-setpoints.md)
@@ -295,6 +302,12 @@ One Season Manager plus five thermostat automations, all sharing
   blueprint ( **Sync Zigbee Occupied Setpoints** is on by default ) or run the
   [[CDA] 🔄 Sync Zigbee Split Occupied Setpoints](sync-zigbee-split-setpoints.md)
   script once to recover.
+- **Cooling setpoint jumps to ~20 °C while comfort is 26 °C**: check
+  `occupied_heating_setpoint` on the climate entity. On these adapters a stale
+  heating value (often 20 °C / 2000) can overwrite cooling after ~30 s. Re-import
+  the blueprint so both occupied setpoints are written together, then run the
+  sync script once. Also confirm Room Sensor Control can idle the split when the
+  room sensor has reached the target (otherwise it keeps driving).
 - **Nothing happens at all**: make sure `input_select.climate_season_mode` is not
   `off` and that the resolved helper has the expected options.
 
