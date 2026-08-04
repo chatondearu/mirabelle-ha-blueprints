@@ -104,17 +104,34 @@ blueprint:
           name: Persons At Home
           description: >
             Select one or more person entities.
-            The automation runs when at least one selected person is home.
+            The automation runs when at least one selected person is present
+            (see Presence Zones below).
           default: []
           selector:
             entity:
               filter:
                 - domain: person
               multiple: true
+        presence_zones:
+          name: Presence Zones (Optional)
+          description: >
+            Optional Home Assistant zones used to decide whether someone is
+            present. When set, a selected person counts as present while their
+            state matches any selected zone (for example home and lotissement).
+            Leave empty to keep the legacy behavior: present only when a person
+            state is home.
+          default: []
+          selector:
+            entity:
+              filter:
+                - domain: zone
+              multiple: true
         close_when_away:
           name: Close Covers When Away
           description: >
-            If enabled, all managed covers are closed when nobody is home.
+            If enabled, all managed covers are closed when nobody is present
+            in the configured presence zones (or away from home when no zones
+            are configured).
           default: true
           selector:
             boolean: {}
@@ -558,6 +575,7 @@ variables:
   south_facade_azimuth_input: !input south_facade_azimuth
   facade_exposure_half_angle_input: !input facade_exposure_half_angle
   presence_person_entities: !input presence_persons
+  presence_zone_entities: !input presence_zones
   close_when_away: !input close_when_away
   awake_entity_input: !input awake_entity
   awake_schedule_input: !input awake_schedule
@@ -620,13 +638,27 @@ variables:
     }}
 
   # --- Presence and awake state ---
+  # Person state matches a zone object_id (e.g. zone.lotissement -> lotissement).
+  presence_zone_slugs: >
+    {{ presence_zone_entities | map('regex_replace', '^zone\\.', '') | list }}
+  has_presence_zones: "{{ presence_zone_entities | count > 0 }}"
   is_home: >
-    {{
-      expand(presence_person_entities)
-      | selectattr('state', 'eq', 'home')
-      | list
-      | count > 0
-    }}
+    {% set persons = expand(presence_person_entities) | list %}
+    {% if has_presence_zones %}
+      {{
+        persons
+        | selectattr('state', 'in', presence_zone_slugs)
+        | list
+        | count > 0
+      }}
+    {% else %}
+      {{
+        persons
+        | selectattr('state', 'eq', 'home')
+        | list
+        | count > 0
+      }}
+    {% endif %}
   is_daylight: "{{ is_state('sun.sun', 'above_horizon') }}"
   is_night: "{{ not is_daylight }}"
   is_awake: >
@@ -721,22 +753,6 @@ variables:
         )
         or
         (has_indoor_temperature and indoor_stable and indoor_temp_value >= (indoor_hot_temp + temperature_hysteresis))
-      )
-    }}
-  summer_cool_enough: >
-    {{
-      is_summer
-      and is_daylight
-      and (
-        (
-          (not has_outdoor_temperature and not has_weather_entity)
-          or temp_value <= (summer_close_temp - temperature_hysteresis)
-        )
-        and
-        (
-          (not has_indoor_temperature)
-          or indoor_temp_value <= (indoor_hot_temp - temperature_hysteresis)
-        )
       )
     }}
   winter_need_solar_gain: >
@@ -881,15 +897,21 @@ variables:
             {% else %}
               {% set target = neutral_position %}
             {% endif %}
-          {% elif summer_cool_enough %}
-            {% set target = neutral_position %}
           {% else %}
-            {% set target = none %}
+            {# Comfort band: below the close threshold (including the hysteresis
+               deadband). Open every facade fully so covers closed from night still
+               open, and non-sun facades stay open while the sun-facing side is
+               not hot enough to need shading. #}
+            {% set target = neutral_position %}
           {% endif %}
         {% else %}
-          {# Winter: open only the sun-facing facade for gains, insulate the rest. #}
-          {% if winter_need_solar_gain and cid in active_sun_facing_cover_ids %}
-            {% set target = winter_day_gain_position %}
+          {# Winter: follow the sun on the exposed facade; insulate the rest. #}
+          {% if cid in active_sun_facing_cover_ids %}
+            {% if winter_need_solar_gain %}
+              {% set target = winter_day_gain_position %}
+            {% else %}
+              {% set target = neutral_position %}
+            {% endif %}
           {% else %}
             {% set target = winter_day_hold_position %}
           {% endif %}

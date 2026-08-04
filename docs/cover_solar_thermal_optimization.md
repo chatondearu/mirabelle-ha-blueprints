@@ -71,8 +71,13 @@ Inputs are grouped into collapsible sections in the UI.
 
 ### Presence & Awake
 
-- **Persons At Home**: select one or more persons; automation runs if at least one is `home`
-- **Close Covers When Away**: if enabled, all managed covers close when nobody is home
+- **Persons At Home**: select one or more persons; the automation runs if at least one is present
+- **Presence Zones (Optional)**: when set, a person counts as present while their state matches
+  any selected zone (for example `Home` and your lotissement zone). Person states follow zone
+  object ids (`zone.lotissement` → state `lotissement`, `zone.home` → state `home`). Leave empty
+  to keep the legacy behavior (present only when state is `home`).
+- **Close Covers When Away**: if enabled, all managed covers close when nobody is present in the
+  configured zones (or away from home when no zones are configured)
 - **Awake Entity (Optional)**: primary awake source when set (`on`/`home` = awake)
 - **Awake Schedule (Optional)**: used when Awake Entity is empty (`on` = awake)
 - If both are empty, daylight is used (`sun.sun` above horizon)
@@ -195,11 +200,10 @@ applies each target through one loop (a cover absent from the target map is left
    1. not awake → no movement
    2. **summer + daylight** (follows the sun):
       - hot (`threshold + buffer`) → the sun-facing facade goes to *Summer Position (Sun-Facing Facade)*; every other facade goes to *Neutral Position* (stays open)
-      - cool enough (`threshold - buffer`) → all facades to *Neutral Position*
-      - in between → **hold** (no movement)
+      - not hot (comfort band, including the hysteresis deadband below the close threshold) → all facades to *Neutral Position* (fully open). Covers closed from night therefore open as soon as it is daylight and not hot enough to shade.
    3. **winter + daylight** (follows the sun):
       - solar gain needed (`threshold - buffer`) → the sun-facing facade goes to *Winter Day Position (Solar Gains)*; every other facade goes to *Winter Day Position (Insulating / No Gains)*
-      - otherwise → all facades to *Winter Day Position (Insulating / No Gains)*
+      - otherwise (comfort band above the cold threshold) → the sun-facing facade goes to *Neutral Position* (fully open); every other facade stays at *Winter Day Position (Insulating / No Gains)*
 
 Only the facade currently exposed to the sun is shaded (summer) or opened for gains (winter);
 the other facades are never closed against the heat nor left losing heat in winter. When **no
@@ -210,8 +214,8 @@ back to applying the sun-facing behavior to **all** managed covers.
 
 Version 2 removes the external priority/latch helpers. Stability is achieved with:
 
-- **Hysteresis**: summer hot uses `threshold + buffer`, release/gain checks use `threshold - buffer`
-- **Hold band**: in the summer deadband, covers keep their current position (no helper needed)
+- **Hysteresis**: summer hot uses `threshold + buffer`; shading stops as soon as the temperature drops below that level (covers reopen fully in the comfort band)
+- **Comfort band**: when it is not hot enough to shade, every facade opens to *Neutral Position* instead of holding the previous position (fixes covers that stayed closed after night)
 - **No-op guard**: a cover is never commanded if it is already at its target
 - **Minimum Position Delta** and **Minimum Action Interval** for comfort moves
 - **Sensor Stability Window**: noisy sensor values are used only once stable
@@ -287,11 +291,16 @@ Bug fixes included in v2:
   reverted immediately.
 - **Contact opening now overrides night closing**: opening a linked door/window reopens its cover
   even after dark, so you can step outside at night without the automation closing it back.
+- **Comfort band opens covers**: between the cold and hot thresholds, covers no longer stay
+  frozen at their previous position. In summer every facade opens fully when it is not hot
+  enough to shade; in winter the sun-facing facade opens fully even when solar gains are not
+  needed.
 
 ## Troubleshooting
 
 - **No movement**:
-  - check selected persons (at least one must be `home`)
+  - check selected persons (at least one must be present in the configured zones, or `home` when no zones are set)
+  - check **Presence Zones**: include every zone where you still want covers to stay open (e.g. home + lotissement)
   - check `Close Covers When Away` option for away behavior
   - if Awake Entity is set, check awake state (`on` or `home`); if Awake Schedule is set, check `on`; otherwise behavior follows daylight
   - verify optional sensor availability (outdoor/weather, indoor, wind)
