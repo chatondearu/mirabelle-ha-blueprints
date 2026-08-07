@@ -287,7 +287,7 @@ action:
                   - service: telegram_bot.send_message
                     continue_on_error: true
                     data:
-                      target: "{{ telegram_chat_id | int }}"
+                      chat_id: "{{ telegram_chat_id | int }}"
                       message_thread_id: "{{ telegram_message_thread_id | int }}"
                       title: "🚨 Alarm triggered"
                       message: "Triggered by: {{ triggered_sensor_name }}"
@@ -295,7 +295,7 @@ action:
                   - service: telegram_bot.send_message
                     continue_on_error: true
                     data:
-                      target: "{{ telegram_chat_id | int }}"
+                      chat_id: "{{ telegram_chat_id | int }}"
                       title: "🚨 Alarm triggered"
                       message: "Triggered by: {{ triggered_sensor_name }}"
 
@@ -317,7 +317,7 @@ action:
                   - service: telegram_bot.send_photo
                     continue_on_error: true
                     data:
-                      target: "{{ telegram_chat_id | int }}"
+                      chat_id: "{{ telegram_chat_id | int }}"
                       message_thread_id: "{{ telegram_message_thread_id | int }}"
                       file: "{{ snapshot_path }}"
                       caption: "🚨 {{ triggered_sensor_name }}"
@@ -325,7 +325,7 @@ action:
                   - service: telegram_bot.send_photo
                     continue_on_error: true
                     data:
-                      target: "{{ telegram_chat_id | int }}"
+                      chat_id: "{{ telegram_chat_id | int }}"
                       file: "{{ snapshot_path }}"
                       caption: "🚨 {{ triggered_sensor_name }}"
 

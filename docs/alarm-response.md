@@ -95,6 +95,8 @@ handled by the same automation via the `mobile_app_notification_action` event.
 
 ## Changelog
 
+- Migrate Telegram bot actions from deprecated `target` to `chat_id` (required
+  before Home Assistant removes `target`, planned for 2026.9).
 - Per-siren triggering with `continue_on_error` (a faulty siren no longer aborts
   notifications), plus configurable **Siren Duration** and **Siren Tone** so the
   siren sounds continuously until disarm.
