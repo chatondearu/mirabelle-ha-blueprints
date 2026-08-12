@@ -312,4 +312,7 @@ Bug fixes included in v2:
 - **Too frequent movements**: increase `Minimum Position Delta` and/or `Minimum Action Interval (Minutes)`, or raise the hysteresis buffer
 - **Contact opening does nothing**: verify the cover in the link is part of *All Managed Covers* and that its linked sensors report `on` when open
 - **Manual move gets reverted too quickly**: increase `Manual Override Hold (Minutes)`
+- **Night close skipped after an automation move**: Cover Manager must be **1.0.1+** so
+  automation `context.parent_id` is preserved during travel. Older versions mis-detect
+  automation moves as manual override for up to Manual Override Hold minutes.
 ```

@@ -13,7 +13,7 @@ from homeassistant.components.cover import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import STATE_CLOSED, STATE_OPEN, STATE_OPENING, STATE_CLOSING
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import Context, HomeAssistant, callback
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_state_change_event
@@ -83,6 +83,9 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         self._lastdirection_entity: Optional[Any] = None
         self._pulsegap_entity: Optional[Any] = None
         self._acceleration_entity: Optional[Any] = None
+        # Context of the active cover command / wall-switch event. Re-applied on
+        # every state write during travel so automation parent_id survives ticks.
+        self._command_context: Context | None = None
         self._attr_supported_features = (
             CoverEntityFeature.OPEN
             | CoverEntityFeature.CLOSE
@@ -182,9 +185,23 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
             return DIRECTION_CLOSING
         return DIRECTION_OPENING if self._last_direction == DIRECTION_CLOSING else DIRECTION_CLOSING
 
+    def _capture_command_context(self, context: Context | None = None) -> None:
+        """Remember context for all state writes of the current command/move."""
+        self._command_context = context if context is not None else self._context
+
+    def _write_ha_state(self) -> None:
+        """Write state, re-applying the active command context when present."""
+        if self._command_context is not None:
+            self.async_set_context(self._command_context)
+        self.async_write_ha_state()
+
+    def _clear_command_context(self) -> None:
+        """Drop command context after a move fully finishes."""
+        self._command_context = None
+
     def _update_and_notify(self, notify_sub_entities: bool = True) -> None:
         """Update HA state and optionally notify dynamic sub-entities."""
-        self.async_write_ha_state()
+        self._write_ha_state()
         if notify_sub_entities:
             self._notify_dynamic_entities()
 
@@ -318,9 +335,10 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
                     self._stop_movement(update_position=False, cancel_task=False)
                     self._last_direction = previous_direction
                     self._update_and_notify()
+                    self._clear_command_context()
                     break
 
-                self.async_write_ha_state()
+                self._write_ha_state()
                 await asyncio.sleep(TICK_SECONDS)
         except asyncio.CancelledError:
             return
@@ -362,6 +380,9 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
                 self._last_limit_stop_time = None
                 return
         
+        # Physical switch: keep event context (typically no automation parent_id).
+        self._capture_command_context(event.context)
+
         if self._direction in (DIRECTION_OPENING, DIRECTION_CLOSING):
             if self._movement_start_time:
                 self._position = self._calculate_position_from_elapsed(
@@ -371,6 +392,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
             self._stop_movement(update_position=False)
             self._last_direction = previous_direction
             self._update_and_notify()
+            self._clear_command_context()
             return
 
         dir_to_start = self._determine_direction_from_position()
@@ -381,18 +403,21 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         """Open cover only if not already fully open."""
         if self.current_cover_position >= int(POSITION_MAX) and self._direction == DIRECTION_IDLE:
             return
+        self._capture_command_context()
         await self._go_direction(DIRECTION_OPENING)
 
     async def async_close_cover(self, **kwargs: Any) -> None:
         """Close cover only if not already fully closed."""
         if self.current_cover_position <= int(POSITION_MIN) and self._direction == DIRECTION_IDLE:
             return
+        self._capture_command_context()
         await self._go_direction(DIRECTION_CLOSING)
 
     async def async_stop_cover(self, **kwargs: Any) -> None:
         """Stop cover movement. According to specification: send 1 pulse to stop."""
         if self._direction == DIRECTION_IDLE:
             return
+        self._capture_command_context()
         if self._movement_start_time:
             self._position = self._calculate_position_from_elapsed(
                 self._direction, self._movement_start_time, self._start_position
@@ -402,6 +427,7 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         self._last_direction = previous_direction
         await self._trigger_pulse()
         self._update_and_notify()
+        self._clear_command_context()
 
     async def async_set_cover_position(self, **kwargs: Any) -> None:
         """
@@ -416,7 +442,9 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
         target = int(self._clamp_position(float(kwargs[ATTR_POSITION])))
         if target == self.current_cover_position:
             return
-        
+
+        self._capture_command_context()
+
         if self._direction == DIRECTION_IDLE:
             if self._position == 0.0:
                 if self._last_direction != DIRECTION_CLOSING:
@@ -616,9 +644,10 @@ class CoverManagerCover(CoverEntity, RestoreEntity):
                             self._last_direction = previous_direction
                             await self._trigger_pulse()
                             self._update_and_notify()
+                        self._clear_command_context()
                         break
                     
-                    self.async_write_ha_state()
+                    self._write_ha_state()
                     await asyncio.sleep(TICK_SECONDS)
             except asyncio.CancelledError:
                 return

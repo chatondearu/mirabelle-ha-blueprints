@@ -1,6 +1,6 @@
 {
   "name": "@mirabelle/cover-manager",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Home Assistant integration for managing covers with switches",
   "private": true,
   "scripts": {
