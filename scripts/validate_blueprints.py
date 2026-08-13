@@ -22,6 +22,8 @@ EXPECTED_BLUEPRINTS = [
     "automations/cover_solar_thermal_optimization.yaml",
     "automations/cover_state_tracker.yaml",
     "automations/frient_keypad_with_alarmo.yaml",
+    "automations/garden-irrigation-orchestrator.yaml",
+    "automations/garden-zone-irrigation.yaml",
     "automations/hvac-season-manager.yaml",
     "automations/living-area-adaptive-lighting.yaml",
     "automations/nfc-disarm.yaml",

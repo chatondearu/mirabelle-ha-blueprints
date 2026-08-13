@@ -35,6 +35,10 @@ def common_entities() -> dict[str, tuple[str, dict[str, Any] | None]]:
         "alarm_control_panel.test": ("disarmed", {}),
         "alarm_control_panel.test_mirror": ("disarmed", {}),
         "input_datetime.test_schedule": ("2025-01-01", {}),
+        "input_datetime.test_garden_slot": (
+            "08:00:00",
+            {"has_date": False, "has_time": True},
+        ),
         "sun.sun": ("above_horizon", {"elevation": 45}),
         "climate.test_split": (
             "off",
@@ -56,6 +60,24 @@ def common_entities() -> dict[str, tuple[str, dict[str, Any] | None]]:
             "heat",
             {"options": ["off", "heat", "cool"]},
         ),
+        "input_boolean.test_garden_enable": ("on", {}),
+        "input_boolean.test_garden_pause": ("off", {}),
+        "input_boolean.test_zone_enabled": ("on", {}),
+        "input_select.test_garden_run_mode": (
+            "sequential",
+            {"options": ["sequential", "parallel"]},
+        ),
+        "input_number.test_garden_temp_threshold": ("32", {}),
+        "input_number.test_garden_cooldown": ("60", {}),
+        "input_number.test_garden_volume": ("10", {}),
+        "input_number.test_garden_duration": ("5", {}),
+        "input_datetime.test_garden_last_heat": (
+            "2025-01-01 00:00:00",
+            {"has_date": True, "has_time": True},
+        ),
+        "switch.test_valve": ("off", {}),
+        "sensor.test_volume": ("0", {"unit_of_measurement": "L"}),
+        "sensor.test_outdoor_temp": ("20", {"unit_of_measurement": "°C"}),
     }
 
 
