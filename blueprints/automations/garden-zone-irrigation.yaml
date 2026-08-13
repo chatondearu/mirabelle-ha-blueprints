@@ -1,0 +1,344 @@
+blueprint:
+  homeassistant:
+    min_version: 2025.5.3
+  name: "[CDA] 💧 Garden Zone Irrigation"
+  description: >
+    Runs a single garden irrigation cycle for one valve (e.g. Sonoff SWV-ZFE).
+    Listens for garden_irrigation.run_zone events matching this zone_id, opens
+    the valve with Zigbee-friendly retries, stops when the target volume delta
+    is reached or the max duration elapses, then closes and emits
+    garden_irrigation.zone_done. Optionally force-closes when the global pause
+    helper turns on or the master enable helper turns off.
+  domain: automation
+  source_url: https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/garden-zone-irrigation.yaml
+  input:
+    zone_section:
+      name: Zone identity
+      icon: mdi:sprinkler-variant
+      input:
+        zone_id:
+          name: Zone ID
+          description: >
+            Stable id used in garden_irrigation.run_zone / zone_done payloads.
+            Must match an entry in the orchestrator aerial or soil zone list.
+          selector:
+            text:
+        irrigation_type:
+          name: Irrigation type
+          description: Aerial misting (refresh) or soil watering (roots).
+          default: soil
+          selector:
+            select:
+              options:
+                - label: Aerial (refresh)
+                  value: aerial
+                - label: Soil (roots)
+                  value: soil
+        zone_enabled_helper:
+          name: Zone enabled helper
+          description: input_boolean — when off, this zone ignores run events.
+          selector:
+            entity:
+              domain: input_boolean
+
+    valve_section:
+      name: Valve and metering
+      icon: mdi:pipe-valve
+      input:
+        valve_switch:
+          name: Valve switch
+          description: On/Off entity for the irrigation valve (Sonoff SWV).
+          selector:
+            entity:
+              domain: switch
+        volume_sensor:
+          name: Volume sensor (optional)
+          description: >
+            Real-time or session volume in litres. Leave empty to run
+            duration-only (max duration helper). Volume stop uses the delta
+            since cycle start so cumulative counters still work.
+          default: ""
+          selector:
+            entity:
+              domain: sensor
+        target_volume_helper:
+          name: Target volume helper
+          description: input_number — target litres for this cycle (delta).
+          selector:
+            entity:
+              domain: input_number
+        max_duration_helper:
+          name: Max duration helper
+          description: input_number — hard cap in minutes (always enforced).
+          selector:
+            entity:
+              domain: input_number
+        on_time_number:
+          name: Device on-time / fail-safe (optional)
+          description: >
+            Number entity that sets the valve fail-safe on-time in seconds.
+            When set, raised to at least max duration + 60s before opening.
+          default: ""
+          selector:
+            entity:
+              domain: number
+
+    reliability_section:
+      name: Reliability
+      icon: mdi:shield-refresh
+      input:
+        retry_attempts:
+          name: Open/close retry attempts
+          default: 3
+          selector:
+            number:
+              min: 1
+              max: 10
+              step: 1
+        retry_delay_seconds:
+          name: Delay between retries (seconds)
+          default: 45
+          selector:
+            number:
+              min: 5
+              max: 180
+              step: 5
+              unit_of_measurement: s
+        force_close_on_pause:
+          name: Force close on pause / master off
+          description: >
+            When enabled, closing is forced if the pause helper turns on or the
+            master enable helper turns off while the valve is open.
+          default: true
+          selector:
+            boolean:
+        pause_helper:
+          name: Global pause helper (optional)
+          description: Same input_boolean as the orchestrator pause helper.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+        master_enable_helper:
+          name: Master enable helper (optional)
+          description: Same input_boolean as the orchestrator master enable.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
+        notify_service:
+          name: Notify service (optional)
+          description: >
+            Full service name for failure alerts, e.g. notify.mobile_app_phone.
+            Leave empty to skip notifications.
+          default: ""
+          selector:
+            text:
+
+mode: single
+
+trigger_variables:
+  pause_helper_input: !input pause_helper
+  master_enable_helper_input: !input master_enable_helper
+  force_close_on_pause_input: !input force_close_on_pause
+
+trigger:
+  - platform: event
+    event_type: garden_irrigation.run_zone
+    id: run_zone
+  # Optional helpers: template triggers avoid empty entity_id on state triggers.
+  - platform: template
+    id: force_pause
+    value_template: >
+      {{ force_close_on_pause_input
+         and pause_helper_input | length > 0
+         and is_state(pause_helper_input, 'on') }}
+  - platform: template
+    id: force_master_off
+    value_template: >
+      {{ force_close_on_pause_input
+         and master_enable_helper_input | length > 0
+         and is_state(master_enable_helper_input, 'off') }}
+
+variables:
+  zone_id: !input zone_id
+  irrigation_type: !input irrigation_type
+  zone_enabled_helper: !input zone_enabled_helper
+  valve_switch: !input valve_switch
+  volume_sensor: !input volume_sensor
+  target_volume_helper: !input target_volume_helper
+  max_duration_helper: !input max_duration_helper
+  on_time_number: !input on_time_number
+  retry_attempts: !input retry_attempts
+  retry_delay_seconds: !input retry_delay_seconds
+  force_close_on_pause: !input force_close_on_pause
+  pause_helper: !input pause_helper
+  master_enable_helper: !input master_enable_helper
+  notify_service: !input notify_service
+  event_zone_id: "{{ trigger.event.data.zone_id if trigger.platform == 'event' else '' }}"
+  event_reason: "{{ trigger.event.data.reason if trigger.platform == 'event' else 'manual' }}"
+  has_volume_sensor: "{{ volume_sensor | length > 0 and has_value(volume_sensor) }}"
+  has_on_time: "{{ on_time_number | length > 0 }}"
+  has_notify: "{{ notify_service | length > 0 }}"
+  max_minutes: "{{ states(max_duration_helper) | float(10) }}"
+  target_litres: "{{ states(target_volume_helper) | float(0) }}"
+  start_volume: "{{ states(volume_sensor) | float(0) if has_volume_sensor else 0 }}"
+  on_time_seconds: "{{ ((max_minutes | float(10)) * 60 + 60) | int }}"
+
+condition: []
+
+action:
+  - choose:
+      # Force close while valve is open (pause / master off)
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ force_close_on_pause
+                 and trigger.id in ['force_pause', 'force_master_off']
+                 and is_state(valve_switch, 'on') }}
+        sequence:
+          - alias: Force close valve
+            repeat:
+              while:
+                - condition: template
+                  value_template: >
+                    {{ is_state(valve_switch, 'on')
+                       and repeat.index <= (retry_attempts | int(3)) }}
+              sequence:
+                - action: switch.turn_off
+                  target:
+                    entity_id: !input valve_switch
+                - wait_template: "{{ is_state(valve_switch, 'off') }}"
+                  timeout:
+                    seconds: "{{ retry_delay_seconds | int(45) }}"
+                  continue_on_timeout: true
+          - event: garden_irrigation.zone_done
+            event_data:
+              zone_id: "{{ zone_id }}"
+              status: aborted
+
+      # Normal irrigation cycle
+      - conditions:
+          - condition: template
+            value_template: >
+              {{ trigger.id == 'run_zone'
+                 and event_zone_id == zone_id
+                 and is_state(zone_enabled_helper, 'on') }}
+        sequence:
+          - alias: Raise device fail-safe on-time if configured
+            if:
+              - condition: template
+                value_template: "{{ has_on_time }}"
+            then:
+              - action: number.set_value
+                target:
+                  entity_id: !input on_time_number
+                data:
+                  value: "{{ on_time_seconds }}"
+
+          - alias: Open valve with retries
+            repeat:
+              while:
+                - condition: template
+                  value_template: >
+                    {{ not is_state(valve_switch, 'on')
+                       and repeat.index <= (retry_attempts | int(3)) }}
+              sequence:
+                - action: switch.turn_on
+                  target:
+                    entity_id: !input valve_switch
+                - wait_template: "{{ is_state(valve_switch, 'on') }}"
+                  timeout:
+                    seconds: "{{ retry_delay_seconds | int(45) }}"
+                  continue_on_timeout: true
+
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ not is_state(valve_switch, 'on') }}"
+                sequence:
+                  - if:
+                      - condition: template
+                        value_template: "{{ has_notify }}"
+                    then:
+                      - service: "{{ notify_service }}"
+                        data:
+                          title: Garden irrigation
+                          message: >
+                            Zone {{ zone_id }} failed to open valve
+                            {{ valve_switch }}.
+                  - event: garden_irrigation.zone_done
+                    event_data:
+                      zone_id: "{{ zone_id }}"
+                      status: failed_open
+                  - stop: Failed to open valve
+
+          - alias: Wait for volume target or max duration
+            if:
+              - condition: template
+                value_template: "{{ has_volume_sensor and (target_litres | float(0)) > 0 }}"
+            then:
+              - wait_template: >
+                  {{ (states(volume_sensor) | float(0)) - (start_volume | float(0))
+                     >= (target_litres | float(0)) }}
+                timeout:
+                  minutes: "{{ max_minutes | float(10) }}"
+                continue_on_timeout: true
+            else:
+              - delay:
+                  minutes: "{{ max_minutes | float(10) }}"
+
+          - variables:
+              stop_status: >
+                {% if has_volume_sensor and (target_litres | float(0)) > 0
+                   and ((states(volume_sensor) | float(0)) - (start_volume | float(0))
+                        >= (target_litres | float(0))) %}
+                  ok
+                {% else %}
+                  timeout
+                {% endif %}
+
+          - alias: Close valve with retries
+            repeat:
+              while:
+                - condition: template
+                  value_template: >
+                    {{ not is_state(valve_switch, 'off')
+                       and repeat.index <= (retry_attempts | int(3)) }}
+              sequence:
+                - action: switch.turn_off
+                  target:
+                    entity_id: !input valve_switch
+                - wait_template: "{{ is_state(valve_switch, 'off') }}"
+                  timeout:
+                    seconds: "{{ retry_delay_seconds | int(45) }}"
+                  continue_on_timeout: true
+
+          - choose:
+              - conditions:
+                  - condition: template
+                    value_template: "{{ not is_state(valve_switch, 'off') }}"
+                sequence:
+                  - if:
+                      - condition: template
+                        value_template: "{{ has_notify }}"
+                    then:
+                      - service: "{{ notify_service }}"
+                        data:
+                          title: Garden irrigation
+                          message: >
+                            Zone {{ zone_id }} failed to close valve
+                            {{ valve_switch }}.
+                  - event: garden_irrigation.zone_done
+                    event_data:
+                      zone_id: "{{ zone_id }}"
+                      status: failed_close
+              - conditions:
+                  - condition: template
+                    value_template: "{{ true }}"
+                sequence:
+                  - event: garden_irrigation.zone_done
+                    event_data:
+                      zone_id: "{{ zone_id }}"
+                      status: "{{ stop_status }}"
+    default: []

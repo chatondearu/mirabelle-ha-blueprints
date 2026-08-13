@@ -23,6 +23,8 @@ A collection of custom blueprints for Home Assistant.
 - [[CDA] 🌞 Smart Cover Solar & Thermal Optimization](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_solar_thermal_optimization.yaml)
 - [[CDA] 🔁 HVAC Season Manager](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fhvac-season-manager.yaml)
 - [[CDA] 🌡️ Reversible Split Thermostat](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Freversible-split-thermostat.yaml)
+- [[CDA] 🌿 Garden Irrigation Orchestrator](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fgarden-irrigation-orchestrator.yaml)
+- [[CDA] 💧 Garden Zone Irrigation](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fgarden-zone-irrigation.yaml)
 - [[CDA] 🪟 Blind Cover Template](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_cover.yaml)
 - [[CDA] 🪟 Blind State Tracker](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_state_tracker.yaml)
 - [[CDA] 🔢 Keypad Frient (KEPZB-110) for Alarmo (FR/EN)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Ffrient_keypad_with_alarmo.yaml)
@@ -56,6 +58,8 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_solar_thermal_optimization.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/hvac-season-manager.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/reversible-split-thermostat.yaml
+https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/garden-irrigation-orchestrator.yaml
+https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/garden-zone-irrigation.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_cover.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/cover_state_tracker.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/frient_keypad_with_alarmo.yaml
@@ -189,6 +193,13 @@ Per-room thermostat for a reversible split on a shared PAC. Applies the global m
 
 [View Documentation](docs/reversible-split-thermostat.md)
 
+### Garden Irrigation
+
+[CDA] 🌿 Garden Irrigation Orchestrator + [CDA] 💧 Garden Zone Irrigation  
+Schedule and heat-triggered aerial misting plus soil watering across as many Sonoff (or other) valves as you need. Orchestrator dispatches zones; each zone runs volume-or-duration cycles with Zigbee-friendly retries.
+
+[View Documentation](docs/garden-irrigation.md)
+
 ### Blind Cover Template
 
 [CDA] 🪟 Blind Cover Template
@@ -229,6 +240,8 @@ mirabelle-ha-blueprints/
 │   │   ├── cover_solar_thermal_optimization.yaml
 │   │   ├── hvac-season-manager.yaml
 │   │   ├── reversible-split-thermostat.yaml
+│   │   ├── garden-irrigation-orchestrator.yaml
+│   │   ├── garden-zone-irrigation.yaml
 │   │   ├── cover_cover.yaml
 │   │   ├── cover_state_tracker.yaml
 │   │   ├── nfc-disarm.yaml
@@ -246,6 +259,7 @@ mirabelle-ha-blueprints/
 │   ├── living-area-adaptive-lighting.md
 │   ├── cover_solar_thermal_optimization.md
 │   ├── reversible-split-thermostat.md
+│   ├── garden-irrigation.md
 │   ├── blind_states.md
 │   └── cover_generator.md
 └── README.md

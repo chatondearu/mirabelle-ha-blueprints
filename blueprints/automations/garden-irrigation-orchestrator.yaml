@@ -1,0 +1,322 @@
+blueprint:
+  homeassistant:
+    min_version: 2025.5.3
+  name: "[CDA] 🌿 Garden Irrigation Orchestrator"
+  description: >
+    Central scheduler for garden irrigation. Fires garden_irrigation.run_zone
+    for configured aerial and soil zone ids on schedule slots, and for aerial
+    zones when outdoor temperature reaches a threshold (with cooldown). Respects
+    master enable, pause, and rain guards. Run mode helper selects sequential
+    (wait for garden_irrigation.zone_done) or parallel dispatch. Pair with one
+    [CDA] Garden Zone Irrigation automation per valve.
+  domain: automation
+  source_url: https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/garden-irrigation-orchestrator.yaml
+  input:
+    guards_section:
+      name: Global guards
+      icon: mdi:shield-check
+      input:
+        master_enable_helper:
+          name: Master enable helper
+          description: input_boolean — when off, no new irrigation runs.
+          selector:
+            entity:
+              domain: input_boolean
+        pause_helper:
+          name: Pause helper
+          description: input_boolean — manual hold (holidays / maintenance).
+          selector:
+            entity:
+              domain: input_boolean
+        rain_sensor:
+          name: Rain sensor (optional)
+          description: >
+            Binary or weather-like sensor. Runs are skipped while wet (on /
+            rainy / pouring / numeric precip > 0). After it turns off, skip for
+            rain lookback hours (uses last_changed). Set lookback to 0 to only
+            skip while currently wet.
+          default: ""
+          selector:
+            entity:
+        rain_lookback_hours:
+          name: Rain lookback (hours)
+          description: >
+            After rain_sensor turns off, keep skipping for this many hours.
+            Use 0 to only skip while currently wet.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 72
+              step: 1
+              unit_of_measurement: h
+
+    run_mode_section:
+      name: Run mode
+      icon: mdi:swap-horizontal
+      input:
+        run_mode_helper:
+          name: Run mode helper
+          description: >
+            input_select with options exactly: sequential, parallel.
+          selector:
+            entity:
+              domain: input_select
+        zone_wait_timeout_minutes:
+          name: Sequential wait timeout (minutes)
+          description: Max time to wait for zone_done per zone in sequential mode.
+          default: 90
+          selector:
+            number:
+              min: 5
+              max: 240
+              step: 5
+              unit_of_measurement: min
+        heat_aerial_priority:
+          name: Prefer heat aerial when queued
+          description: >
+            Informational for operators: with automation mode queued, a heat run
+            starts after the current orchestrator job finishes. Enable parallel
+            run mode if aerial refresh must not wait on soil cycles.
+          default: true
+          selector:
+            boolean:
+
+    aerial_section:
+      name: Aerial (refresh)
+      icon: mdi:weather-partly-rainy
+      input:
+        aerial_zone_ids:
+          name: Aerial zone IDs
+          description: >
+            Comma-separated zone_id values matching Garden Zone Irrigation
+            instances (e.g. aerial_potager, aerial_terrace).
+          default: ""
+          selector:
+            text:
+              multiline: true
+        aerial_time_triggers:
+          name: Aerial schedule helpers
+          description: >
+            One or more input_datetime helpers (time only). Create via Helpers
+            or the schedule creator blueprint. Leave empty if you only use heat.
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                domain: input_datetime
+        outdoor_temperature:
+          name: Outdoor temperature sensor
+          description: Used for heat-triggered aerial refresh. Leave empty to disable.
+          default: ""
+          selector:
+            entity:
+              domain: sensor
+        aerial_temp_threshold_helper:
+          name: Aerial temperature threshold helper
+          description: input_number — °C at or above which aerial heat refresh may run.
+          selector:
+            entity:
+              domain: input_number
+        heat_cooldown_helper:
+          name: Heat cooldown helper (minutes)
+          description: input_number — minimum minutes between heat-triggered aerial runs.
+          selector:
+            entity:
+              domain: input_number
+        last_heat_helper:
+          name: Last heat run helper
+          description: >
+            input_datetime (date and time) updated after each heat dispatch.
+            Used for cooldown.
+          selector:
+            entity:
+              domain: input_datetime
+
+    soil_section:
+      name: Soil (roots)
+      icon: mdi:watering-can
+      input:
+        soil_zone_ids:
+          name: Soil zone IDs
+          description: Comma-separated zone_id values for soil watering zones.
+          default: ""
+          selector:
+            text:
+              multiline: true
+        soil_time_triggers:
+          name: Soil schedule helpers
+          description: One or more input_datetime helpers (time only) for soil runs.
+          default: []
+          selector:
+            entity:
+              multiple: true
+              filter:
+                domain: input_datetime
+
+mode: queued
+max: 10
+
+trigger_variables:
+  outdoor_temperature_tv: !input outdoor_temperature
+  aerial_temp_threshold_helper_tv: !input aerial_temp_threshold_helper
+
+trigger:
+  - platform: time
+    at: !input aerial_time_triggers
+    id: schedule_aerial
+  - platform: time
+    at: !input soil_time_triggers
+    id: schedule_soil
+  # Temperature crossing threshold only (cooldown checked in condition — avoid now() here)
+  - platform: template
+    id: heat_aerial
+    value_template: >
+      {% if outdoor_temperature_tv | length == 0 %}
+        false
+      {% else %}
+        {% set temp = states(outdoor_temperature_tv) | float(none) %}
+        {% set thr = states(aerial_temp_threshold_helper_tv) | float(35) %}
+        {{ temp is not none and temp >= thr }}
+      {% endif %}
+  - platform: event
+    event_type: garden_irrigation.request
+    id: manual_request
+
+variables:
+  master_enable_helper: !input master_enable_helper
+  pause_helper: !input pause_helper
+  rain_sensor: !input rain_sensor
+  rain_lookback_hours: !input rain_lookback_hours
+  run_mode_helper: !input run_mode_helper
+  zone_wait_timeout_minutes: !input zone_wait_timeout_minutes
+  heat_aerial_priority: !input heat_aerial_priority
+  aerial_zone_ids_raw: !input aerial_zone_ids
+  soil_zone_ids_raw: !input soil_zone_ids
+  last_heat_helper: !input last_heat_helper
+  heat_cooldown_helper: !input heat_cooldown_helper
+  run_mode: "{{ states(run_mode_helper) | lower | trim }}"
+  aerial_zone_ids: >
+    {{ aerial_zone_ids_raw.replace('\n', ',').split(',')
+       | map('trim') | reject('eq', '') | list }}
+  soil_zone_ids: >
+    {{ soil_zone_ids_raw.replace('\n', ',').split(',')
+       | map('trim') | reject('eq', '') | list }}
+  request_type: >
+    {{ trigger.event.data.type if trigger.id == 'manual_request'
+       and trigger.event.data is defined else '' }}
+  request_zone_id: >
+    {{ trigger.event.data.zone_id if trigger.id == 'manual_request'
+       and trigger.event.data is defined
+       and trigger.event.data.zone_id is defined else '' }}
+  dispatch_reason: >
+    {% if trigger.id == 'schedule_aerial' %}
+      schedule_aerial
+    {% elif trigger.id == 'schedule_soil' %}
+      schedule_soil
+    {% elif trigger.id == 'heat_aerial' %}
+      heat_aerial
+    {% else %}
+      manual
+    {% endif %}
+  selected_zone_ids: >
+    {% if request_zone_id | length > 0 %}
+      {{ [request_zone_id] }}
+    {% elif trigger.id == 'schedule_soil'
+        or (trigger.id == 'manual_request' and request_type == 'soil') %}
+      {{ soil_zone_ids }}
+    {% else %}
+      {{ aerial_zone_ids }}
+    {% endif %}
+  rain_wet: >
+    {% if rain_sensor | length == 0 %}
+      false
+    {% else %}
+      {% set st = states(rain_sensor) | lower %}
+      {% set wet_now = st in ['on', 'rainy', 'pouring', 'true']
+         or (st | is_number and st | float(0) > 0) %}
+      {% if wet_now %}
+        true
+      {% elif (rain_lookback_hours | float(0)) > 0 and st == 'off' %}
+        {% set age = as_timestamp(now())
+           - as_timestamp(states[rain_sensor].last_changed, as_timestamp(now())) %}
+        {{ age < ((rain_lookback_hours | float(0)) * 3600) }}
+      {% else %}
+        false
+      {% endif %}
+    {% endif %}
+  guards_ok: >
+    {{ is_state(master_enable_helper, 'on')
+       and not is_state(pause_helper, 'on')
+       and not rain_wet }}
+  cooldown_minutes: "{{ states(heat_cooldown_helper) | float(60) }}"
+  last_heat_ts: >
+    {% set raw = states(last_heat_helper) %}
+    {% if raw not in ['unknown', 'unavailable', 'none', ''] %}
+      {{ as_timestamp(raw, 0) }}
+    {% else %}
+      0
+    {% endif %}
+  cooldown_ok: >
+    {{ (as_timestamp(now()) - (last_heat_ts | float(0)))
+       >= ((cooldown_minutes | float(60)) * 60) }}
+
+condition:
+  - condition: template
+    value_template: "{{ guards_ok }}"
+  - condition: template
+    value_template: "{{ (selected_zone_ids | list | length) > 0 }}"
+  - condition: template
+    value_template: >
+      {% if trigger.id == 'heat_aerial' %}
+        {{ cooldown_ok }}
+      {% else %}
+        true
+      {% endif %}
+
+action:
+  - variables:
+      zones: "{{ selected_zone_ids | list }}"
+
+  - alias: Record last heat run timestamp
+    if:
+      - condition: template
+        value_template: "{{ dispatch_reason == 'heat_aerial' }}"
+    then:
+      - action: input_datetime.set_datetime
+        target:
+          entity_id: !input last_heat_helper
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ run_mode == 'parallel' }}"
+        sequence:
+          - alias: Dispatch all zones in parallel
+            repeat:
+              for_each: "{{ zones }}"
+              sequence:
+                - event: garden_irrigation.run_zone
+                  event_data:
+                    zone_id: "{{ repeat.item }}"
+                    reason: "{{ dispatch_reason }}"
+    default:
+      - alias: Dispatch zones sequentially
+        repeat:
+          for_each: "{{ zones }}"
+          sequence:
+            - event: garden_irrigation.run_zone
+              event_data:
+                zone_id: "{{ repeat.item }}"
+                reason: "{{ dispatch_reason }}"
+            - wait_for_trigger:
+                - platform: event
+                  event_type: garden_irrigation.zone_done
+                  event_data:
+                    zone_id: "{{ repeat.item }}"
+              timeout:
+                minutes: "{{ zone_wait_timeout_minutes | int(90) }}"
+              continue_on_timeout: true

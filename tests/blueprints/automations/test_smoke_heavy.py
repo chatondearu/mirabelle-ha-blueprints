@@ -10,6 +10,7 @@ from tests.blueprints.conftest import smoke_load_automation
 HEAVY_AUTOMATIONS = (
     "cover_solar_thermal_optimization.yaml",
     "living-area-adaptive-lighting.yaml",
+    "garden-irrigation-orchestrator.yaml",
 )
 
 
