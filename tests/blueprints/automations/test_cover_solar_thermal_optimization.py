@@ -464,3 +464,100 @@ async def test_winter_gains_open_only_sun_facing_facade(hass: HomeAssistant) -> 
     positions = _requested_positions(set_position)
     assert positions.get(BAY) == 100
     assert positions.get(DOOR) == 50
+
+
+@pytest.mark.behavior
+async def test_group_cover_without_user_id_is_not_manual_override(
+    hass: HomeAssistant,
+) -> None:
+    """Group covers with parent_id=None must still accept automation comfort moves.
+
+    Group entities rewrite state without an automation parent_id. Treating that as
+    manual override caused hourly open/shade oscillation on shutters_* groups.
+    """
+    group = "cover.shutters_south"
+    seed_entities(
+        hass,
+        {
+            "sun.sun": ("above_horizon", {"azimuth": 180.0, "elevation": 45}),
+            PERSON: ("home", {}),
+            group: (
+                "open",
+                {
+                    "current_position": 100,
+                    "entity_id": [BAY, DOOR],
+                },
+            ),
+            OUTDOOR: ("30", {}),
+        },
+    )
+    await hass.async_block_till_done()
+
+    set_position = async_mock_service(hass, "cover", "set_cover_position")
+
+    await async_load_automation_blueprint(
+        hass,
+        FILENAME,
+        {
+            "covers": [group],
+            "south_covers": [group],
+            "presence_persons": [PERSON],
+            "season_mode": "summer",
+            "outdoor_temperature": OUTDOOR,
+            "summer_sun_facing_position": "25",
+            "neutral_position": "100",
+            "sensor_stability_minutes": "0",
+            "manual_override_minutes": 60,
+            "minimum_action_interval_minutes": 0,
+            "minimum_reposition_delta": 0,
+        },
+    )
+
+    seed_entities(hass, {"sun.sun": ("above_horizon", {"azimuth": 175.0, "elevation": 44})})
+    await hass.async_block_till_done()
+
+    positions = _requested_positions(set_position)
+    assert positions.get(group) == 25
+
+
+@pytest.mark.behavior
+async def test_individual_cover_without_parent_is_manual_override(
+    hass: HomeAssistant,
+) -> None:
+    """Individual covers with no parent_id stay held during the override window."""
+    seed_entities(
+        hass,
+        {
+            "sun.sun": ("above_horizon", {"azimuth": 180.0, "elevation": 45}),
+            PERSON: ("home", {}),
+            BAY: ("open", {"current_position": 100}),
+            OUTDOOR: ("30", {}),
+        },
+    )
+    await hass.async_block_till_done()
+
+    set_position = async_mock_service(hass, "cover", "set_cover_position")
+
+    await async_load_automation_blueprint(
+        hass,
+        FILENAME,
+        {
+            "covers": [BAY],
+            "south_covers": [BAY],
+            "presence_persons": [PERSON],
+            "season_mode": "summer",
+            "outdoor_temperature": OUTDOOR,
+            "summer_sun_facing_position": "25",
+            "neutral_position": "100",
+            "sensor_stability_minutes": "0",
+            "manual_override_minutes": 60,
+            "minimum_action_interval_minutes": 0,
+            "minimum_reposition_delta": 0,
+        },
+    )
+
+    seed_entities(hass, {"sun.sun": ("above_horizon", {"azimuth": 175.0, "elevation": 44})})
+    await hass.async_block_till_done()
+
+    positions = _requested_positions(set_position)
+    assert BAY not in positions
