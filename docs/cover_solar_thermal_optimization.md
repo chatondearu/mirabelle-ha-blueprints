@@ -163,7 +163,11 @@ Each value is selected from key positions (`0`, `25`, `50`, `75`, `100`):
 
 ### Motion & Manual Override
 
-- **Manual Override Hold (Minutes)**: hold a manually changed cover out of comfort/night moves for this duration
+- **Manual Override Hold (Minutes)**: hold a manually changed cover out of comfort/night moves for this duration.
+  When the hold expires, the automation recalculates the **current** target from live conditions (it does
+  not restore the previous position). Prefer managing **individual** covers rather than group covers:
+  group entities never keep an automation `parent_id`, which used to false-trigger a full override hour
+  after every automated move. Group covers now only enter override when a UI `user_id` is present.
 - **Minimum Position Delta**: ignore small comfort moves below this difference (default `10`)
 - **Minimum Action Interval (Minutes)**: minimum delay between comfort moves for the same cover (default `5`)
 
@@ -315,4 +319,9 @@ Bug fixes included in v2:
 - **Night close skipped after an automation move**: Cover Manager must be **1.0.1+** so
   automation `context.parent_id` is preserved during travel. Older versions mis-detect
   automation moves as manual override for up to Manual Override Hold minutes.
-```
+  Prefer listing **individual** covers in *All Managed Covers* (not `cover.shutters_*`
+  groups). Groups cannot keep automation parent context; override for groups is limited
+  to UI user actions so automated moves are not blocked for an hour.
+- **Covers oscillate every ~Manual Override Hold minutes**: usually means group covers were
+  used with the old parent_id heuristic, or Cover Manager was not restarted after 1.0.1.
+  After updating, restart Home Assistant once so the integration code reloads.

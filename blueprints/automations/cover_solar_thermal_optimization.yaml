@@ -475,8 +475,11 @@ blueprint:
           name: Manual Override Hold (Minutes)
           description: >
             If a cover is manually changed (external action), keep that cover out of
-            comfort actions for this duration before automation takes control again.
-            Safety branches (away/night/wind) and contact opening can still override.
+            comfort and night actions for this duration before automation takes control
+            again. On expiry the automation recalculates the *current* target from live
+            conditions (it does not restore the previous position). Away/wind safety and
+            contact opening still bypass this hold. Group covers only lock on a real UI
+            user context (their aggregated state has no reliable automation parent_id).
           default: 60
           selector:
             number:
@@ -820,16 +823,43 @@ variables:
     {% endfor %}
     {{ ns.ids | unique | list }}
 
-  # --- Manual override and anti-wear locks (comfort only) ---
+  # --- Manual override and anti-wear locks (comfort + night) ---
+  # Individual covers (Cover Manager): a recent change with no parent_id is treated
+  # as external/manual (Cover Manager 1.0.1+ preserves automation parent_id).
+  # Group covers: their state updates never keep automation parent_id, so the same
+  # heuristic false-triggers on every automation move. For groups, only a real
+  # user_id on the group or a recently changed member counts as manual.
+  # When the hold expires, cover_targets is recomputed from live conditions (no
+  # restore of the pre-override position).
   manual_override_cover_ids: >
     {% if manual_override_minutes | int(0) <= 0 %}
       []
     {% else %}
       {% set ns = namespace(ids=[]) %}
+      {% set window = manual_override_minutes | int(0) * 60 %}
       {% for cover in expand(cover_entities) %}
-        {% set changed_recently = (as_timestamp(now()) - as_timestamp(cover.last_changed)) < (manual_override_minutes | int(0) * 60) %}
-        {% if cover.attributes.current_position is defined and changed_recently and (cover.context is not none) and (cover.context.parent_id is none) %}
-          {% set ns.ids = ns.ids + [cover.entity_id] %}
+        {% set changed_recently = (as_timestamp(now()) - as_timestamp(cover.last_changed)) < window %}
+        {% if cover.attributes.current_position is defined and changed_recently and (cover.context is not none) %}
+          {% set member_ids = cover.attributes.entity_id if cover.attributes.entity_id is defined else none %}
+          {% set is_group = member_ids is not none and member_ids is sequence and member_ids is not string and member_ids is not mapping %}
+          {% if is_group %}
+            {% set g = namespace(manual=false) %}
+            {% if cover.context.user_id %}
+              {% set g.manual = true %}
+            {% else %}
+              {% for m in expand(member_ids) %}
+                {% if (as_timestamp(now()) - as_timestamp(m.last_changed)) < window
+                      and m.context is not none and m.context.user_id %}
+                  {% set g.manual = true %}
+                {% endif %}
+              {% endfor %}
+            {% endif %}
+            {% if g.manual %}
+              {% set ns.ids = ns.ids + [cover.entity_id] %}
+            {% endif %}
+          {% elif cover.context.parent_id is none %}
+            {% set ns.ids = ns.ids + [cover.entity_id] %}
+          {% endif %}
         {% endif %}
       {% endfor %}
       {{ ns.ids }}
