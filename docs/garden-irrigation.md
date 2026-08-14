@@ -63,7 +63,7 @@ Events:
 | Valve switch | Sonoff On/Off |
 | Volume sensor | Optional; if empty → duration-only |
 | Target / max duration helpers | Stop: volume delta **or** max minutes |
-| On-time number | Optional fail-safe seconds entity |
+| Device irrigation duration | Optional Sonoff **Irrigation duration** number (minutes); raised to max+1 before open |
 | Retries / delay | Zigbee open-close reliability |
 | Pause / master helpers | Same entities as orchestrator for force-close |
 

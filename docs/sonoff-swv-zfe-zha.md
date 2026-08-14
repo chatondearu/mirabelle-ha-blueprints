@@ -58,13 +58,19 @@ Expect entities such as:
 | Entity (examples) | Purpose |
 | ----------------- | ------- |
 | Switch (OnOff) | Open / close valve |
-| On time / Off wait time | Timed on (device uses seconds; quirk converts ZCL deciseconds) |
-| Real-time irrigation duration / volume | Current run stats |
-| Daily / hourly duration & volume | Usage counters |
+| **Irrigation duration** (minutes, 1–719) | Device default run length when you turn the switch on — **set this** (replaces the broken ZCL On time) |
+| Irrigation mode | `Duration` or `Capacity` |
+| Irrigation amount | Target volume when mode is capacity |
+| Fail-safe timeout | Safety max duration (minutes) |
+| Water flow unit | Liter / US gallon / imperial gallon |
+| Real-time / daily / hourly duration & volume | Usage counters |
 | Water shortage / leakage / fail safe | Alarms (firmware 1.0.7 may not report abnormal state reliably — see Zigbee2MQTT notes) |
 | Child lock | Disable physical button |
+| Seasonal month multipliers | Tenths (`10` = 1.0×, `15` = 1.5×) |
 
-**Important:** default fail-safe / timed behaviour can close the valve after ~10 minutes. Raise **On time** (or equivalent fail-safe settings) before long irrigation runs.
+**Important:** ignore any leftover **On time** / **Off wait time** entities from an older quirk — the device returns `UNSUPPORTED_ATTRIBUTE` for those ZCL fields. Use **Irrigation duration** instead.
+
+**Not exposed in this ZHA quirk** (need Zigbee2MQTT or future work): on-device irrigation *plans* (schedules), rain-delay *commands*, and historical record downloads (`read_swvzf_records`).
 
 ## Connectivity checklist (remote watering)
 

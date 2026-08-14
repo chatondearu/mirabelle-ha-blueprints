@@ -74,10 +74,12 @@ blueprint:
             entity:
               domain: input_number
         on_time_number:
-          name: Device on-time / fail-safe (optional)
+          name: Device irrigation duration (optional)
           description: >
-            Number entity that sets the valve fail-safe on-time in seconds.
-            When set, raised to at least max duration + 60s before opening.
+            Number entity for the valve default run length in minutes
+            (Sonoff SWV: Irrigation duration, 1–719). When set, raised to at
+            least max duration + 1 minute before opening. Leave empty if
+            unavailable. Do not use legacy On time / Off wait time entities.
           default: ""
           selector:
             entity:
@@ -183,7 +185,7 @@ variables:
   max_minutes: "{{ states(max_duration_helper) | float(10) }}"
   target_litres: "{{ states(target_volume_helper) | float(0) }}"
   start_volume: "{{ states(volume_sensor) | float(0) if has_volume_sensor else 0 }}"
-  on_time_seconds: "{{ ((max_minutes | float(10)) * 60 + 60) | int }}"
+  on_time_seconds: "{{ ((max_minutes | float(10)) + 1) | int }}"
 
 condition: []
 
@@ -225,7 +227,7 @@ action:
                  and event_zone_id == zone_id
                  and is_state(zone_enabled_helper, 'on') }}
         sequence:
-          - alias: Raise device fail-safe on-time if configured
+          - alias: Raise device irrigation duration if configured
             if:
               - condition: template
                 value_template: "{{ has_on_time }}"
