@@ -232,7 +232,7 @@ action:
             then:
               - action: number.set_value
                 target:
-                  entity_id: !input on_time_number
+                  entity_id: "{{ on_time_number }}"
                 data:
                   value: "{{ on_time_seconds }}"
 
