@@ -146,7 +146,10 @@ Outdoor temperature priority:
 ### Thermal Thresholds
 
 - **Summer Close Temperature**: outdoor threshold for summer shading
-- **Indoor Hot Temperature**: indoor threshold to activate summer shading
+- **Indoor Hot Temperature**: indoor reading that can tip into summer shading only when
+  outdoor temperature is already near or above *Summer Close Temperature* (within the
+  hysteresis buffer). A warm indoor sensor alone never shades covers on a cool outdoor day.
+  If no outdoor/weather source is configured, this threshold is used alone as a fallback.
 - **Winter Open Temperature Below**: outdoor threshold to favor winter solar gains
 - **Winter Indoor Cold Temperature**: indoor threshold to favor winter solar gains
 - **Temperature Hysteresis Buffer**: deadband in °C to reduce threshold oscillation
@@ -180,7 +183,9 @@ is held for the Manual Override duration instead of being reverted immediately.
 The automation reevaluates immediately on:
 
 - Presence changes
-- Managed cover state changes
+- Managed cover **settled** state changes (`open` / `closed` / etc. — travel states
+  `opening` / `closing` are ignored so the automation does not re-enter on every
+  position tick of its own moves)
 - `sun.sun` state changes (daylight, azimuth)
 - Awake entity/schedule changes
 - A linked contact sensor opening or closing
@@ -191,7 +196,9 @@ Temperature, weather and wind changes are picked up on the **10-minute** re-eval
 ### Decision model
 
 The automation computes a single global **mode**, then a **target position per cover**, then
-applies each target through one loop (a cover absent from the target map is left untouched):
+applies each target through one loop (a cover absent from the target map is left untouched).
+Triggers are only entry points: every run recomputes the desired state from live conditions
+(presence, sun, temperatures, wind, contacts) — the trigger type does not choose the action.
 
 1. **Away** (safety): nobody home and *Close When Away* enabled → all covers to `0`
    (if *Close When Away* is disabled, nothing happens)
@@ -203,8 +210,9 @@ applies each target through one loop (a cover absent from the target map is left
 5. **Active** (daytime, someone home), decided **per cover**:
    1. not awake → no movement
    2. **summer + daylight** (follows the sun):
-      - hot (`threshold + buffer`) → the sun-facing facade goes to *Summer Position (Sun-Facing Facade)*; every other facade goes to *Neutral Position* (stays open)
-      - not hot (comfort band, including the hysteresis deadband below the close threshold) → all facades to *Neutral Position* (fully open). Covers closed from night therefore open as soon as it is daylight and not hot enough to shade.
+      - hot → the sun-facing facade goes to *Summer Position (Sun-Facing Facade)*; every other facade goes to *Neutral Position* (stays open).
+        Hot means outdoor ≥ *Summer Close Temperature* + hysteresis, **or** indoor ≥ *Indoor Hot Temperature* + hysteresis **and** outdoor is already near/above the close band (outdoor ≥ close − hysteresis). Indoor heat alone never shades on a cool outdoor day. Without any outdoor/weather source, indoor heat alone is used as a fallback.
+      - not hot (comfort band) → all facades to *Neutral Position* (fully open). Covers closed from night therefore open as soon as it is daylight and not hot enough to shade.
    3. **winter + daylight** (follows the sun):
       - solar gain needed (`threshold - buffer`) → the sun-facing facade goes to *Winter Day Position (Solar Gains)*; every other facade goes to *Winter Day Position (Insulating / No Gains)*
       - otherwise (comfort band above the cold threshold) → the sun-facing facade goes to *Neutral Position* (fully open); every other facade stays at *Winter Day Position (Insulating / No Gains)*
@@ -218,11 +226,19 @@ back to applying the sun-facing behavior to **all** managed covers.
 
 Version 2 removes the external priority/latch helpers. Stability is achieved with:
 
-- **Hysteresis**: summer hot uses `threshold + buffer`; shading stops as soon as the temperature drops below that level (covers reopen fully in the comfort band)
-- **Comfort band**: when it is not hot enough to shade, every facade opens to *Neutral Position* instead of holding the previous position (fixes covers that stayed closed after night)
+- **Hysteresis**: summer hot uses `threshold + buffer` for outdoor entry; indoor can only tip
+  shading when outdoor is already within `threshold ± buffer`. Shading stops as soon as the
+  outdoor reading drops below the hot band (covers reopen fully in the comfort band)
+- **Comfort band**: when it is not hot enough to shade, every facade opens to *Neutral Position*
+  instead of holding the previous position (fixes covers that stayed closed after night)
+- **Cool outdoor day**: indoor heat alone never forces summer shading while outdoor/weather
+  temperature stays below *Summer Close Temperature* − hysteresis (typical rainy/cool summer day)
 - **No-op guard**: a cover is never commanded if it is already at its target
 - **Minimum Position Delta** and **Minimum Action Interval** for comfort moves
-- **Sensor Stability Window**: noisy sensor values are used only once stable
+- **Sensor Stability Window**: numeric outdoor/indoor/wind sensors are used only once their
+  *state* (`last_changed`) has been unchanged for the configured minutes. Weather entities are
+  not gated this way (forecast polls bump `last_updated` without meaning the temperature is
+  noisy); use hysteresis for weather instead
 - Optional sensor entities are validated before use (`unknown`/`unavailable`/missing are ignored)
 
 ## Orientation Mapping
@@ -299,6 +315,10 @@ Bug fixes included in v2:
   frozen at their previous position. In summer every facade opens fully when it is not hot
   enough to shade; in winter the sun-facing facade opens fully even when solar gains are not
   needed.
+- **Cool outdoor day**: indoor heat alone no longer forces summer shading while outdoor/weather
+  stays below the close band (fixes rainy/cool summer mornings).
+- **Cover travel no longer re-triggers**: state triggers ignore `opening` / `closing`, so the
+  automation does not re-enter on every position tick of its own moves.
 
 ## Troubleshooting
 
@@ -314,6 +334,15 @@ Bug fixes included in v2:
   Half-Angle** if shading starts/stops too early or too late
 - **Position service errors**: ensure the cover integration supports `cover.set_cover_position`
 - **Too frequent movements**: increase `Minimum Position Delta` and/or `Minimum Action Interval (Minutes)`, or raise the hysteresis buffer
+- **Hourly open then shade while it stays hot (weather-only setup)**: fixed in current blueprint —
+  weather forecast polls no longer clear `summer_hot` via the stability window. Reload the
+  blueprint after updating. Prefer a dedicated outdoor temperature sensor when possible.
+- **Shades on a cool / rainy day while indoor feels warm**: fixed in current blueprint — indoor
+  heat alone no longer triggers summer shading when outdoor/weather is below the close band.
+  Reload the blueprint after updating. Check that *Outdoor Temperature Sensor* or *Weather
+  Entity* is configured so the cool outdoor reading is visible.
+- **Covers chatter while moving (open/close storm)**: cover triggers now ignore `opening` /
+  `closing` travel states. Reload the blueprint after updating.
 - **Contact opening does nothing**: verify the cover in the link is part of *All Managed Covers* and that its linked sensors report `on` when open
 - **Manual move gets reverted too quickly**: increase `Manual Override Hold (Minutes)`
 - **Night close skipped after an automation move**: Cover Manager must be **1.0.1+** so

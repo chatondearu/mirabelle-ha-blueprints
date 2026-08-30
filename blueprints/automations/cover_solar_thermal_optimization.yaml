@@ -349,7 +349,12 @@ blueprint:
               unit_of_measurement: °C
         indoor_hot_temp:
           name: Indoor Hot Temperature
-          description: In summer/daylight, shading is activated above this indoor temperature.
+          description: >
+            In summer/daylight, indoor heat can tip into shading only when outdoor
+            temperature is already near or above the Summer Close Temperature
+            (within the hysteresis buffer). A warm indoor reading alone never
+            shades covers on a cool outdoor day. If no outdoor/weather source is
+            configured, this threshold is used on its own as a fallback.
           default: 24
           selector:
             number:
@@ -391,8 +396,13 @@ blueprint:
         sensor_stability_minutes:
           name: Sensor Stability Window (Minutes)
           description: >
-            Minimum time (in minutes) a sensor value must stay unchanged before being used.
-            Helps prevent rapid reactions to noisy sensor updates.
+            For numeric outdoor/indoor/wind sensors only: wait until the sensor
+            state (the measured value) has been unchanged for this many minutes
+            before using it. Uses last_changed, not last_updated, so polling
+            heartbeats do not reset the window. Weather entities are excluded —
+            they refresh attributes on a schedule and would otherwise open covers
+            for several minutes after every forecast poll even when it stays hot.
+            Temperature oscillation is handled by the hysteresis buffer instead.
           default: 5
           selector:
             select:
@@ -522,10 +532,15 @@ trigger_variables:
   cover_contact_links_input: !input cover_contact_links
 
 trigger:
-  # Real state triggers fire on any change. An empty entity list is tolerated
-  # by Home Assistant (it simply tracks nothing).
+  # Cover settled-state only: ignore opening/closing travel ticks so the
+  # automation does not re-enter on every position update of its own moves.
+  # Settled changes still catch manual overrides for the next evaluation.
+  # An empty entity list is tolerated by Home Assistant (it tracks nothing).
   - platform: state
     entity_id: !input covers
+    not_to:
+      - opening
+      - closing
   - platform: state
     entity_id: !input presence_persons
   - platform: state
@@ -592,12 +607,12 @@ variables:
   summer_start_day: !input summer_start_day
   summer_end_month: !input summer_end_month
   summer_end_day: !input summer_end_day
-  summer_close_temp: !input summer_close_temp
-  indoor_hot_temp: !input indoor_hot_temp
-  winter_open_temp_below: !input winter_open_temp_below
-  winter_indoor_cold_temp: !input winter_indoor_cold_temp
-  temperature_hysteresis: !input temperature_hysteresis
-  max_wind_speed: !input max_wind_speed
+  summer_close_temp_input: !input summer_close_temp
+  indoor_hot_temp_input: !input indoor_hot_temp
+  winter_open_temp_below_input: !input winter_open_temp_below
+  winter_indoor_cold_temp_input: !input winter_indoor_cold_temp
+  temperature_hysteresis_input: !input temperature_hysteresis
+  max_wind_speed_input: !input max_wind_speed
   manual_override_minutes_input: !input manual_override_minutes
   minimum_reposition_delta_input: !input minimum_reposition_delta
   minimum_action_interval_minutes_input: !input minimum_action_interval_minutes
@@ -611,6 +626,7 @@ variables:
   neutral_position_input: !input neutral_position
 
   # --- Normalized numeric values ---
+  # Coerce unset/null blueprint inputs so threshold math never sees None.
   contact_open_position: "{{ contact_open_position_input | int(100) }}"
   night_position: "{{ night_position_input | int(0) }}"
   wind_position: "{{ wind_position_input | int(0) }}"
@@ -624,6 +640,12 @@ variables:
   manual_override_minutes: "{{ manual_override_minutes_input | int(60) }}"
   minimum_reposition_delta: "{{ minimum_reposition_delta_input | int(0) }}"
   minimum_action_interval_minutes: "{{ minimum_action_interval_minutes_input | int(0) }}"
+  summer_close_temp: "{{ summer_close_temp_input | float(24) }}"
+  indoor_hot_temp: "{{ indoor_hot_temp_input | float(24) }}"
+  winter_open_temp_below: "{{ winter_open_temp_below_input | float(17) }}"
+  winter_indoor_cold_temp: "{{ winter_indoor_cold_temp_input | float(19) }}"
+  temperature_hysteresis: "{{ temperature_hysteresis_input | float(0.5) }}"
+  max_wind_speed: "{{ max_wind_speed_input | float(35) }}"
 
   # --- Source availability guards ---
   has_awake_entity: "{{ awake_entity_input is string and awake_entity_input | length > 0 }}"
@@ -673,31 +695,30 @@ variables:
       {{ is_daylight }}
     {% endif %}
 
-  # --- Sensor stability (values used only when stable long enough) ---
+  # --- Sensor stability (numeric sensors only; weather excluded) ---
+  # Use last_changed so a poll that rewrites the same state does not reset the
+  # window. Weather entities bump last_updated on every forecast refresh even
+  # when temperature stays high; gating on that caused hourly comfort-band
+  # openings. Weather readings stay usable immediately; hysteresis covers noise.
   outdoor_stable: >
     {{
       (not has_outdoor_temperature)
       or sensor_stability_minutes == 0
-      or (as_timestamp(now()) - as_timestamp(states[outdoor_temperature_entity].last_updated)) >= (sensor_stability_minutes * 60)
+      or (as_timestamp(now()) - as_timestamp(states[outdoor_temperature_entity].last_changed)) >= (sensor_stability_minutes * 60)
     }}
   indoor_stable: >
     {{
       (not has_indoor_temperature)
       or sensor_stability_minutes == 0
-      or (as_timestamp(now()) - as_timestamp(states[indoor_temperature_entity].last_updated)) >= (sensor_stability_minutes * 60)
+      or (as_timestamp(now()) - as_timestamp(states[indoor_temperature_entity].last_changed)) >= (sensor_stability_minutes * 60)
     }}
   wind_stable: >
     {{
       (not has_wind_sensor)
       or sensor_stability_minutes == 0
-      or (as_timestamp(now()) - as_timestamp(states[wind_speed_entity].last_updated)) >= (sensor_stability_minutes * 60)
+      or (as_timestamp(now()) - as_timestamp(states[wind_speed_entity].last_changed)) >= (sensor_stability_minutes * 60)
     }}
-  weather_stable: >
-    {{
-      (not has_weather_entity)
-      or sensor_stability_minutes == 0
-      or (as_timestamp(now()) - as_timestamp(states[weather_entity].last_updated)) >= (sensor_stability_minutes * 60)
-    }}
+  weather_stable: "{{ true }}"
 
   # --- Measured values ---
   temp_value: >
@@ -745,17 +766,36 @@ variables:
 
   # --- Thermal conditions (hysteresis around thresholds) ---
   wind_high: "{{ has_wind_sensor and wind_stable and (wind_value > max_wind_speed) }}"
+  # Outdoor source usable for thermal decisions (sensor stable, or weather).
+  outdoor_usable: >
+    {{
+      (has_outdoor_temperature and outdoor_stable)
+      or (has_weather_entity and weather_stable)
+    }}
+  indoor_hot: >
+    {{
+      has_indoor_temperature
+      and indoor_stable
+      and indoor_temp_value >= (indoor_hot_temp + temperature_hysteresis)
+    }}
+  # Summer shading needs outdoor heat as the primary signal. Indoor heat may
+  # tip into shading only when outdoor is already near/above the close band
+  # (summer_close_temp - hysteresis). A warm room on a cool rainy day must
+  # keep covers open. Indoor-only fallback applies when no outdoor source exists.
   summer_hot: >
     {{
       is_summer
       and is_daylight
       and (
-        (
-          ((has_outdoor_temperature and outdoor_stable) or (has_weather_entity and weather_stable))
-          and temp_value >= (summer_close_temp + temperature_hysteresis)
-        )
+        (outdoor_usable and temp_value >= (summer_close_temp + temperature_hysteresis))
         or
-        (has_indoor_temperature and indoor_stable and indoor_temp_value >= (indoor_hot_temp + temperature_hysteresis))
+        (
+          indoor_hot
+          and (
+            (not outdoor_usable)
+            or (temp_value >= (summer_close_temp - temperature_hysteresis))
+          )
+        )
       )
     }}
   winter_need_solar_gain: >

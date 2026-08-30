@@ -422,6 +422,265 @@ async def test_summer_heat_shades_only_sun_facing_facade(hass: HomeAssistant) ->
 
 
 @pytest.mark.behavior
+async def test_summer_cool_outdoor_keeps_open_despite_hot_indoor(
+    hass: HomeAssistant,
+) -> None:
+    """Indoor heat alone must not shade covers on a cool outdoor day.
+
+    Reproduces the cool/rainy summer morning failure mode: outdoor ~16°C with an
+    indoor sensor above Indoor Hot Temperature must reopen to Neutral instead of
+    holding/applying the summer shade position.
+    """
+    indoor = "sensor.indoor_temperature"
+    seed_entities(
+        hass,
+        {
+            "sun.sun": ("above_horizon", {"azimuth": 180.0, "elevation": 45}),
+            PERSON: ("home", {}),
+            # Start shaded so a comfort-band decision is observable.
+            BAY: ("open", {"current_position": 25}),
+            DOOR: ("open", {"current_position": 25}),
+            OUTDOOR: ("16", {}),
+            indoor: ("26", {}),
+        },
+    )
+    await hass.async_block_till_done()
+
+    set_position = async_mock_service(hass, "cover", "set_cover_position")
+
+    await async_load_automation_blueprint(
+        hass,
+        FILENAME,
+        {
+            "covers": [BAY, DOOR],
+            "south_covers": [BAY],
+            "north_covers": [DOOR],
+            "presence_persons": [PERSON],
+            "season_mode": "summer",
+            "outdoor_temperature": OUTDOOR,
+            "indoor_temperature": indoor,
+            "summer_close_temp": 25,
+            "indoor_hot_temp": 25,
+            "temperature_hysteresis": 0.5,
+            "summer_sun_facing_position": "25",
+            "neutral_position": "100",
+            "sensor_stability_minutes": "0",
+            "manual_override_minutes": 0,
+            "minimum_action_interval_minutes": 0,
+            "minimum_reposition_delta": 0,
+        },
+    )
+
+    seed_entities(hass, {"sun.sun": ("above_horizon", {"azimuth": 180.0, "elevation": 40})})
+    await hass.async_block_till_done()
+
+    positions = _requested_positions(set_position)
+    assert positions.get(BAY) == 100
+    assert positions.get(DOOR) == 100
+
+
+@pytest.mark.behavior
+async def test_summer_indoor_tips_shading_when_outdoor_near_close_band(
+    hass: HomeAssistant,
+) -> None:
+    """Indoor heat may tip shading when outdoor is already near the close band."""
+    indoor = "sensor.indoor_temperature"
+    seed_entities(
+        hass,
+        {
+            "sun.sun": ("above_horizon", {"azimuth": 180.0, "elevation": 45}),
+            PERSON: ("home", {}),
+            BAY: ("open", {"current_position": 100}),
+            DOOR: ("open", {"current_position": 100}),
+            # 24.7 is below close+hyst (25.5) but >= close-hyst (24.5).
+            OUTDOOR: ("24.7", {}),
+            indoor: ("26", {}),
+        },
+    )
+    await hass.async_block_till_done()
+
+    set_position = async_mock_service(hass, "cover", "set_cover_position")
+
+    await async_load_automation_blueprint(
+        hass,
+        FILENAME,
+        {
+            "covers": [BAY, DOOR],
+            "south_covers": [BAY],
+            "north_covers": [DOOR],
+            "presence_persons": [PERSON],
+            "season_mode": "summer",
+            "outdoor_temperature": OUTDOOR,
+            "indoor_temperature": indoor,
+            "summer_close_temp": 25,
+            "indoor_hot_temp": 25,
+            "temperature_hysteresis": 0.5,
+            "summer_sun_facing_position": "25",
+            "neutral_position": "100",
+            "sensor_stability_minutes": "0",
+            "manual_override_minutes": 0,
+            "minimum_action_interval_minutes": 0,
+            "minimum_reposition_delta": 0,
+        },
+    )
+
+    seed_entities(hass, {"sun.sun": ("above_horizon", {"azimuth": 180.0, "elevation": 40})})
+    await hass.async_block_till_done()
+
+    positions = _requested_positions(set_position)
+    assert positions.get(BAY) == 25
+    assert positions.get(DOOR) == 100
+
+
+@pytest.mark.behavior
+async def test_summer_indoor_only_fallback_shades_without_outdoor_source(
+    hass: HomeAssistant,
+) -> None:
+    """Without outdoor/weather, indoor heat alone remains a valid shading fallback."""
+    indoor = "sensor.indoor_temperature"
+    seed_entities(
+        hass,
+        {
+            "sun.sun": ("above_horizon", {"azimuth": 180.0, "elevation": 45}),
+            PERSON: ("home", {}),
+            BAY: ("open", {"current_position": 100}),
+            DOOR: ("open", {"current_position": 100}),
+            indoor: ("26", {}),
+        },
+    )
+    await hass.async_block_till_done()
+
+    set_position = async_mock_service(hass, "cover", "set_cover_position")
+
+    await async_load_automation_blueprint(
+        hass,
+        FILENAME,
+        {
+            "covers": [BAY, DOOR],
+            "south_covers": [BAY],
+            "north_covers": [DOOR],
+            "presence_persons": [PERSON],
+            "season_mode": "summer",
+            "indoor_temperature": indoor,
+            "indoor_hot_temp": 25,
+            "temperature_hysteresis": 0.5,
+            "summer_sun_facing_position": "25",
+            "neutral_position": "100",
+            "sensor_stability_minutes": "0",
+            "manual_override_minutes": 0,
+            "minimum_action_interval_minutes": 0,
+            "minimum_reposition_delta": 0,
+        },
+    )
+
+    seed_entities(hass, {"sun.sun": ("above_horizon", {"azimuth": 180.0, "elevation": 40})})
+    await hass.async_block_till_done()
+
+    positions = _requested_positions(set_position)
+    assert positions.get(BAY) == 25
+    assert positions.get(DOOR) == 100
+
+
+@pytest.mark.behavior
+async def test_weather_recent_poll_still_shades_when_hot(hass: HomeAssistant) -> None:
+    """A fresh weather last_updated must not drop summer_hot while temperature stays high.
+
+    Weather integrations refresh attributes on a schedule. Gating stability on
+    last_updated used to open all covers for sensor_stability_minutes after every
+    poll even at 32°C. Weather is therefore always treated as stable; hysteresis
+    still dampens real temperature oscillation.
+    """
+    weather = "weather.forecast_home"
+    seed_entities(
+        hass,
+        {
+            "sun.sun": ("above_horizon", {"azimuth": 180.0, "elevation": 45}),
+            PERSON: ("home", {}),
+            BAY: ("open", {"current_position": 100}),
+            DOOR: ("open", {"current_position": 100}),
+            # last_updated is "now" after async_set — old logic would mark unstable.
+            weather: ("sunny", {"temperature": 32.0}),
+        },
+    )
+    await hass.async_block_till_done()
+
+    set_position = async_mock_service(hass, "cover", "set_cover_position")
+
+    await async_load_automation_blueprint(
+        hass,
+        FILENAME,
+        {
+            "covers": [BAY, DOOR],
+            "south_covers": [BAY],
+            "north_covers": [DOOR],
+            "presence_persons": [PERSON],
+            "season_mode": "summer",
+            "weather_entity": weather,
+            "summer_close_temp": 25,
+            "temperature_hysteresis": 0.5,
+            "summer_sun_facing_position": "25",
+            "neutral_position": "100",
+            "sensor_stability_minutes": "10",
+            "manual_override_minutes": 0,
+            "minimum_action_interval_minutes": 0,
+            "minimum_reposition_delta": 0,
+        },
+    )
+
+    seed_entities(hass, {"sun.sun": ("above_horizon", {"azimuth": 180.0, "elevation": 40})})
+    await hass.async_block_till_done()
+
+    positions = _requested_positions(set_position)
+    assert positions.get(BAY) == 25
+    assert positions.get(DOOR) == 100
+
+
+@pytest.mark.behavior
+async def test_null_temperature_hysteresis_still_evaluates_summer_hot(
+    hass: HomeAssistant,
+) -> None:
+    """Unset hysteresis inputs must not crash threshold math (None + float)."""
+    seed_entities(
+        hass,
+        {
+            "sun.sun": ("above_horizon", {"azimuth": 180.0, "elevation": 45}),
+            PERSON: ("home", {}),
+            BAY: ("open", {"current_position": 100}),
+            OUTDOOR: ("30", {}),
+        },
+    )
+    await hass.async_block_till_done()
+
+    set_position = async_mock_service(hass, "cover", "set_cover_position")
+
+    await async_load_automation_blueprint(
+        hass,
+        FILENAME,
+        {
+            "covers": [BAY],
+            "south_covers": [BAY],
+            "presence_persons": [PERSON],
+            "season_mode": "summer",
+            "outdoor_temperature": OUTDOOR,
+            "summer_close_temp": 25,
+            "temperature_hysteresis": None,
+            "summer_sun_facing_position": "25",
+            "neutral_position": "100",
+            "sensor_stability_minutes": "0",
+            "manual_override_minutes": 0,
+            "minimum_action_interval_minutes": 0,
+            "minimum_reposition_delta": 0,
+        },
+    )
+
+    seed_entities(hass, {"sun.sun": ("above_horizon", {"azimuth": 180.0, "elevation": 40})})
+    await hass.async_block_till_done()
+
+    positions = _requested_positions(set_position)
+    assert positions.get(BAY) == 25
+
+
+@pytest.mark.behavior
 async def test_winter_gains_open_only_sun_facing_facade(hass: HomeAssistant) -> None:
     """In winter, only the sun-facing facade opens for gains; others insulate."""
     seed_entities(
