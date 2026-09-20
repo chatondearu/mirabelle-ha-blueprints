@@ -10,11 +10,20 @@ import voluptuous as vol
 from homeassistant.components import websocket_api
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers import (
+    config_validation as cv,
+    device_registry as dr,
+    entity_registry as er,
+)
 
+from .access import normalize_access, user_can_use_dashboard
+from .cameras import normalize_cameras, normalize_sensor_camera_map
 from .const import (
     CDA_BLUEPRINT_MARKERS,
+    CONF_ACCESS,
+    CONF_ACCESS_MODE,
     CONF_BLOCK_ARM_IF_OPEN,
+    CONF_CAMERAS,
     CONF_CODES,
     CONF_ENTRY_DELAY,
     CONF_EXIT_DELAY,
@@ -22,14 +31,17 @@ from .const import (
     CONF_NAME,
     CONF_RESPONSE,
     CONF_SENSOR_ASSIGNMENTS,
+    CONF_SENSOR_CAMERA_MAP,
     DEFAULT_BLOCK_ARM_IF_OPEN,
     DEFAULT_ENTRY_DELAY,
     DEFAULT_EXIT_DELAY,
     DOMAIN,
     WS_TYPE_GET_CONFIG,
+    WS_TYPE_GET_DASHBOARD,
     WS_TYPE_LIST_LINKED,
     WS_TYPE_UPDATE_CONFIG,
 )
+from .dashboard import build_dashboard
 from .keypad import discover_default_keypad_device_id
 from .response import normalize_response
 from .sensors import (
@@ -48,6 +60,7 @@ def async_register_websockets(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_get_config)
     websocket_api.async_register_command(hass, ws_update_config)
     websocket_api.async_register_command(hass, ws_list_linked)
+    websocket_api.async_register_command(hass, ws_get_dashboard)
 
 
 def _entries(hass: HomeAssistant) -> list[ConfigEntry]:
@@ -60,6 +73,46 @@ def _entry_or_none(hass: HomeAssistant, entry_id: str | None) -> ConfigEntry | N
         return entry if entry and entry.domain == DOMAIN else None
     entries = _entries(hass)
     return entries[0] if entries else None
+
+
+def _connection_user(
+    connection: websocket_api.ActiveConnection,
+) -> tuple[bool, str | None]:
+    user = getattr(connection, "user", None)
+    if user is None:
+        return False, None
+    return bool(getattr(user, "is_admin", False)), getattr(user, "id", None)
+
+
+def _require_dashboard_acl(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    entry: ConfigEntry,
+) -> bool:
+    merged = merge_runtime_config({**entry.data, **entry.options})
+    is_admin, user_id = _connection_user(connection)
+    return user_can_use_dashboard(
+        merged.get(CONF_ACCESS) or normalize_access(None),
+        is_admin=is_admin,
+        user_id=user_id,
+    )
+
+
+def _require_admin(connection: websocket_api.ActiveConnection, msg_id: int) -> bool:
+    is_admin, _user_id = _connection_user(connection)
+    if is_admin:
+        return True
+    connection.send_error(msg_id, "unauthorized", "Administrator access required")
+    return False
+
+
+def _panel_entity_id(hass: HomeAssistant, entry: ConfigEntry) -> str:
+    return (
+        er.async_get(hass).async_get_entity_id(
+            "alarm_control_panel", DOMAIN, entry.entry_id
+        )
+        or "alarm_control_panel.cda_alarm"
+    )
 
 
 def _public_config(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
@@ -77,8 +130,32 @@ def _public_config(hass: HomeAssistant, entry: ConfigEntry) -> dict[str, Any]:
         CONF_CODES: merged.get(CONF_CODES, []),
         CONF_KEYPADS: merged.get(CONF_KEYPADS, []),
         CONF_RESPONSE: merged.get(CONF_RESPONSE, normalize_response(None)),
+        CONF_CAMERAS: merged.get(CONF_CAMERAS, []),
+        CONF_SENSOR_CAMERA_MAP: merged.get(CONF_SENSOR_CAMERA_MAP, {}),
+        CONF_ACCESS: merged.get(CONF_ACCESS, normalize_access(None)),
         "discovered_default_keypad": discover_default_keypad_device_id(hass),
         "zha_devices": _zha_devices(hass),
+    }
+
+
+def _dashboard_safe_config(
+    hass: HomeAssistant, entry: ConfigEntry
+) -> dict[str, Any]:
+    merged = merge_runtime_config({**entry.data, **entry.options})
+    return {
+        "entry_id": entry.entry_id,
+        "panel_entity_id": _panel_entity_id(hass, entry),
+        CONF_SENSOR_ASSIGNMENTS: merged.get(CONF_SENSOR_ASSIGNMENTS, []),
+        CONF_CAMERAS: merged.get(CONF_CAMERAS, []),
+        CONF_SENSOR_CAMERA_MAP: merged.get(CONF_SENSOR_CAMERA_MAP, {}),
+        CONF_ACCESS: {
+            CONF_ACCESS_MODE: merged[CONF_ACCESS][CONF_ACCESS_MODE],
+        },
+        CONF_ENTRY_DELAY: merged.get(CONF_ENTRY_DELAY, DEFAULT_ENTRY_DELAY),
+        CONF_EXIT_DELAY: merged.get(CONF_EXIT_DELAY, DEFAULT_EXIT_DELAY),
+        CONF_BLOCK_ARM_IF_OPEN: merged.get(
+            CONF_BLOCK_ARM_IF_OPEN, DEFAULT_BLOCK_ARM_IF_OPEN
+        ),
     }
 
 
@@ -106,7 +183,6 @@ def _zha_devices(hass: HomeAssistant) -> list[dict[str, Any]]:
         vol.Optional("entry_id"): cv.string,
     }
 )
-@websocket_api.require_admin
 @websocket_api.async_response
 async def ws_get_config(
     hass: HomeAssistant,
@@ -118,7 +194,16 @@ async def ws_get_config(
     if entry is None:
         connection.send_error(msg["id"], "not_found", "No CDA Alarm config entry")
         return
-    connection.send_result(msg["id"], _public_config(hass, entry))
+    is_admin, _user_id = _connection_user(connection)
+    if not is_admin and not _require_dashboard_acl(hass, connection, entry):
+        connection.send_error(msg["id"], "unauthorized", "Dashboard access denied")
+        return
+    payload = (
+        _public_config(hass, entry)
+        if is_admin
+        else _dashboard_safe_config(hass, entry)
+    )
+    connection.send_result(msg["id"], payload)
 
 
 @websocket_api.websocket_command(
@@ -128,7 +213,6 @@ async def ws_get_config(
         vol.Required("config"): dict,
     }
 )
-@websocket_api.require_admin
 @websocket_api.async_response
 async def ws_update_config(
     hass: HomeAssistant,
@@ -136,6 +220,8 @@ async def ws_update_config(
     msg: dict[str, Any],
 ) -> None:
     """Persist panel edits into the config entry options."""
+    if not _require_admin(connection, msg["id"]):
+        return
     entry = _entry_or_none(hass, msg.get("entry_id"))
     if entry is None:
         connection.send_error(msg["id"], "not_found", "No CDA Alarm config entry")
@@ -153,6 +239,13 @@ async def ws_update_config(
     expanded = expand_assignments(assignments)
     keypads = normalize_keypads(incoming.get(CONF_KEYPADS, current.get(CONF_KEYPADS)))
     response = normalize_response(incoming.get(CONF_RESPONSE, current.get(CONF_RESPONSE)))
+    cameras = normalize_cameras(
+        incoming.get(CONF_CAMERAS, current.get(CONF_CAMERAS))
+    )
+    sensor_camera_map = normalize_sensor_camera_map(
+        incoming.get(CONF_SENSOR_CAMERA_MAP, current.get(CONF_SENSOR_CAMERA_MAP))
+    )
+    access = normalize_access(incoming.get(CONF_ACCESS, current.get(CONF_ACCESS)))
 
     def _int(key: str, default: int) -> int:
         try:
@@ -174,6 +267,9 @@ async def ws_update_config(
         CONF_CODES: incoming.get(CONF_CODES, current.get(CONF_CODES, [])),
         CONF_KEYPADS: keypads,
         CONF_RESPONSE: response,
+        CONF_CAMERAS: cameras,
+        CONF_SENSOR_CAMERA_MAP: sensor_camera_map,
+        CONF_ACCESS: access,
     }
     if not isinstance(options[CONF_CODES], list):
         connection.send_error(msg["id"], "invalid_format", "codes must be a list")
@@ -195,7 +291,6 @@ async def ws_update_config(
         vol.Optional("panel_entity_id"): cv.string,
     }
 )
-@websocket_api.require_admin
 @websocket_api.async_response
 async def ws_list_linked(
     hass: HomeAssistant,
@@ -203,12 +298,12 @@ async def ws_list_linked(
     msg: dict[str, Any],
 ) -> None:
     """List automations that reference CDA Alarm or known CDA blueprints."""
+    if not _require_admin(connection, msg["id"]):
+        return
     entry = _entry_or_none(hass, msg.get("entry_id"))
     panel_entity = msg.get("panel_entity_id") or "alarm_control_panel.cda_alarm"
     if entry is not None:
         # Prefer the actual entity id for this entry when available.
-        from homeassistant.helpers import entity_registry as er
-
         entity_id = er.async_get(hass).async_get_entity_id(
             "alarm_control_panel", DOMAIN, entry.entry_id
         )
@@ -271,3 +366,31 @@ async def ws_list_linked(
             ],
         },
     )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): WS_TYPE_GET_DASHBOARD,
+        vol.Optional("entry_id"): cv.string,
+        vol.Optional("panel_entity_id"): cv.string,
+    }
+)
+@websocket_api.async_response
+async def ws_get_dashboard(
+    hass: HomeAssistant,
+    connection: websocket_api.ActiveConnection,
+    msg: dict[str, Any],
+) -> None:
+    """Return a dashboard snapshot when the configured ACL permits it."""
+    entry = _entry_or_none(hass, msg.get("entry_id"))
+    if entry is None:
+        connection.send_error(msg["id"], "not_found", "No CDA Alarm config entry")
+        return
+    if not _require_dashboard_acl(hass, connection, entry):
+        connection.send_error(msg["id"], "unauthorized", "Dashboard access denied")
+        return
+
+    panel_entity_id = msg.get("panel_entity_id") or _panel_entity_id(hass, entry)
+    payload = build_dashboard(hass, entry, panel_entity_id)
+    payload["can_configure"] = _connection_user(connection)[0]
+    connection.send_result(msg["id"], payload)
