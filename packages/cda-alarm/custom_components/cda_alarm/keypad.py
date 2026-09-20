@@ -18,6 +18,7 @@ from homeassistant.components.alarm_control_panel import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_CODE, ATTR_ENTITY_ID
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_state_change_event
@@ -321,7 +322,10 @@ async def _async_execute_keypad_action(
     data: dict[str, Any] = {ATTR_ENTITY_ID: panel_entity_id}
     if code is not None:
         data[ATTR_CODE] = code
-    await hass.services.async_call(ALARM_DOMAIN, service, data, blocking=True)
+    try:
+        await hass.services.async_call(ALARM_DOMAIN, service, data, blocking=True)
+    except HomeAssistantError:
+        _LOGGER.debug("Keypad action rejected by panel", exc_info=True)
     await hass.async_block_till_done()
     panel_state = hass.states.get(panel_entity_id)
     await push_status(_panel_status(panel_state.state if panel_state else None))

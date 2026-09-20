@@ -16,6 +16,7 @@ from homeassistant.components.alarm_control_panel import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event
 from homeassistant.helpers.restore_state import RestoreEntity
@@ -196,7 +197,7 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity, RestoreEntity):
         """Disarm the alarm when the code is valid."""
         if not self._is_valid_code(code):
             _LOGGER.warning("Rejected CDA Alarm disarm request with invalid code")
-            return
+            raise HomeAssistantError("Invalid code")
         self._cancel_delays()
         self._active_sensors = []
         self._open_sensors = {}
@@ -219,7 +220,7 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity, RestoreEntity):
         if not self._is_valid_code(code):
             _LOGGER.warning("Rejected CDA Alarm arm request with invalid code")
             self._async_report_arm_failure(REASON_INVALID_CODE, target_state)
-            return
+            raise HomeAssistantError("Invalid code")
 
         sensors = list(self._config.get(MODE_SENSORS[target_state], []))
         open_sensors = self._get_open_sensors(sensors)
