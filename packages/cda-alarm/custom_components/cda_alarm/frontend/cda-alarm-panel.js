@@ -275,15 +275,34 @@ class CdaAlarmPanel extends LitElement {
     this._message = "";
     this._newEntity = "";
     this._codesJson = "[]";
+    this._dashboardReloadTimer = null;
+    this._dashboardLoadPromise = null;
+    this._dashboardReloadPending = false;
   }
 
   createRenderRoot() {
     return this;
   }
 
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this._dashboardReloadTimer !== null) {
+      clearTimeout(this._dashboardReloadTimer);
+      this._dashboardReloadTimer = null;
+    }
+  }
+
   updated(changed) {
-    if (changed.has("hass") && this.hass && !this._dashboard && !this._loading) {
+    if (!changed.has("hass") || !this.hass) return;
+    if (!this._dashboard && !this._loading && !this._denied) {
       this._load();
+      return;
+    }
+    if (
+      this._dashboard &&
+      this._dashboardStateChanged(changed.get("hass"))
+    ) {
+      this._scheduleDashboardReload();
     }
   }
 
@@ -293,48 +312,113 @@ class CdaAlarmPanel extends LitElement {
     this._error = "";
     this._denied = false;
     try {
-      const dashboard = await this.hass.connection.sendMessagePromise({
-        type: WS_DASHBOARD,
-      });
-      this._dashboard = dashboard;
-      this._isAdmin = Boolean(dashboard.can_configure);
-      if (this._isAdmin) {
-        const config = await this.hass.connection.sendMessagePromise({
-          type: WS_GET,
-          entry_id: dashboard.entry_id,
-        });
-        this._config = this._normalizeConfig(config);
-        this._codesJson = JSON.stringify(this._config.codes || [], null, 2);
-      } else {
-        this._config = null;
-        if (this._tab !== "dashboard") this._tab = "dashboard";
-      }
-      if (this._tab === "linked") {
+      await this._reloadDashboard({ loadConfig: true });
+      if (!this._denied && this._tab === "linked") {
         await this._loadLinked();
       }
     } catch (err) {
-      if (err?.code === "unauthorized" || /access denied/i.test(err?.message)) {
-        this._denied = true;
-        this._dashboard = null;
-        this._config = null;
-      } else {
-        this._error = err?.message || String(err);
-      }
+      this._handleDashboardError(err);
     } finally {
       this._loading = false;
     }
   }
 
-  async _reloadDashboard() {
-    if (!this.hass) return;
-    try {
-      this._dashboard = await this.hass.connection.sendMessagePromise({
-        type: WS_DASHBOARD,
-        entry_id: this._dashboard?.entry_id,
-      });
-    } catch (err) {
-      this._error = err?.message || String(err);
+  _dashboardEntityIds() {
+    if (!this._dashboard) return [];
+    return [
+      this._dashboard.panel_entity_id,
+      ...(this._dashboard.areas || []).flatMap((area) =>
+        (area.sensors || []).map((sensor) => sensor.entity_id)
+      ),
+      ...(this._dashboard.cameras || []).map((camera) => camera.entity_id),
+    ].filter(Boolean);
+  }
+
+  _dashboardStateChanged(previousHass) {
+    return this._dashboardEntityIds().some(
+      (entityId) =>
+        previousHass?.states?.[entityId] !== this.hass?.states?.[entityId]
+    );
+  }
+
+  _scheduleDashboardReload() {
+    if (this._dashboardReloadTimer !== null) {
+      clearTimeout(this._dashboardReloadTimer);
     }
+    this._dashboardReloadTimer = setTimeout(() => {
+      this._dashboardReloadTimer = null;
+      this._reloadDashboard();
+    }, 250);
+  }
+
+  _handleDashboardError(err) {
+    if (err?.code !== "unauthorized" && !/access denied/i.test(err?.message)) {
+      this._error = err?.message || String(err);
+      return false;
+    }
+    this._denied = true;
+    this._dashboard = null;
+    this._isAdmin = false;
+    this._config = null;
+    this._linked = null;
+    this._tab = "dashboard";
+    this._error = "";
+    this._dashboardReloadPending = false;
+    if (this._dashboardReloadTimer !== null) {
+      clearTimeout(this._dashboardReloadTimer);
+      this._dashboardReloadTimer = null;
+    }
+    return true;
+  }
+
+  async _applyDashboard(dashboard, loadConfig) {
+    const wasAdmin = this._isAdmin;
+    this._dashboard = dashboard;
+    this._denied = false;
+    this._isAdmin = Boolean(dashboard.can_configure);
+    if (!this._isAdmin) {
+      this._config = null;
+      this._linked = null;
+      this._tab = "dashboard";
+      return;
+    }
+    const configIsMissing =
+      !this._config || this._config.entry_id !== dashboard.entry_id;
+    if (loadConfig || !wasAdmin || configIsMissing) {
+      const config = await this.hass.connection.sendMessagePromise({
+        type: WS_GET,
+        entry_id: dashboard.entry_id,
+      });
+      this._config = this._normalizeConfig(config);
+      this._codesJson = JSON.stringify(this._config.codes || [], null, 2);
+    }
+  }
+
+  async _reloadDashboard({ loadConfig = false } = {}) {
+    if (!this.hass) return;
+    if (this._dashboardLoadPromise) {
+      this._dashboardReloadPending = true;
+      return this._dashboardLoadPromise;
+    }
+    this._dashboardLoadPromise = (async () => {
+      this._error = "";
+      try {
+        const dashboard = await this.hass.connection.sendMessagePromise({
+          type: WS_DASHBOARD,
+          entry_id: this._dashboard?.entry_id,
+        });
+        await this._applyDashboard(dashboard, loadConfig);
+      } catch (err) {
+        this._handleDashboardError(err);
+      } finally {
+        this._dashboardLoadPromise = null;
+        if (this._dashboardReloadPending && !this._denied) {
+          this._dashboardReloadPending = false;
+          this._scheduleDashboardReload();
+        }
+      }
+    })();
+    return this._dashboardLoadPromise;
   }
 
   _normalizeConfig(config) {
