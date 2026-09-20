@@ -24,8 +24,8 @@ monorepo and is **synced** to a dedicated repository for HACS.
 3. Search for **CDA Alarm** → **Download**
 4. Restart Home Assistant
 5. **Settings → Devices & services → Add integration → CDA Alarm**
-6. Open the **CDA Alarm** sidebar panel to configure sensors, keypads, delays,
-   codes, and response
+6. Open the **CDA Alarm** sidebar panel to use the security Dashboard and
+   configure sensors, keypads, delays, codes, cameras, access, and response
 
 ## Manual install
 
@@ -40,7 +40,9 @@ Copy `custom_components/cda_alarm` into your HA
 
 ## Features
 
-- Sidebar panel (Sensors / General / Response / Linked)
+- Live security Dashboard as the default sidebar tab
+- Sensors grouped by Home Assistant area, with an **Unassigned** fallback
+- Sidebar configuration (Sensors / General / Response / Cameras / Access / Linked)
 - Standard `alarm_control_panel` services (`arm_home` / `away` / `night`, disarm)
 - Unified codes (PIN, RFID, NFC)
 - Hard-block arm when sensors are open (configurable)
@@ -48,8 +50,30 @@ Copy `custom_components/cda_alarm` into your HA
 - Multi-keypad list with default discovery fallback
 - Frient keypad as **input only** (no ZHA panel mirror)
 - Sirens / media noise / TTS when the panel is `triggered`
+- Dashboard cameras with optional sensor-to-camera mapping and trigger highlighting
+- Dashboard access for administrators, everyone, or selected users
 - State restore across reload / restart
 - English and French UI strings
+
+## Dashboard, cameras, and access
+
+The Dashboard shows the live alarm state, arm/disarm controls, monitored
+sensors grouped by Home Assistant area, and configured camera entities.
+Administrators select cameras and optionally map monitored sensors to cameras
+in the **Cameras** tab. A mapped camera is highlighted when its sensor triggers
+the alarm.
+
+The administrator-only **Access** tab controls who can view and operate the
+Dashboard: administrators only (default), every authenticated user, or selected
+Home Assistant users. Administrators are always allowed. Configuration tabs and
+updates remain restricted to administrators, and non-administrators never
+receive alarm codes through the panel API.
+
+## Upgrade to 0.4.0
+
+Restart Home Assistant and refresh the browser after upgrading. Existing alarm
+settings are preserved. Cameras and mappings initially remain empty, while
+Dashboard access defaults to administrators only.
 
 ## Documentation
 
@@ -62,6 +86,15 @@ Full guide (migration from Alarmo, troubleshooting, codes JSON):
 
 Monorepo tags `cda-alarm-vX.Y.Z` publish GitHub releases on this HACS repository
 as `vX.Y.Z`.
+
+## Changelog
+
+### 0.4.0
+
+- Added the live Dashboard with area-grouped sensors and alarm controls.
+- Added camera configuration, sensor mappings, and triggered-camera highlighting.
+- Added administrator/everyone/selected-user Dashboard ACL modes.
+- Adopted native Home Assistant form controls and light DOM rendering.
 
 ## License
 

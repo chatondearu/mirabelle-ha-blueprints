@@ -47,17 +47,51 @@ Package overview: [packages/cda-alarm/README.md](../packages/cda-alarm/README.md
 ## Configuration
 
 After adding the integration, open the **CDA Alarm** item in the Home Assistant
-sidebar (admin only). The options flow under **Configure** only points you to
-that panel.
+sidebar. Administrators can configure the integration; other users can open the
+Dashboard when allowed by the configured access policy. The options flow under
+**Configure** only points you to that panel.
 
 ### Sidebar tabs
 
 | Tab | Contents |
 | --- | --- |
+| **Dashboard** | Live alarm state and controls, sensors grouped by area, and configured cameras |
 | **Sensors** | Multi-select entities (any domain) and Away / Home / Night per entity |
 | **General** | Entry/exit delays, block-arm-if-open, codes JSON, keypad list with default |
 | **Response** | Sirens, noise media players, TTS (owned by the integration) |
+| **Cameras** | Camera entities and optional sensor-to-camera mappings |
+| **Access** | Dashboard access policy for administrators, everyone, or selected users |
 | **Linked** | Automations that reference the panel or known CDA blueprints |
+
+The **Dashboard** is the default tab. It shows arm/disarm controls, the current
+alarm state, and monitored sensors grouped by their Home Assistant area.
+Entities without an area appear under **Unassigned**. States update live while
+the panel is open. If codes are configured, enter a valid PIN before using an
+arm or disarm control.
+
+### Cameras
+
+In the administrator-only **Cameras** tab, select the `camera` entities to show
+on the Dashboard. You can optionally map each monitored sensor to one of those
+cameras. When the alarm is triggered, the Dashboard highlights the camera
+mapped to the first open triggering sensor. Missing or unavailable cameras are
+shown as unavailable; CDA Alarm does not provide video recording or an NVR
+proxy.
+
+### Dashboard access
+
+Administrators configure access in the **Access** tab:
+
+| Mode | Dashboard access |
+| --- | --- |
+| **Administrators only** | Administrators only (default) |
+| **Everyone** | Every authenticated Home Assistant user |
+| **Selected users** | Administrators and the selected Home Assistant users |
+
+The policy covers Dashboard viewing and its standard arm/disarm controls.
+Configuration tabs and configuration updates always remain administrator-only.
+Authorized non-administrators do not receive alarm codes or other
+administrator-only configuration through the panel API.
 
 | Setting | Description | Default |
 | --- | --- | --- |
@@ -200,6 +234,13 @@ a door opened while Home Assistant was down still starts the entry delay.
 A parallel run during cutover is fine; avoid two panels both driving sirens or
 the same keypad.
 
+## Upgrading to 0.4.0
+
+After installing 0.4.0, restart Home Assistant and refresh the browser so the
+new sidebar frontend is loaded. Existing alarm settings remain valid. Camera
+selection and sensor mappings start empty, and Dashboard access defaults to
+administrators only until changed in the new **Access** tab.
+
 ## Troubleshooting
 
 | Issue | Things to check |
@@ -215,6 +256,16 @@ the same keypad.
 | No `open_sensors` on trigger | Sensors assigned to the active mode; entities report open/`on` |
 
 ## Changelog
+
+### 0.4.0
+
+- Added a live security Dashboard as the default sidebar tab, with alarm
+  controls and sensors grouped by Home Assistant area.
+- Added camera selection and optional sensor-to-camera mapping, including
+  triggered-camera highlighting.
+- Added Dashboard access modes for administrators, everyone, or selected users;
+  configuration remains administrator-only.
+- Updated panel forms to native Home Assistant controls and light DOM rendering.
 
 ### 0.3.0
 
