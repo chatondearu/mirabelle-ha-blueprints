@@ -92,7 +92,7 @@ Unavailable and unknown TTS players are removed from the announcement target.
 
 When the panel leaves `triggered` for any state, or when **Silence** is tapped,
 the automation turns off every configured siren and sends `media_stop` to every
-noise player.
+configured noise or TTS media player.
 
 ### Sensor → Camera mapping
 
@@ -110,8 +110,8 @@ If no mapping matches, the **Default Camera** is used.
 
 The notification adds two actions: **Disarm** (`CDA_ALARM_DISARM`) disarms the
 panel, while **Silence** (`CDA_ALARM_SILENCE`) turns the sirens off and stops
-media on all configured noise players. Both are handled by the same automation
-via the `mobile_app_notification_action` event.
+media on all configured noise and TTS players. Both are handled by the same
+automation via the `mobile_app_notification_action` event.
 
 ## Troubleshooting
 
