@@ -1,0 +1,46 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Create a CDA Alarm panel",
+        "description": "Choose the name shown for this alarm panel.",
+        "data": {
+          "name": "Name"
+        }
+      }
+    }
+  },
+  "options": {
+    "error": {
+      "invalid_codes": "Codes must be a JSON array of objects containing only name, pin, rfid, and nfc_tag_id string fields."
+    },
+    "step": {
+      "init": {
+        "title": "CDA Alarm options",
+        "description": "Configure sensors, delays, and keypad access. Codes use a JSON array, for example: [{\"name\":\"Alice\",\"pin\":\"1234\",\"rfid\":\"tag-id\",\"nfc_tag_id\":\"home-assistant-tag-id\"}].",
+        "data": {
+          "sensors_away": "Away sensors",
+          "sensors_home": "Home sensors",
+          "sensors_night": "Night sensors",
+          "entry_delay": "Entry delay",
+          "exit_delay": "Exit delay",
+          "block_arm_if_open": "Block arming when a sensor is open",
+          "frient_device_id": "Frient keypad device",
+          "enable_keypad_feedback": "Enable keypad feedback",
+          "keypad_endpoint": "Keypad endpoint",
+          "codes_json": "Codes (JSON)"
+        },
+        "data_description": {
+          "sensors_away": "Binary sensors monitored in away mode.",
+          "sensors_home": "Binary sensors monitored in home mode.",
+          "sensors_night": "Binary sensors monitored in night mode.",
+          "entry_delay": "Seconds allowed before the alarm triggers.",
+          "exit_delay": "Seconds allowed to leave after arming.",
+          "frient_device_id": "Optional ZHA Frient keypad used by this alarm.",
+          "keypad_endpoint": "Zigbee endpoint used for keypad feedback.",
+          "codes_json": "JSON array of objects. Supported string fields are name, pin, rfid, and nfc_tag_id."
+        }
+      }
+    }
+  }
+}
