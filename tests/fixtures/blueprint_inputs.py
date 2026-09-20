@@ -204,12 +204,10 @@ SCRIPT_INPUTS: dict[str, dict[str, Any]] = {
 
 
 def frient_keypad_inputs(device_id: str) -> dict[str, Any]:
-    """Inputs for the third-party Frient keypad blueprint."""
+    """Inputs for the Frient keypad fallback blueprint (CDA Alarm target panel)."""
     return {
         "keypad": device_id,
-        "alarm_panel": ALARM,
         "mirror_alarm_panel": ALARM_MIRROR,
-        "default_pin": "1234",
         "mirror_default_pin": "1234",
         "enable_keypad_feedback": False,
         "keypad_endpoint": 1,
