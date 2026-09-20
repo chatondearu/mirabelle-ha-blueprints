@@ -106,4 +106,4 @@ def test_manifest_declares_config_flow() -> None:
     )
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert manifest.get("config_flow") is True
-    assert manifest.get("version") == "0.5.0"
+    assert manifest.get("version") == "0.5.1"
