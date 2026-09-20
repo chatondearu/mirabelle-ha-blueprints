@@ -3,14 +3,15 @@ blueprint:
     min_version: 2025.5.3
   name: "[CDA] 🛋️ Living Area Adaptive Lighting"
   description: >
-    Adaptive day and night lighting for living areas using computed profiles.
-    Night mode applies per-lamp blue starlight variation on color lights and dim
-    white lights, with an optional brightness ramp that fades down to midnight.
-    Day mode warms color temperature over time and adjusts brightness from
-    illuminance and cover shading. An optional progressive transition recreates
-    outdoor light around sunrise/sunset, the night window can be pinned to fixed
-    times (default sun), and a manual override can pause the automation after a
-    hand control. Uses zone occupancy sensors with optional person home constraints.
+    Adaptive lighting for living areas using computed profiles: morning, day,
+    evening, and night. Supports shared profile presets (package helpers), optional
+    brightness animations (leaf_cloud), and following a global lighting hub mode.
+    Night mode applies per-lamp starlight on color lights and dim white lights, with
+    an optional brightness ramp. Day/morning/evening warm color temperature from sun
+    elevation and adjust brightness from illuminance and cover shading. Optional
+    cover-open privacy (block or brightness cap). Profile boundaries support
+    sunrise/sunset/elevation/fixed time with a postpone delay. Manual override can
+    pause after hand control. Uses zone occupancy with optional person home constraints.
   domain: automation
   source_url: https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/living-area-adaptive-lighting.yaml
   input:
@@ -86,8 +87,8 @@ blueprint:
         illuminance_sensor:
           name: Illuminance Sensor
           description: >
-            Optional lux sensor. When empty, day/night uses sun position and optional
-            time windows only.
+            Optional lux sensor. When empty, profile windows and sun position drive
+            lighting need.
           default: ""
           selector:
             entity:
@@ -112,27 +113,192 @@ blueprint:
               min: 0
               max: 2000
               unit_of_measurement: lx
-        night_start:
-          name: Night Start
+        lux_dark_covers_open:
+          name: Lux Dark Threshold (Covers Open)
           description: >
-            Time when the night window begins (HH:MM:SS). Leave empty to use the
-            sun (sunset). Set a fixed time to define night yourself, handy in winter.
+            Optional stricter dark threshold when covers are open for privacy.
+            Leave at 0 to reuse Lux Dark Threshold.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 2000
+              unit_of_measurement: lx
+        lux_bright_covers_open:
+          name: Lux Bright Threshold (Covers Open)
+          description: >
+            Optional stricter bright threshold when covers are open. Leave at 0 to
+            reuse Lux Bright Threshold.
+          default: 0
+          selector:
+            number:
+              min: 0
+              max: 2000
+              unit_of_measurement: lx
+    schedule_section:
+      name: Profile Schedule
+      icon: mdi:calendar-clock
+      description: >
+        When each profile becomes active. Night is the late "night simulation"
+        window; evening covers dusk until night; morning softens the start of day.
+      input:
+        night_start:
+          name: Night Start (Fixed Time)
+          description: >
+            Fixed clock time for night when Night Trigger is fixed_time. Leave empty
+            to fall back to sunset when using sun-based night, or to 22:00:00 when
+            evening profile is enabled.
           default: ""
           selector:
             time: {}
         day_start:
-          name: Night End (Day Start)
+          name: Night End / Morning Start (Fixed Time)
           description: >
-            Time when the night window ends and day begins (HH:MM:SS). Leave empty
-            to use the sun (sunrise). Set a fixed time to keep day starting at the
-            same hour year round.
+            Fixed clock time when the night window ends (and morning may start when
+            Morning Trigger is fixed_time). Leave empty to use sunrise.
           default: ""
           selector:
             time: {}
+        night_trigger:
+          name: Night Trigger
+          description: Event that starts the night (simulation) profile.
+          default: fixed_time
+          selector:
+            select:
+              options:
+                - label: Fixed time
+                  value: fixed_time
+                - label: Sunset
+                  value: sunset
+                - label: Sunrise
+                  value: sunrise
+                - label: Sun elevation
+                  value: sun_elevation
+        night_delay_minutes:
+          name: Night Delay
+          description: >
+            Minutes to wait after the night trigger before night becomes active
+            (negative = start earlier).
+          default: 0
+          selector:
+            number:
+              min: -180
+              max: 180
+              unit_of_measurement: minutes
+        night_elevation:
+          name: Night Elevation Threshold
+          description: Sun elevation (degrees) used when Night Trigger is sun_elevation.
+          default: -12
+          selector:
+            number:
+              min: -18
+              max: 5
+              unit_of_measurement: "°"
+        evening_enabled:
+          name: Evening Profile Enabled
+          description: >
+            When enabled, the evening profile runs from the evening trigger until
+            night start (fixes full day brightness after sunset when night is late).
+          default: true
+          selector:
+            boolean: {}
+        evening_trigger:
+          name: Evening Trigger
+          description: Event that starts the evening profile.
+          default: sunset
+          selector:
+            select:
+              options:
+                - label: Sunset
+                  value: sunset
+                - label: Fixed time
+                  value: fixed_time
+                - label: Sun elevation
+                  value: sun_elevation
+        evening_fixed_time:
+          name: Evening Fixed Time
+          description: Used when Evening Trigger is fixed_time.
+          default: "18:00:00"
+          selector:
+            time: {}
+        evening_elevation:
+          name: Evening Elevation Threshold
+          description: >
+            Sun elevation (degrees) at or below which evening starts when trigger is
+            sun_elevation. Default 0 matches sunset.
+          default: 0
+          selector:
+            number:
+              min: -18
+              max: 20
+              unit_of_measurement: "°"
+        evening_delay_minutes:
+          name: Evening Delay
+          description: Minutes after the evening trigger before evening is active.
+          default: 0
+          selector:
+            number:
+              min: -180
+              max: 180
+              unit_of_measurement: minutes
+        morning_enabled:
+          name: Morning Profile Enabled
+          description: Soft morning profile after night ends, before full day.
+          default: true
+          selector:
+            boolean: {}
+        morning_trigger:
+          name: Morning Trigger
+          description: Event that starts the morning profile (also ends night).
+          default: fixed_time
+          selector:
+            select:
+              options:
+                - label: Fixed time
+                  value: fixed_time
+                - label: Sunrise
+                  value: sunrise
+                - label: Sun elevation
+                  value: sun_elevation
+        morning_fixed_time:
+          name: Morning Fixed Time
+          description: >
+            Used when Morning Trigger is fixed_time. Leave empty to reuse Night End
+            / Morning Start (day_start), then sunrise.
+          default: ""
+          selector:
+            time: {}
+        morning_elevation:
+          name: Morning Elevation Threshold
+          description: Sun elevation (degrees) at or above which morning starts.
+          default: -6
+          selector:
+            number:
+              min: -18
+              max: 30
+              unit_of_measurement: "°"
+        morning_delay_minutes:
+          name: Morning Delay
+          description: Minutes after the morning trigger before morning is active.
+          default: 0
+          selector:
+            number:
+              min: -180
+              max: 180
+              unit_of_measurement: minutes
+        morning_duration_minutes:
+          name: Morning Duration
+          description: How long morning stays active after it starts.
+          default: 180
+          selector:
+            number:
+              min: 15
+              max: 360
+              unit_of_measurement: minutes
     covers_section:
       name: Covers
       icon: mdi:window-shutter
-      description: Optional covers used to estimate shading in the living area.
+      description: Optional covers for shading and open-cover privacy.
       input:
         covers:
           name: Living Area Covers
@@ -155,10 +321,96 @@ blueprint:
               min: 0
               max: 100
               unit_of_measurement: "%"
+        cover_open_privacy_threshold:
+          name: Cover Open Privacy Threshold
+          description: >
+            Average open position (%) at or above which open-cover privacy policy
+            applies (e.g. 50 means mostly open).
+          default: 50
+          selector:
+            number:
+              min: 0
+              max: 100
+              unit_of_measurement: "%"
+        open_covers_policy:
+          name: Open Covers Privacy Policy
+          description: >
+            When covers are open above the privacy threshold: block lux-based lighting,
+            cap brightness, or leave legacy behavior (off).
+          default: block
+          selector:
+            select:
+              options:
+                - label: Block (do not light for low lux)
+                  value: block
+                - label: Cap brightness
+                  value: cap
+                - label: Off (legacy)
+                  value: "off"
+        open_covers_brightness_cap:
+          name: Open Covers Brightness Cap
+          description: Max brightness percent when policy is Cap and covers are open.
+          default: 25
+          selector:
+            number:
+              min: 1
+              max: 100
+              unit_of_measurement: "%"
     night_profile_section:
       name: Night Profile
       icon: mdi:weather-night
       input:
+        night_enabled:
+          name: Night Profile Enabled
+          default: true
+          selector:
+            boolean: {}
+        night_preset:
+          name: Night Preset
+          description: >
+            Shared preset for this mode only. Local uses the manual values in this
+            section (including animation).
+          default: local
+          selector:
+
+            select:
+              options:
+                - label: Local (manual config below)
+                  value: local
+                - label: Starlight Blue
+                  value: starlight_blue
+                - label: Ember Red
+                  value: ember_red
+                - label: Soft Day
+                  value: soft_day
+
+        night_animation_type:
+          name: Night Animation
+          description: Used when this mode preset is Local. Preset packs bring their own animation.
+          default: "none"
+          selector:
+            select:
+              options:
+                - label: None
+                  value: "none"
+                - label: Leaf / cloud sway
+                  value: leaf_cloud
+        night_animation_amplitude:
+          name: Night Animation Amplitude
+          default: 8
+          selector:
+            number:
+              min: 0
+              max: 30
+              unit_of_measurement: "%"
+        night_animation_period:
+          name: Night Animation Period
+          default: 75
+          selector:
+            number:
+              min: 15
+              max: 300
+              unit_of_measurement: seconds
         night_hue_base:
           name: Night Hue Base
           description: Base hue for color lights (0-360). Blue night is around 235.
@@ -229,13 +481,151 @@ blueprint:
           default: "00:00:00"
           selector:
             time: {}
+    morning_profile_section:
+      name: Morning Profile
+      icon: mdi:weather-sunset-up
+      description: Soft profile after night ends (before full day).
+      input:
+        morning_preset:
+          name: Morning Preset
+          description: >
+            Shared preset for this mode only. Local uses the manual values in this
+            section (including animation).
+          default: local
+          selector:
+
+            select:
+              options:
+                - label: Local (manual config below)
+                  value: local
+                - label: Starlight Blue
+                  value: starlight_blue
+                - label: Ember Red
+                  value: ember_red
+                - label: Soft Day
+                  value: soft_day
+
+        morning_animation_type:
+          name: Morning Animation
+          description: Used when this mode preset is Local. Preset packs bring their own animation.
+          default: "none"
+          selector:
+            select:
+              options:
+                - label: None
+                  value: "none"
+                - label: Leaf / cloud sway
+                  value: leaf_cloud
+        morning_animation_amplitude:
+          name: Morning Animation Amplitude
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 30
+              unit_of_measurement: "%"
+        morning_animation_period:
+          name: Morning Animation Period
+          default: 90
+          selector:
+            number:
+              min: 15
+              max: 300
+              unit_of_measurement: seconds
+        morning_kelvin_min:
+          name: Morning Kelvin Minimum
+          description: Warmest morning color temperature.
+          default: 2500
+          selector:
+            number:
+              min: 2000
+              max: 6500
+              unit_of_measurement: K
+        morning_kelvin_max:
+          name: Morning Kelvin Maximum
+          description: Coolest morning color temperature.
+          default: 3500
+          selector:
+            number:
+              min: 2000
+              max: 6500
+              unit_of_measurement: K
+        morning_brightness_min:
+          name: Morning Brightness Minimum
+          description: Minimum brightness percent during morning.
+          default: 25
+          selector:
+            number:
+              min: 1
+              max: 100
+              unit_of_measurement: "%"
+        morning_brightness_max:
+          name: Morning Brightness Maximum
+          description: Maximum brightness percent during morning.
+          default: 70
+          selector:
+            number:
+              min: 1
+              max: 100
+              unit_of_measurement: "%"
     day_profile_section:
       name: Day Profile
       icon: mdi:white-balance-sunny
       input:
+        day_enabled:
+          name: Day Profile Enabled
+          default: true
+          selector:
+            boolean: {}
+        day_preset:
+          name: Day Preset
+          description: >
+            Shared preset for this mode only. Local uses the manual values in this
+            section (including animation).
+          default: local
+          selector:
+
+            select:
+              options:
+                - label: Local (manual config below)
+                  value: local
+                - label: Starlight Blue
+                  value: starlight_blue
+                - label: Ember Red
+                  value: ember_red
+                - label: Soft Day
+                  value: soft_day
+
+        day_animation_type:
+          name: Day Animation
+          description: Used when this mode preset is Local. Preset packs bring their own animation.
+          default: "none"
+          selector:
+            select:
+              options:
+                - label: None
+                  value: "none"
+                - label: Leaf / cloud sway
+                  value: leaf_cloud
+        day_animation_amplitude:
+          name: Day Animation Amplitude
+          default: 5
+          selector:
+            number:
+              min: 0
+              max: 30
+              unit_of_measurement: "%"
+        day_animation_period:
+          name: Day Animation Period
+          default: 90
+          selector:
+            number:
+              min: 15
+              max: 300
+              unit_of_measurement: seconds
         day_kelvin_min:
           name: Day Kelvin Minimum
-          description: Warmest color temperature at low sun elevation (evening).
+          description: Warmest color temperature at low sun elevation.
           default: 2700
           selector:
             number:
@@ -279,21 +669,107 @@ blueprint:
               min: 0
               max: 1000
               unit_of_measurement: K
+    evening_profile_section:
+      name: Evening Profile
+      icon: mdi:weather-sunset-down
+      description: >
+        Dusk profile until night simulation starts. Prevents day-max brightness
+        when night start is a late fixed time.
+      input:
+        evening_preset:
+          name: Evening Preset
+          description: >
+            Shared preset for this mode only. Local uses the manual values in this
+            section (including animation).
+          default: local
+          selector:
+
+            select:
+              options:
+                - label: Local (manual config below)
+                  value: local
+                - label: Starlight Blue
+                  value: starlight_blue
+                - label: Ember Red
+                  value: ember_red
+                - label: Soft Day
+                  value: soft_day
+
+        evening_animation_type:
+          name: Evening Animation
+          description: Used when this mode preset is Local. Preset packs bring their own animation.
+          default: "none"
+          selector:
+            select:
+              options:
+                - label: None
+                  value: "none"
+                - label: Leaf / cloud sway
+                  value: leaf_cloud
+        evening_animation_amplitude:
+          name: Evening Animation Amplitude
+          default: 6
+          selector:
+            number:
+              min: 0
+              max: 30
+              unit_of_measurement: "%"
+        evening_animation_period:
+          name: Evening Animation Period
+          default: 90
+          selector:
+            number:
+              min: 15
+              max: 300
+              unit_of_measurement: seconds
+        evening_kelvin_min:
+          name: Evening Kelvin Minimum
+          description: Warmest evening color temperature.
+          default: 2200
+          selector:
+            number:
+              min: 1800
+              max: 6500
+              unit_of_measurement: K
+        evening_kelvin_max:
+          name: Evening Kelvin Maximum
+          description: Coolest evening color temperature.
+          default: 3000
+          selector:
+            number:
+              min: 1800
+              max: 6500
+              unit_of_measurement: K
+        evening_brightness_min:
+          name: Evening Brightness Minimum
+          description: Minimum brightness percent during evening.
+          default: 25
+          selector:
+            number:
+              min: 1
+              max: 100
+              unit_of_measurement: "%"
+        evening_brightness_max:
+          name: Evening Brightness Maximum
+          description: Maximum brightness percent during evening.
+          default: 55
+          selector:
+            number:
+              min: 1
+              max: 100
+              unit_of_measurement: "%"
     transition_section:
-      name: Day/Night Transition
+      name: Horizon Transition
       icon: mdi:weather-sunset
       description: >
-        Optional progressive transition around sunrise/sunset that recreates
-        outdoor light (warm golden hour blending into daylight).
+        Optional progressive blend across a sun elevation band near the horizon.
       input:
         progressive_transition:
           name: Progressive Transition
           description: >
-            When enabled, instead of switching abruptly at sunrise/sunset, the
-            lights blend gradually across a sun elevation band: warm and dim near
-            the horizon, brighter and cooler as the sun climbs (and the reverse at
-            sunset). Below the band the night profile applies, above it the day
-            profile applies.
+            When enabled and mode is auto, lights blend across the elevation band
+            near the horizon. Outside the band, morning/day/evening/night profiles
+            apply normally (evening after dusk until night start).
           default: false
           selector:
             boolean: {}
@@ -312,7 +788,7 @@ blueprint:
           name: Transition Elevation High
           description: >
             Sun elevation (degrees) at which the transition completes into the day
-            profile.
+            side of the band.
           default: 6
           selector:
             number:
@@ -323,13 +799,34 @@ blueprint:
           name: Transition Warm Kelvin
           description: >
             Warmest color temperature at the horizon during the transition (golden
-            hour). Blends up to the day color temperature as the sun rises.
+            hour). Blends toward the active day-side profile kelvin.
           default: 2200
           selector:
             number:
               min: 1500
               max: 4000
               unit_of_measurement: K
+
+    hub_section:
+      name: Lighting Hub
+      icon: mdi:sitemap
+      description: Optional shared schedule from the Living Area Lighting Hub.
+      input:
+        follow_global_profile:
+          name: Follow Global Profile Hub
+          description: >
+            When enabled and room mode is auto, use input_select.cda_lal_global_profile
+            from the Living Area Lighting Hub instead of this automation's schedule.
+          default: false
+          selector:
+            boolean: {}
+        global_profile_helper:
+          name: Global Profile Helper
+          description: input_select written by the lighting hub (default entity id).
+          default: input_select.cda_lal_global_profile
+          selector:
+            entity:
+              domain: input_select
     control_section:
       name: Manual Control
       icon: mdi:tune
@@ -369,8 +866,8 @@ blueprint:
         manual_mode_helper:
           name: Manual Mode Helper Override
           description: >
-            Optional existing input_select (options: auto, day, night, off). When set,
-            overrides auto-created mode helper entity id.
+            Optional existing input_select (options: auto, morning, day, evening,
+            night, off). When set, overrides auto-created mode helper entity id.
           default: ""
           selector:
             entity:
@@ -468,7 +965,7 @@ trigger:
         none
       {% endif %}
   - platform: time_pattern
-    minutes: "/15"
+    minutes: "/5"
   - platform: template
     value_template: >
       {% set group_lights = color_lights_input + white_lights_input %}
@@ -505,20 +1002,47 @@ variables:
   illuminance_sensor_entity: !input illuminance_sensor
   lux_dark: !input lux_dark
   lux_bright: !input lux_bright
+  lux_dark_covers_open: !input lux_dark_covers_open
+  lux_bright_covers_open: !input lux_bright_covers_open
   night_start_input: !input night_start
   day_start_input: !input day_start
+  night_trigger: !input night_trigger
+  night_delay_minutes: !input night_delay_minutes
+  night_elevation: !input night_elevation
+  evening_enabled: !input evening_enabled
+  evening_trigger: !input evening_trigger
+  evening_fixed_time: !input evening_fixed_time
+  evening_elevation: !input evening_elevation
+  evening_delay_minutes: !input evening_delay_minutes
+  morning_enabled: !input morning_enabled
+  morning_trigger: !input morning_trigger
+  morning_fixed_time: !input morning_fixed_time
+  morning_elevation: !input morning_elevation
+  morning_delay_minutes: !input morning_delay_minutes
+  morning_duration_minutes: !input morning_duration_minutes
   cover_entities: !input covers
   cover_shade_threshold: !input cover_shade_threshold
+  cover_open_privacy_threshold: !input cover_open_privacy_threshold
+  open_covers_policy: !input open_covers_policy
+  open_covers_brightness_cap: !input open_covers_brightness_cap
   night_hue_base: !input night_hue_base
   night_hue_spread: !input night_hue_spread
   night_saturation: !input night_saturation
   night_brightness_color: !input night_brightness_color
   night_brightness_white: !input night_brightness_white
+  morning_kelvin_min: !input morning_kelvin_min
+  morning_kelvin_max: !input morning_kelvin_max
+  morning_brightness_min: !input morning_brightness_min
+  morning_brightness_max: !input morning_brightness_max
   day_kelvin_min: !input day_kelvin_min
   day_kelvin_max: !input day_kelvin_max
   day_brightness_min: !input day_brightness_min
   day_brightness_max: !input day_brightness_max
   cover_kelvin_warm_shift: !input cover_kelvin_warm_shift
+  evening_kelvin_min: !input evening_kelvin_min
+  evening_kelvin_max: !input evening_kelvin_max
+  evening_brightness_min: !input evening_brightness_min
+  evening_brightness_max: !input evening_brightness_max
   night_dim_enabled: !input night_dim_enabled
   night_brightness_high: !input night_brightness_high
   night_dim_until_input: !input night_dim_until
@@ -535,6 +1059,26 @@ variables:
   control_mode_helper_name: !input control_mode_helper_name
   control_hold_helper_name: !input control_hold_helper_name
   transition_seconds: !input transition_seconds
+  follow_global_profile: !input follow_global_profile
+  global_profile_helper: !input global_profile_helper
+  night_enabled: !input night_enabled
+  day_enabled: !input day_enabled
+  night_preset: !input night_preset
+  morning_preset: !input morning_preset
+  day_preset: !input day_preset
+  evening_preset: !input evening_preset
+  night_animation_type: !input night_animation_type
+  night_animation_amplitude: !input night_animation_amplitude
+  night_animation_period: !input night_animation_period
+  morning_animation_type: !input morning_animation_type
+  morning_animation_amplitude: !input morning_animation_amplitude
+  morning_animation_period: !input morning_animation_period
+  day_animation_type: !input day_animation_type
+  day_animation_amplitude: !input day_animation_amplitude
+  day_animation_period: !input day_animation_period
+  evening_animation_type: !input evening_animation_type
+  evening_animation_amplitude: !input evening_animation_amplitude
+  evening_animation_period: !input evening_animation_period
   control_helper_slug: >
     {{
       control_helper_slug_input
@@ -619,23 +1163,230 @@ variables:
     {% endif %}
   sun_elevation: "{{ state_attr('sun.sun', 'elevation') | float(0) }}"
   is_sun_up: "{{ is_state('sun.sun', 'above_horizon') }}"
+  now_ts: "{{ as_timestamp(now()) }}"
+  sunset_tod: >
+    {{ as_local(as_datetime(state_attr('sun.sun', 'next_setting'))).strftime('%H:%M:%S') }}
+  sunrise_tod: >
+    {{ as_local(as_datetime(state_attr('sun.sun', 'next_rising'))).strftime('%H:%M:%S') }}
   has_night_start: "{{ night_start_input is string and night_start_input | length > 0 }}"
   has_night_end: "{{ day_start_input is string and day_start_input | length > 0 }}"
-  is_night: >
-    {% if not has_night_start and not has_night_end %}
-      {{ not is_sun_up }}
+  has_morning_fixed: "{{ morning_fixed_time is string and morning_fixed_time | length > 0 }}"
+  night_fixed_tod: >
+    {% if has_night_start %}
+      {{ night_start_input }}
+    {% elif evening_enabled %}
+      22:00:00
     {% else %}
-      {% set t = now().strftime('%H:%M:%S') %}
-      {% set sunset_tod = as_local(as_datetime(state_attr('sun.sun', 'next_setting'))).strftime('%H:%M:%S') %}
-      {% set sunrise_tod = as_local(as_datetime(state_attr('sun.sun', 'next_rising'))).strftime('%H:%M:%S') %}
-      {% set start = night_start_input if has_night_start else sunset_tod %}
-      {% set end = day_start_input if has_night_end else sunrise_tod %}
-      {% if start <= end %}
-        {{ start <= t and t < end }}
+      {{ sunset_tod }}
+    {% endif %}
+  morning_fixed_tod: >
+    {% if has_morning_fixed %}
+      {{ morning_fixed_time }}
+    {% elif has_night_end %}
+      {{ day_start_input }}
+    {% else %}
+      {{ sunrise_tod }}
+    {% endif %}
+  night_start_today_ts: >
+    {% if night_trigger == 'sunset' %}
+      {{ as_timestamp(today_at(sunset_tod)) + (night_delay_minutes | float(0) * 60) }}
+    {% elif night_trigger == 'sunrise' %}
+      {{ as_timestamp(today_at(sunrise_tod)) + (night_delay_minutes | float(0) * 60) }}
+    {% else %}
+      {{ as_timestamp(today_at(night_fixed_tod)) + (night_delay_minutes | float(0) * 60) }}
+    {% endif %}
+  morning_start_today_ts: >
+    {% if morning_trigger == 'sunrise' %}
+      {{ as_timestamp(today_at(sunrise_tod)) + (morning_delay_minutes | float(0) * 60) }}
+    {% else %}
+      {{ as_timestamp(today_at(morning_fixed_tod)) + (morning_delay_minutes | float(0) * 60) }}
+    {% endif %}
+  evening_start_today_ts: >
+    {% if evening_trigger == 'fixed_time' %}
+      {{ as_timestamp(today_at(evening_fixed_time)) + (evening_delay_minutes | float(0) * 60) }}
+    {% else %}
+      {{ as_timestamp(today_at(sunset_tod)) + (evening_delay_minutes | float(0) * 60) }}
+    {% endif %}
+  in_night_window: >
+    {% if night_trigger == 'sun_elevation' %}
+      {{ (sun_elevation | float(0)) <= (night_elevation | float(-12)) }}
+    {% else %}
+      {% set t = now_ts | float(0) %}
+      {% set nstart = night_start_today_ts | float(0) %}
+      {% set nend = morning_start_today_ts | float(0) %}
+      {% if nend <= nstart %}
+        {{ t >= nstart or t < nend }}
       {% else %}
-        {{ t >= start or t < end }}
+        {{ t >= nstart and t < nend }}
       {% endif %}
     {% endif %}
+  in_evening_window: >
+    {% if not evening_enabled or in_night_window %}
+      {{ false }}
+    {% elif evening_trigger == 'sun_elevation' %}
+      {{ (sun_elevation | float(0)) <= (evening_elevation | float(0)) }}
+    {% else %}
+      {% set t = now_ts | float(0) %}
+      {% set estart = evening_start_today_ts | float(0) %}
+      {% set nstart = night_start_today_ts | float(0) %}
+      {% if nstart <= estart %}
+        {{ t >= estart or t < nstart }}
+      {% else %}
+        {{ t >= estart and t < nstart }}
+      {% endif %}
+    {% endif %}
+  in_morning_window: >
+    {% if not morning_enabled or in_night_window or in_evening_window %}
+      {{ false }}
+    {% elif morning_trigger == 'sun_elevation' %}
+      {{
+        (sun_elevation | float(0)) >= (morning_elevation | float(-6))
+        and (now_ts | float(0)) < ((morning_start_today_ts | float(0))
+             + (morning_duration_minutes | float(180) * 60))
+      }}
+    {% else %}
+      {% set t = now_ts | float(0) %}
+      {% set mstart = morning_start_today_ts | float(0) %}
+      {% set mend = mstart + (morning_duration_minutes | float(180) * 60) %}
+      {{ t >= mstart and t < mend }}
+    {% endif %}
+  effective_mode: >
+    {% if has_manual_mode_helper %}
+      {{ states(mode_helper_entity) }}
+    {% else %}
+      auto
+    {% endif %}
+  scheduled_profile: >
+    {% if in_night_window and night_enabled %}
+      night
+    {% elif in_evening_window and evening_enabled %}
+      evening
+    {% elif in_morning_window and morning_enabled %}
+      morning
+    {% elif day_enabled %}
+      day
+    {% else %}
+      day
+    {% endif %}
+  hub_profile: >
+    {% if follow_global_profile
+          and global_profile_helper is string
+          and global_profile_helper | length > 0
+          and states(global_profile_helper) not in ['unknown', 'unavailable', ''] %}
+      {{ states(global_profile_helper) }}
+    {% else %}
+      {{ scheduled_profile }}
+    {% endif %}
+  active_profile: >
+    {% if effective_mode in ['morning', 'day', 'evening', 'night'] %}
+      {{ effective_mode }}
+    {% elif effective_mode == 'off' %}
+      off
+    {% elif follow_global_profile and hub_profile in ['morning', 'day', 'evening', 'night'] %}
+      {{ hub_profile }}
+    {% else %}
+      {{ scheduled_profile }}
+    {% endif %}
+  # Preset selected for the active mode (local = manual values in that section).
+  active_mode_preset: >
+    {% if active_profile == 'night' %}
+      {{ night_preset }}
+    {% elif active_profile == 'morning' %}
+      {{ morning_preset }}
+    {% elif active_profile == 'evening' %}
+      {{ evening_preset }}
+    {% else %}
+      {{ day_preset }}
+    {% endif %}
+  active_preset_prefix: >
+    {% if active_mode_preset != 'local' %}
+      lal_preset_{{ active_mode_preset }}
+    {% else %}
+    {% endif %}
+  # Per-mode resolved values (each mode uses its own preset or local config).
+  eff_night_hue: >
+    {% if night_preset == 'local' %}{{ night_hue_base }}
+    {% else %}{{ states('input_number.lal_preset_' ~ night_preset ~ '_night_hue') | float(night_hue_base) }}{% endif %}
+  eff_night_sat: >
+    {% if night_preset == 'local' %}{{ night_saturation }}
+    {% else %}{{ states('input_number.lal_preset_' ~ night_preset ~ '_night_sat') | float(night_saturation) }}{% endif %}
+  eff_night_bri_color: >
+    {% if night_preset == 'local' %}{{ night_brightness_color }}
+    {% else %}{{ states('input_number.lal_preset_' ~ night_preset ~ '_night_bri_color') | float(night_brightness_color) }}{% endif %}
+  eff_night_bri_white: >
+    {% if night_preset == 'local' %}{{ night_brightness_white }}
+    {% else %}{{ states('input_number.lal_preset_' ~ night_preset ~ '_night_bri_white') | float(night_brightness_white) }}{% endif %}
+  eff_morning_kelvin_min: >
+    {% if morning_preset == 'local' %}{{ morning_kelvin_min }}
+    {% else %}{{ states('input_number.lal_preset_' ~ morning_preset ~ '_morning_kelvin_min') | float(morning_kelvin_min) }}{% endif %}
+  eff_morning_kelvin_max: >
+    {% if morning_preset == 'local' %}{{ morning_kelvin_max }}
+    {% else %}{{ states('input_number.lal_preset_' ~ morning_preset ~ '_morning_kelvin_max') | float(morning_kelvin_max) }}{% endif %}
+  eff_morning_bri_min: >
+    {% if morning_preset == 'local' %}{{ morning_brightness_min }}
+    {% else %}{{ states('input_number.lal_preset_' ~ morning_preset ~ '_morning_bri_min') | float(morning_brightness_min) }}{% endif %}
+  eff_morning_bri_max: >
+    {% if morning_preset == 'local' %}{{ morning_brightness_max }}
+    {% else %}{{ states('input_number.lal_preset_' ~ morning_preset ~ '_morning_bri_max') | float(morning_brightness_max) }}{% endif %}
+  eff_day_kelvin_min: >
+    {% if day_preset == 'local' %}{{ day_kelvin_min }}
+    {% else %}{{ states('input_number.lal_preset_' ~ day_preset ~ '_day_kelvin_min') | float(day_kelvin_min) }}{% endif %}
+  eff_day_kelvin_max: >
+    {% if day_preset == 'local' %}{{ day_kelvin_max }}
+    {% else %}{{ states('input_number.lal_preset_' ~ day_preset ~ '_day_kelvin_max') | float(day_kelvin_max) }}{% endif %}
+  eff_day_bri_min: >
+    {% if day_preset == 'local' %}{{ day_brightness_min }}
+    {% else %}{{ states('input_number.lal_preset_' ~ day_preset ~ '_day_bri_min') | float(day_brightness_min) }}{% endif %}
+  eff_day_bri_max: >
+    {% if day_preset == 'local' %}{{ day_brightness_max }}
+    {% else %}{{ states('input_number.lal_preset_' ~ day_preset ~ '_day_bri_max') | float(day_brightness_max) }}{% endif %}
+  eff_evening_kelvin_min: >
+    {% if evening_preset == 'local' %}{{ evening_kelvin_min }}
+    {% else %}{{ states('input_number.lal_preset_' ~ evening_preset ~ '_evening_kelvin_min') | float(evening_kelvin_min) }}{% endif %}
+  eff_evening_kelvin_max: >
+    {% if evening_preset == 'local' %}{{ evening_kelvin_max }}
+    {% else %}{{ states('input_number.lal_preset_' ~ evening_preset ~ '_evening_kelvin_max') | float(evening_kelvin_max) }}{% endif %}
+  eff_evening_bri_min: >
+    {% if evening_preset == 'local' %}{{ evening_brightness_min }}
+    {% else %}{{ states('input_number.lal_preset_' ~ evening_preset ~ '_evening_bri_min') | float(evening_brightness_min) }}{% endif %}
+  eff_evening_bri_max: >
+    {% if evening_preset == 'local' %}{{ evening_brightness_max }}
+    {% else %}{{ states('input_number.lal_preset_' ~ evening_preset ~ '_evening_bri_max') | float(evening_brightness_max) }}{% endif %}
+  # Animation follows the active mode's preset or that mode's local animation fields.
+  eff_animation_type: >
+    {% if active_mode_preset == 'local' %}
+      {% if active_profile == 'night' %}{{ night_animation_type }}
+      {% elif active_profile == 'morning' %}{{ morning_animation_type }}
+      {% elif active_profile == 'evening' %}{{ evening_animation_type }}
+      {% else %}{{ day_animation_type }}{% endif %}
+    {% else %}
+      {% set eid = 'input_select.' ~ active_preset_prefix ~ '_animation' %}
+      {% if states(eid) not in ['unknown', 'unavailable', ''] %}
+        {{ states(eid) }}
+      {% else %}
+        none
+      {% endif %}
+    {% endif %}
+  eff_animation_amplitude: >
+    {% if active_mode_preset == 'local' %}
+      {% if active_profile == 'night' %}{{ night_animation_amplitude }}
+      {% elif active_profile == 'morning' %}{{ morning_animation_amplitude }}
+      {% elif active_profile == 'evening' %}{{ evening_animation_amplitude }}
+      {% else %}{{ day_animation_amplitude }}{% endif %}
+    {% else %}
+      {{ states('input_number.' ~ active_preset_prefix ~ '_anim_amplitude') | float(8) }}
+    {% endif %}
+  eff_animation_period: >
+    {% if active_mode_preset == 'local' %}
+      {% if active_profile == 'night' %}{{ night_animation_period }}
+      {% elif active_profile == 'morning' %}{{ morning_animation_period }}
+      {% elif active_profile == 'evening' %}{{ evening_animation_period }}
+      {% else %}{{ day_animation_period }}{% endif %}
+    {% else %}
+      {{ states('input_number.' ~ active_preset_prefix ~ '_anim_period') | float(75) }}
+    {% endif %}
+  animation_allowed_now: >
+    {{ eff_animation_type not in ['none', ''] and active_profile in ['morning', 'day', 'evening', 'night'] }}
   cover_open_factor: >
     {% if has_covers %}
       {% set positions = expand(cover_entities) | map(attribute='attributes.current_position') | reject('none') | list %}
@@ -653,9 +1404,30 @@ variables:
     {% else %}
       0
     {% endif %}
+  covers_open_for_privacy: >
+    {{
+      has_covers
+      and (cover_open_factor | float(0) >= cover_open_privacy_threshold | float(50))
+    }}
+  privacy_block_active: >
+    {{ covers_open_for_privacy and open_covers_policy == 'block' }}
+  privacy_cap_active: >
+    {{ covers_open_for_privacy and open_covers_policy == 'cap' }}
+  effective_lux_dark: >
+    {% if covers_open_for_privacy and (lux_dark_covers_open | float(0) > 0) %}
+      {{ lux_dark_covers_open }}
+    {% else %}
+      {{ lux_dark }}
+    {% endif %}
+  effective_lux_bright: >
+    {% if covers_open_for_privacy and (lux_bright_covers_open | float(0) > 0) %}
+      {{ lux_bright_covers_open }}
+    {% else %}
+      {{ lux_bright }}
+    {% endif %}
   lux_needs_light: >
-    {% if has_illuminance_sensor %}
-      {{ current_lux < lux_dark }}
+    {% if has_illuminance_sensor and not privacy_block_active %}
+      {{ current_lux | float(0) < effective_lux_dark | float(0) }}
     {% else %}
       {{ false }}
     {% endif %}
@@ -663,63 +1435,141 @@ variables:
     {{ has_covers and (cover_closed_factor | float(0) >= cover_shade_threshold | float(0)) }}
   need_artificial_light: >
     {{
-      is_night
-      or lux_needs_light
-      or covers_need_light
+      active_profile == 'night'
       or (
-        has_illuminance_sensor
-        and zone_occupied
-        and (current_lux | float(0) < lux_bright | float(0))
-        and (cover_closed_factor | float(0) >= (cover_shade_threshold | float(0) * 0.5))
+        not privacy_block_active
+        and (
+          active_profile == 'evening'
+          or lux_needs_light
+          or covers_need_light
+          or (
+            has_illuminance_sensor
+            and zone_occupied
+            and (current_lux | float(0) < effective_lux_bright | float(0))
+            and (cover_closed_factor | float(0) >= (cover_shade_threshold | float(0) * 0.5))
+          )
+        )
       )
     }}
-  effective_mode: >
-    {% if has_manual_mode_helper %}
-      {{ states(mode_helper_entity) }}
-    {% else %}
-      auto
-    {% endif %}
-  use_night_profile: >
-    {% if effective_mode == 'night' %}
-      {{ true }}
-    {% elif effective_mode == 'day' %}
-      {{ false }}
-    {% else %}
-      {{ is_night }}
-    {% endif %}
+  use_night_profile: "{{ active_profile == 'night' }}"
+  use_morning_profile: "{{ active_profile == 'morning' }}"
+  use_evening_profile: "{{ active_profile == 'evening' }}"
+  use_day_profile: "{{ active_profile == 'day' }}"
   day_kelvin: >
     {% set elev = [sun_elevation | float(0), 0] | max %}
     {% set elev_clamped = [elev, 45] | min %}
     {% set ratio = elev_clamped / 45 %}
-    {% set base = (day_kelvin_max - ((day_kelvin_max - day_kelvin_min) * (1 - ratio))) | int %}
+    {% set kmin = eff_day_kelvin_min | float(day_kelvin_min) %}
+    {% set kmax = eff_day_kelvin_max | float(day_kelvin_max) %}
+    {% set base = (kmax - ((kmax - kmin) * (1 - ratio))) | int %}
     {% set warm_shift = (cover_closed_factor | float(0) / 100) * (cover_kelvin_warm_shift | float(0)) %}
-    {{ [base - warm_shift, day_kelvin_min] | max | int }}
-  day_brightness_pct: >
-    {% if has_illuminance_sensor and lux_bright > 0 %}
-      {% set lux_ratio = 1 - ([current_lux, lux_bright] | min / lux_bright) %}
-      {% set lux_brightness = day_brightness_min + ((day_brightness_max - day_brightness_min) * lux_ratio) %}
+    {{ [base - warm_shift, kmin] | max | int }}
+  morning_kelvin: >
+    {% set elev = [sun_elevation | float(0), 0] | max %}
+    {% set elev_clamped = [elev, 45] | min %}
+    {% set ratio = elev_clamped / 45 %}
+    {% set kmin = eff_morning_kelvin_min | float(morning_kelvin_min) %}
+    {% set kmax = eff_morning_kelvin_max | float(morning_kelvin_max) %}
+    {% set base = (kmax - ((kmax - kmin) * (1 - ratio))) | int %}
+    {% set warm_shift = (cover_closed_factor | float(0) / 100) * (cover_kelvin_warm_shift | float(0)) %}
+    {{ [base - warm_shift, kmin] | max | int }}
+  evening_kelvin: >
+    {% set elev = [sun_elevation | float(0), 0] | max %}
+    {% set elev_clamped = [elev, 45] | min %}
+    {% set ratio = elev_clamped / 45 %}
+    {% set kmin = eff_evening_kelvin_min | float(evening_kelvin_min) %}
+    {% set kmax = eff_evening_kelvin_max | float(evening_kelvin_max) %}
+    {% set base = (kmax - ((kmax - kmin) * (1 - ratio))) | int %}
+    {% set warm_shift = (cover_closed_factor | float(0) / 100) * (cover_kelvin_warm_shift | float(0)) %}
+    {{ [base - warm_shift, kmin] | max | int }}
+  day_brightness_raw: >
+    {% set bright = effective_lux_bright | float(120) %}
+    {% set bmin = eff_day_bri_min | float(day_brightness_min) %}
+    {% set bmax = eff_day_bri_max | float(day_brightness_max) %}
+    {% if has_illuminance_sensor and bright > 0 %}
+      {% set lux_ratio = 1 - ([current_lux | float(0), bright] | min / bright) %}
+      {% set lux_brightness = bmin + ((bmax - bmin) * lux_ratio) %}
     {% else %}
-      {% set lux_brightness = (day_brightness_min + day_brightness_max) / 2 %}
+      {% set lux_brightness = (bmin + bmax) / 2 %}
     {% endif %}
-    {% set cover_boost = (cover_closed_factor | float(0) / 100) * (day_brightness_max - day_brightness_min) * 0.35 %}
-    {{ [[lux_brightness + cover_boost, day_brightness_max] | min, day_brightness_min] | max | round(0) | int }}
+    {% set cover_boost = (cover_closed_factor | float(0) / 100) * (bmax - bmin) * 0.35 %}
+    {{ [[lux_brightness + cover_boost, bmax] | min, bmin] | max | round(0) | int }}
+  morning_brightness_raw: >
+    {% set bright = effective_lux_bright | float(120) %}
+    {% set bmin = eff_morning_bri_min | float(morning_brightness_min) %}
+    {% set bmax = eff_morning_bri_max | float(morning_brightness_max) %}
+    {% if has_illuminance_sensor and bright > 0 %}
+      {% set lux_ratio = 1 - ([current_lux | float(0), bright] | min / bright) %}
+      {% set lux_brightness = bmin + ((bmax - bmin) * lux_ratio) %}
+    {% else %}
+      {% set lux_brightness = (bmin + bmax) / 2 %}
+    {% endif %}
+    {% set cover_boost = (cover_closed_factor | float(0) / 100) * (bmax - bmin) * 0.35 %}
+    {{ [[lux_brightness + cover_boost, bmax] | min, bmin] | max | round(0) | int }}
+  evening_brightness_raw: >
+    {% set bright = effective_lux_bright | float(120) %}
+    {% set bmin = eff_evening_bri_min | float(evening_brightness_min) %}
+    {% set bmax = eff_evening_bri_max | float(evening_brightness_max) %}
+    {% if has_illuminance_sensor and bright > 0 %}
+      {% set lux_ratio = 1 - ([current_lux | float(0), bright] | min / bright) %}
+      {% set lux_brightness = bmin + ((bmax - bmin) * lux_ratio) %}
+    {% else %}
+      {% set lux_brightness = (bmin + bmax) / 2 %}
+    {% endif %}
+    {% set cover_boost = (cover_closed_factor | float(0) / 100) * (bmax - bmin) * 0.35 %}
+    {{ [[lux_brightness + cover_boost, bmax] | min, bmin] | max | round(0) | int }}
+  day_brightness_pct: >
+    {% set raw = day_brightness_raw | int(50) %}
+    {% if privacy_cap_active %}
+      {{ [raw, open_covers_brightness_cap | int(25)] | min }}
+    {% else %}
+      {{ raw }}
+    {% endif %}
+  morning_brightness_pct: >
+    {% set raw = morning_brightness_raw | int(40) %}
+    {% if privacy_cap_active %}
+      {{ [raw, open_covers_brightness_cap | int(25)] | min }}
+    {% else %}
+      {{ raw }}
+    {% endif %}
+  evening_brightness_pct: >
+    {% set raw = evening_brightness_raw | int(40) %}
+    {% if privacy_cap_active %}
+      {{ [raw, open_covers_brightness_cap | int(25)] | min }}
+    {% else %}
+      {{ raw }}
+    {% endif %}
+  profile_kelvin: >
+    {% if use_morning_profile %}
+      {{ morning_kelvin }}
+    {% elif use_evening_profile %}
+      {{ evening_kelvin }}
+    {% else %}
+      {{ day_kelvin }}
+    {% endif %}
+  profile_brightness_pct: >
+    {% if use_morning_profile %}
+      {{ morning_brightness_pct }}
+    {% elif use_evening_profile %}
+      {{ evening_brightness_pct }}
+    {% else %}
+      {{ day_brightness_pct }}
+    {% endif %}
   night_dim_factor: >
     {% if not night_dim_enabled %}
       {{ 0.0 }}
     {% else %}
-      {% set now_ts = as_timestamp(now()) %}
-      {% set start_tod = night_start_input if has_night_start
-                         else as_local(as_datetime(state_attr('sun.sun', 'next_setting'))).strftime('%H:%M:%S') %}
-      {% set start_ts = as_timestamp(today_at(start_tod)) %}
-      {% if start_ts > now_ts %}{% set start_ts = start_ts - 86400 %}{% endif %}
+      {% set start_ts = night_start_today_ts | float(0) %}
       {% set until_ts = as_timestamp(today_at(night_dim_until_input)) %}
       {% if until_ts <= start_ts %}{% set until_ts = until_ts + 86400 %}{% endif %}
-      {% if now_ts <= start_ts %}
+      {% set t = now_ts | float(0) %}
+      {% if t < start_ts %}{% set t = t + 86400 %}{% endif %}
+      {% if t <= start_ts %}
         {{ 1.0 }}
-      {% elif now_ts >= until_ts %}
+      {% elif t >= until_ts %}
         {{ 0.0 }}
       {% else %}
-        {{ (1.0 - (now_ts - start_ts) / (until_ts - start_ts)) | round(3) }}
+        {{ (1.0 - (t - start_ts) / (until_ts - start_ts)) | round(3) }}
       {% endif %}
     {% endif %}
   transition_progress: >
@@ -737,16 +1587,22 @@ variables:
       and effective_mode == 'auto'
       and (sun_elevation | float(0) > (transition_elevation_low | float(-6)))
       and (sun_elevation | float(0) < (transition_elevation_high | float(6)))
+      and active_profile != 'night'
     }}
   transition_kelvin: >
     {% set p = transition_progress | float(0) %}
     {% set warm = transition_warm_kelvin | float(2200) %}
-    {{ (warm + (day_kelvin | float(0) - warm) * p) | round(0) | int }}
+    {{ (warm + (profile_kelvin | float(0) - warm) * p) | round(0) | int }}
   transition_brightness_pct: >
     {% set p = transition_progress | float(0) %}
     {% set nb = night_brightness_color | float(40) %}
-    {% set db = day_brightness_pct | float(100) %}
-    {{ [[(nb + (db - nb) * p) | round(0) | int, 100] | min, 1] | max }}
+    {% set db = profile_brightness_pct | float(55) %}
+    {% set raw = [[(nb + (db - nb) * p) | round(0) | int, 100] | min, 1] | max %}
+    {% if privacy_cap_active %}
+      {{ [raw, open_covers_brightness_cap | int(25)] | min }}
+    {% else %}
+      {{ raw }}
+    {% endif %}
   manual_override_active: >
     {% if not manual_override_enabled %}
       {{ false }}
@@ -820,15 +1676,30 @@ action:
                         sat_offset: "{{ (seed_sum | int(0)) % 11 - 5 }}"
                         brightness_offset: "{{ (seed_sum | int(0)) % 15 - 7 }}"
                         night_base_color: >
-                          {{ (night_brightness_color | float(0))
-                             + ((night_brightness_high | float(0)) - (night_brightness_color | float(0)))
+                          {{ (eff_night_bri_color | float(0))
+                             + ((night_brightness_high | float(0)) - (eff_night_bri_color | float(0)))
                              * (night_dim_factor | float(0)) }}
                         lamp_hue: >
-                          {{ ((night_hue_base | int(0)) + (hue_offset | int(0)) + 360) % 360 }}
+                          {{ ((eff_night_hue | int(0)) + (hue_offset | int(0)) + 360) % 360 }}
                         lamp_sat: >
-                          {{ [[(night_saturation | int(0)) + (sat_offset | int(0)), 100] | min, 0] | max }}
+                          {{ [[(eff_night_sat | int(0)) + (sat_offset | int(0)), 100] | min, 0] | max }}
+                        anim_delta: >
+                          {% if animation_allowed_now and eff_animation_type == 'leaf_cloud' %}
+                            {% set amp = eff_animation_amplitude | float(8) %}
+                            {% set period = [eff_animation_period | float(75), 15] | max %}
+                            {% set phase = (now_ts | float(0) / period) + ((seed_sum | int(0)) % 100) / 15.0 %}
+                            {{ (sin(phase) * amp + 0.35 * sin(phase * 2.17) * amp) | round(1) }}
+                          {% else %}
+                            0
+                          {% endif %}
                         lamp_brightness_pct: >
-                          {{ [[(night_base_color | round(0) | int) + (brightness_offset | int(0)), 100] | min, 1] | max }}
+                          {{ [[(night_base_color | round(0) | int) + (brightness_offset | int(0)) + (anim_delta | float(0)) | round(0) | int, 100] | min, 1] | max }}
+                        lamp_transition: >
+                          {% if animation_allowed_now and eff_animation_type == 'leaf_cloud' %}
+                            {{ [transition_seconds | int(3), 4] | max }}
+                          {% else %}
+                            {{ transition_seconds }}
+                          {% endif %}
                     - service: light.turn_on
                       target:
                         entity_id: "{{ repeat.item }}"
@@ -837,7 +1708,7 @@ action:
                           - "{{ lamp_hue | int }}"
                           - "{{ lamp_sat | int }}"
                         brightness_pct: "{{ lamp_brightness_pct | int }}"
-                        transition: "{{ transition_seconds }}"
+                        transition: "{{ lamp_transition | int }}"
               - repeat:
                   for_each: "{{ white_light_entities }}"
                   sequence:
@@ -851,17 +1722,32 @@ action:
                           {{ ns.v }}
                         brightness_offset: "{{ (seed_sum | int(0)) % 9 - 4 }}"
                         night_base_white: >
-                          {{ (night_brightness_white | float(0))
-                             + ((night_brightness_high | float(0)) - (night_brightness_white | float(0)))
+                          {{ (eff_night_bri_white | float(0))
+                             + ((night_brightness_high | float(0)) - (eff_night_bri_white | float(0)))
                              * (night_dim_factor | float(0)) }}
+                        anim_delta: >
+                          {% if animation_allowed_now and eff_animation_type == 'leaf_cloud' %}
+                            {% set amp = eff_animation_amplitude | float(8) %}
+                            {% set period = [eff_animation_period | float(75), 15] | max %}
+                            {% set phase = (now_ts | float(0) / period) + ((seed_sum | int(0)) % 100) / 15.0 %}
+                            {{ (sin(phase) * amp + 0.35 * sin(phase * 2.17) * amp) | round(1) }}
+                          {% else %}
+                            0
+                          {% endif %}
                         lamp_brightness_pct: >
-                          {{ [[(night_base_white | round(0) | int) + (brightness_offset | int(0)), 100] | min, 1] | max }}
+                          {{ [[(night_base_white | round(0) | int) + (brightness_offset | int(0)) + (anim_delta | float(0)) | round(0) | int, 100] | min, 1] | max }}
+                        lamp_transition: >
+                          {% if animation_allowed_now and eff_animation_type == 'leaf_cloud' %}
+                            {{ [transition_seconds | int(3), 4] | max }}
+                          {% else %}
+                            {{ transition_seconds }}
+                          {% endif %}
                     - service: light.turn_on
                       target:
                         entity_id: "{{ repeat.item }}"
                       data:
                         brightness_pct: "{{ lamp_brightness_pct | int }}"
-                        transition: "{{ transition_seconds }}"
+                        transition: "{{ lamp_transition | int }}"
           - conditions:
               - condition: template
                 value_template: >
@@ -906,7 +1792,7 @@ action:
                     zone_occupied
                     and not home_required_blocked
                     and need_artificial_light
-                    and not use_night_profile
+                    and active_profile in ['morning', 'day', 'evening']
                     and not transition_active
                   }}
             sequence:
@@ -919,6 +1805,30 @@ action:
                             'color_temp'
                             in (state_attr(repeat.item, 'supported_color_modes') or [])
                           }}
+                        light_seed: "{{ repeat.item }}"
+                        seed_sum: >
+                          {% set ns = namespace(v=0) %}
+                          {% for ch in light_seed %}
+                            {% set ns.v = ns.v + ch | ord %}
+                          {% endfor %}
+                          {{ ns.v }}
+                        anim_delta: >
+                          {% if animation_allowed_now and eff_animation_type == 'leaf_cloud' %}
+                            {% set amp = eff_animation_amplitude | float(8) %}
+                            {% set period = [eff_animation_period | float(75), 15] | max %}
+                            {% set phase = (now_ts | float(0) / period) + ((seed_sum | int(0)) % 100) / 15.0 %}
+                            {{ (sin(phase) * amp + 0.35 * sin(phase * 2.17) * amp) | round(1) }}
+                          {% else %}
+                            0
+                          {% endif %}
+                        lamp_brightness_pct: >
+                          {{ [[(profile_brightness_pct | int) + (anim_delta | float(0)) | round(0) | int, 100] | min, 1] | max }}
+                        lamp_transition: >
+                          {% if animation_allowed_now and eff_animation_type == 'leaf_cloud' %}
+                            {{ [transition_seconds | int(3), 4] | max }}
+                          {% else %}
+                            {{ transition_seconds }}
+                          {% endif %}
                     - if:
                         - condition: template
                           value_template: "{{ supports_color_temp }}"
@@ -927,14 +1837,14 @@ action:
                           target:
                             entity_id: "{{ repeat.item }}"
                           data:
-                            color_temp_kelvin: "{{ day_kelvin | int }}"
-                            brightness_pct: "{{ day_brightness_pct | int }}"
-                            transition: "{{ transition_seconds }}"
+                            color_temp_kelvin: "{{ profile_kelvin | int }}"
+                            brightness_pct: "{{ lamp_brightness_pct | int }}"
+                            transition: "{{ lamp_transition | int }}"
                       else:
                         - service: light.turn_on
                           target:
                             entity_id: "{{ repeat.item }}"
                           data:
-                            brightness_pct: "{{ day_brightness_pct | int }}"
-                            transition: "{{ transition_seconds }}"
+                            brightness_pct: "{{ lamp_brightness_pct | int }}"
+                            transition: "{{ lamp_transition | int }}"
         default: []

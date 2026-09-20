@@ -115,6 +115,14 @@ AUTOMATION_INPUTS_HEAVY: dict[str, dict[str, Any]] = {
         "covers": [],
         "create_dashboard_helpers": False,
         "control_helper_slug": "living_area_lighting",
+        "follow_global_profile": False,
+        "night_preset": "local",
+        "morning_preset": "local",
+        "day_preset": "local",
+        "evening_preset": "local",
+    },
+    "living-area-lighting-hub.yaml": {
+        "global_profile_helper": "input_select.test_lal_global_profile",
     },
     "cover_solar_thermal_optimization.yaml": {
         "covers": [COVER],
@@ -175,6 +183,13 @@ SCRIPT_INPUTS: dict[str, dict[str, Any]] = {
         "mode_helper_name": "Living Area Lighting Mode",
         "hold_helper_name": "Living Area Lighting Hold",
         "package_filename": "cda_living_area_lighting_helpers.yaml",
+    },
+    "create-lal-profile-presets.yaml": {
+        "package_filename": "cda_lal_profile_presets.yaml",
+        "force_overwrite": False,
+    },
+    "create-lal-hub-helpers.yaml": {
+        "package_filename": "cda_lal_hub_helpers.yaml",
     },
     "sync-zigbee-split-setpoints.yaml": {
         "climate_entities": [CLIMATE],

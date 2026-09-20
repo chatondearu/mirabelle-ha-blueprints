@@ -67,6 +67,10 @@ def common_entities() -> dict[str, tuple[str, dict[str, Any] | None]]:
             "sequential",
             {"options": ["sequential", "parallel"]},
         ),
+        "input_select.test_lal_global_profile": (
+            "day",
+            {"options": ["morning", "day", "evening", "night"]},
+        ),
         "input_number.test_garden_temp_threshold": ("32", {}),
         "input_number.test_garden_cooldown": ("60", {}),
         "input_number.test_garden_volume": ("10", {}),

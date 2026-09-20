@@ -1,0 +1,271 @@
+blueprint:
+  homeassistant:
+    min_version: 2025.5.3
+  name: "[CDA] 🛋️ Living Area Lighting Hub"
+  description: >
+    Publishes a shared morning/day/evening/night profile to an input_select.
+    Room Living Area Adaptive Lighting automations can follow this mode when
+    Follow Global Profile Hub is enabled. Does not control lights directly.
+  domain: automation
+  source_url: https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/automations/living-area-lighting-hub.yaml
+  input:
+    schedule_section:
+      name: Global Profile Schedule
+      icon: mdi:calendar-clock
+      input:
+        night_start:
+          name: Night Start (Fixed Time)
+          default: "22:30:00"
+          selector:
+            time: {}
+        day_start:
+          name: Night End / Morning Start
+          default: "06:00:00"
+          selector:
+            time: {}
+        night_trigger:
+          name: Night Trigger
+          default: fixed_time
+          selector:
+            select:
+              options:
+                - label: Fixed time
+                  value: fixed_time
+                - label: Sunset
+                  value: sunset
+                - label: Sun elevation
+                  value: sun_elevation
+        night_delay_minutes:
+          name: Night Delay
+          default: 0
+          selector:
+            number:
+              min: -180
+              max: 180
+              unit_of_measurement: minutes
+        night_elevation:
+          name: Night Elevation
+          default: -12
+          selector:
+            number:
+              min: -18
+              max: 5
+              unit_of_measurement: "°"
+        evening_enabled:
+          name: Evening Enabled
+          default: true
+          selector:
+            boolean: {}
+        evening_trigger:
+          name: Evening Trigger
+          default: sunset
+          selector:
+            select:
+              options:
+                - label: Sunset
+                  value: sunset
+                - label: Fixed time
+                  value: fixed_time
+                - label: Sun elevation
+                  value: sun_elevation
+        evening_fixed_time:
+          name: Evening Fixed Time
+          default: "18:00:00"
+          selector:
+            time: {}
+        evening_elevation:
+          name: Evening Elevation
+          default: 0
+          selector:
+            number:
+              min: -18
+              max: 20
+              unit_of_measurement: "°"
+        evening_delay_minutes:
+          name: Evening Delay
+          default: 0
+          selector:
+            number:
+              min: -180
+              max: 180
+              unit_of_measurement: minutes
+        morning_enabled:
+          name: Morning Enabled
+          default: true
+          selector:
+            boolean: {}
+        morning_trigger:
+          name: Morning Trigger
+          default: fixed_time
+          selector:
+            select:
+              options:
+                - label: Fixed time
+                  value: fixed_time
+                - label: Sunrise
+                  value: sunrise
+                - label: Sun elevation
+                  value: sun_elevation
+        morning_elevation:
+          name: Morning Elevation
+          default: -6
+          selector:
+            number:
+              min: -18
+              max: 30
+              unit_of_measurement: "°"
+        morning_delay_minutes:
+          name: Morning Delay
+          default: 0
+          selector:
+            number:
+              min: -180
+              max: 180
+              unit_of_measurement: minutes
+        morning_duration_minutes:
+          name: Morning Duration
+          default: 180
+          selector:
+            number:
+              min: 15
+              max: 360
+              unit_of_measurement: minutes
+    output_section:
+      name: Output
+      icon: mdi:export
+      input:
+        global_profile_helper:
+          name: Global Profile Helper
+          description: input_select updated with morning/day/evening/night.
+          default: input_select.cda_lal_global_profile
+          selector:
+            entity:
+              domain: input_select
+
+mode: restart
+
+trigger:
+  - platform: sun
+    event: sunrise
+  - platform: sun
+    event: sunset
+  - platform: state
+    entity_id: sun.sun
+  - platform: time_pattern
+    minutes: "/5"
+  - platform: homeassistant
+    event: start
+
+variables:
+  night_start_input: !input night_start
+  day_start_input: !input day_start
+  night_trigger: !input night_trigger
+  night_delay_minutes: !input night_delay_minutes
+  night_elevation: !input night_elevation
+  evening_enabled: !input evening_enabled
+  evening_trigger: !input evening_trigger
+  evening_fixed_time: !input evening_fixed_time
+  evening_elevation: !input evening_elevation
+  evening_delay_minutes: !input evening_delay_minutes
+  morning_enabled: !input morning_enabled
+  morning_trigger: !input morning_trigger
+  morning_elevation: !input morning_elevation
+  morning_delay_minutes: !input morning_delay_minutes
+  morning_duration_minutes: !input morning_duration_minutes
+  global_profile_helper: !input global_profile_helper
+  now_ts: "{{ as_timestamp(now()) }}"
+  sun_elevation: "{{ state_attr('sun.sun', 'elevation') | float(0) }}"
+  sunset_tod: >
+    {{ as_local(as_datetime(state_attr('sun.sun', 'next_setting'))).strftime('%H:%M:%S') }}
+  sunrise_tod: >
+    {{ as_local(as_datetime(state_attr('sun.sun', 'next_rising'))).strftime('%H:%M:%S') }}
+  night_fixed_tod: "{{ night_start_input if night_start_input else '22:00:00' }}"
+  morning_fixed_tod: "{{ day_start_input if day_start_input else sunrise_tod }}"
+  night_start_today_ts: >
+    {% if night_trigger == 'sunset' %}
+      {{ as_timestamp(today_at(sunset_tod)) + (night_delay_minutes | float(0) * 60) }}
+    {% else %}
+      {{ as_timestamp(today_at(night_fixed_tod)) + (night_delay_minutes | float(0) * 60) }}
+    {% endif %}
+  morning_start_today_ts: >
+    {% if morning_trigger == 'sunrise' %}
+      {{ as_timestamp(today_at(sunrise_tod)) + (morning_delay_minutes | float(0) * 60) }}
+    {% else %}
+      {{ as_timestamp(today_at(morning_fixed_tod)) + (morning_delay_minutes | float(0) * 60) }}
+    {% endif %}
+  evening_start_today_ts: >
+    {% if evening_trigger == 'fixed_time' %}
+      {{ as_timestamp(today_at(evening_fixed_time)) + (evening_delay_minutes | float(0) * 60) }}
+    {% else %}
+      {{ as_timestamp(today_at(sunset_tod)) + (evening_delay_minutes | float(0) * 60) }}
+    {% endif %}
+  in_night_window: >
+    {% if night_trigger == 'sun_elevation' %}
+      {{ (sun_elevation | float(0)) <= (night_elevation | float(-12)) }}
+    {% else %}
+      {% set t = now_ts | float(0) %}
+      {% set nstart = night_start_today_ts | float(0) %}
+      {% set nend = morning_start_today_ts | float(0) %}
+      {% if nend <= nstart %}
+        {{ t >= nstart or t < nend }}
+      {% else %}
+        {{ t >= nstart and t < nend }}
+      {% endif %}
+    {% endif %}
+  in_evening_window: >
+    {% if not evening_enabled or in_night_window %}
+      {{ false }}
+    {% elif evening_trigger == 'sun_elevation' %}
+      {{ (sun_elevation | float(0)) <= (evening_elevation | float(0)) }}
+    {% else %}
+      {% set t = now_ts | float(0) %}
+      {% set estart = evening_start_today_ts | float(0) %}
+      {% set nstart = night_start_today_ts | float(0) %}
+      {% if nstart <= estart %}
+        {{ t >= estart or t < nstart }}
+      {% else %}
+        {{ t >= estart and t < nstart }}
+      {% endif %}
+    {% endif %}
+  in_morning_window: >
+    {% if not morning_enabled or in_night_window or in_evening_window %}
+      {{ false }}
+    {% elif morning_trigger == 'sun_elevation' %}
+      {{
+        (sun_elevation | float(0)) >= (morning_elevation | float(-6))
+        and (now_ts | float(0)) < ((morning_start_today_ts | float(0))
+             + (morning_duration_minutes | float(180) * 60))
+      }}
+    {% else %}
+      {% set t = now_ts | float(0) %}
+      {% set mstart = morning_start_today_ts | float(0) %}
+      {% set mend = mstart + (morning_duration_minutes | float(180) * 60) %}
+      {{ t >= mstart and t < mend }}
+    {% endif %}
+  global_profile: >
+    {% if in_night_window %}
+      night
+    {% elif in_evening_window %}
+      evening
+    {% elif in_morning_window %}
+      morning
+    {% else %}
+      day
+    {% endif %}
+
+action:
+  - if:
+      - condition: template
+        value_template: >
+          {{
+            global_profile_helper is string
+            and global_profile_helper | length > 0
+            and states(global_profile_helper) not in ['unknown', 'unavailable', '']
+            and states(global_profile_helper) != global_profile
+          }}
+    then:
+      - service: input_select.select_option
+        target:
+          entity_id: "{{ global_profile_helper }}"
+        data:
+          option: "{{ global_profile }}"

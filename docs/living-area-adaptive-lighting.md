@@ -37,30 +37,44 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 
 ```text
 Occupancy ON + need artificial light + someone home (if required)
-  -> Night profile (sun down / forced night): blue starlight on color lights, dim white lights
-  -> Day profile: warm-to-cool kelvin from sun elevation, brightness from lux + cover shading
+  -> Night: blue starlight (late "night simulation" window)
+  -> Evening: warm, capped brightness from dusk until night start
+  -> Morning: soft profile after night ends
+  -> Day: warm-to-cool kelvin from sun elevation, brightness from lux + covers
 
 Occupancy OFF (after delay) / manual off / away
   -> All configured lights off
 ```
 
+Priority in **auto** mode: `night > evening > morning > day`.
+
 ### Night profile (starlight)
 
 - Color lights: `hs_color` around a configurable blue hue with **stable per-lamp variation** (derived from each `entity_id`, so the look does not change on every trigger).
 - White lights: low `brightness_pct` only (no forced hue).
+- Night is the late simulation window (e.g. fixed 22:30), **not** simply sunset.
 
-### Day profile
+### Evening / morning / day profiles
 
-- **Kelvin**: interpolated between `day_kelvin_min` (low sun) and `day_kelvin_max` (high sun, capped at 45° elevation), then warmed when average cover position is higher.
-- **Brightness**: higher when lux is lower; boosted when covers are more closed.
+- **Kelvin**: interpolated between each profile’s min/max from sun elevation, then warmed when covers are more closed.
+- **Brightness**: higher when lux is lower; boosted when covers are more closed; evening/morning max defaults stay below full day to avoid a sudden 100% jump after sunset when night start is late.
+
+### Open-cover privacy
+
+When average cover **open** position is at or above **Cover Open Privacy Threshold**:
+
+- **block** — do not turn lights on for low lux (night profile can still run)
+- **cap** — allow lighting but clamp brightness to **Open Covers Brightness Cap**
+- **off** — legacy behavior
 
 ### When artificial light is needed
 
 Lighting runs only if the zone is occupied and at least one of:
 
-- Night (sun below horizon, or optional night time window)
-- Illuminance below **Lux Dark Threshold**
-- Average **closed** amount at or above **Cover Shade Threshold** (mostly closed blinds), even if the lux sensor still reads bright near a window
+- Active profile is **night**
+- Active profile is **evening** (unless open-cover privacy is **block**)
+- Illuminance below the effective lux dark threshold (skipped when privacy is **block**)
+- Average **closed** amount at or above **Cover Shade Threshold**
 
 If the zone is occupied but none of the above apply (bright day, open blinds), the automation does **not** force lights on and does **not** turn them off (leaves current state unchanged).
 
@@ -91,19 +105,41 @@ If the zone is **not** occupied, lights are turned off after the delay.
 | Illuminance Sensor | Optional lux sensor | empty |
 | Lux Dark Threshold | Below this: need light (lx) | `80` |
 | Lux Bright Threshold | Above this: suppress day lighting (lx) | `120` |
-| Night Start | Time the night window begins; empty = sunset | empty |
-| Night End (Day Start) | Time the night window ends; empty = sunrise | empty |
-
-The night window now drives the day/night profile selection regardless of the lux sensor: leave both empty to follow the sun, or pin one/both to fixed times (handy in winter to keep day starting at the same hour). When only one is set, the other falls back to the corresponding sun time.
+| Lux Dark (Covers Open) | Stricter dark threshold when covers open; `0` = reuse dark | `0` |
+| Lux Bright (Covers Open) | Stricter bright threshold when covers open; `0` = reuse bright | `0` |
 
 Use **Lux Dark** lower than **Lux Bright** to avoid flicker when lux hovers near a single threshold.
+
+### Profile schedule
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| Night Start (Fixed Time) | Clock time when night trigger is `fixed_time`; empty → `22:00` if evening enabled else sunset | empty |
+| Night End / Morning Start | Ends night / can start morning; empty → sunrise | empty |
+| Night Trigger | `fixed_time` / `sunset` / `sunrise` / `sun_elevation` | `fixed_time` |
+| Night Delay | Minutes after night trigger (negative = earlier) | `0` |
+| Night Elevation | Elevation threshold for night when trigger is elevation | `-12` |
+| Evening Profile Enabled | Dusk profile until night | `true` |
+| Evening Trigger | `sunset` / `fixed_time` / `sun_elevation` | `sunset` |
+| Evening Fixed Time | When evening trigger is fixed | `18:00:00` |
+| Evening Elevation | Elevation for evening start | `0` |
+| Evening Delay | Minutes after evening trigger | `0` |
+| Morning Profile Enabled | Soft profile after night | `true` |
+| Morning Trigger | `fixed_time` / `sunrise` / `sun_elevation` | `fixed_time` |
+| Morning Fixed Time | Empty → reuse Night End time | empty |
+| Morning Elevation | Elevation for morning start | `-6` |
+| Morning Delay | Minutes after morning trigger | `0` |
+| Morning Duration | Morning length (minutes) | `180` |
 
 ### Covers
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | Living Area Covers | Optional cover entities | `[]` |
-| Cover Shade Threshold | Average position % to trigger day lighting | `60` |
+| Cover Shade Threshold | Average closed % to trigger lighting | `60` |
+| Cover Open Privacy Threshold | Average open % where privacy policy applies | `50` |
+| Open Covers Privacy Policy | `block` / `cap` / `off` | `block` |
+| Open Covers Brightness Cap | Max % when policy is `cap` | `25` |
 
 Average **closed** amount uses `100 - current_position` (Home Assistant: 0 = closed, 100 = open). Example: blinds 25% open → position `25` → **75% closed** toward the default threshold of `60`. If no covers are selected, closed factor is `0`.
 
@@ -122,26 +158,28 @@ Average **closed** amount uses `100 - current_position` (Home Assistant: 0 = clo
 
 When **Night Brightness Ramp** is on, night brightness starts at **Night Brightness Start** at night start and linearly fades down to **Night Brightness (Color/White)** by **Night Dim Until** (midnight by default), then stays at the floor for the rest of the night.
 
-### Day/Night transition
+### Morning / day / evening profiles
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| Progressive Transition | Blend night↔day across a sun elevation band | `false` |
-| Transition Elevation Low | Sun elevation where transition starts (night side) | `-6` |
-| Transition Elevation High | Sun elevation where transition completes (day) | `6` |
-| Transition Warm Kelvin | Warmest color temperature at the horizon (golden hour) | `2200` |
+| Morning Kelvin Min / Max | Soft morning CT | `2500` / `3500` |
+| Morning Brightness Min / Max | Soft morning brightness | `25` / `70` |
+| Day Kelvin Min / Max | Day CT | `2700` / `4000` |
+| Day Brightness Min / Max | Day brightness | `35` / `100` |
+| Cover Kelvin Warm Shift | Kelvin subtracted at 100% closed | `300` |
+| Evening Kelvin Min / Max | Evening CT | `2200` / `3000` |
+| Evening Brightness Min / Max | Evening brightness (caps the post-sunset spike) | `25` / `55` |
 
-When enabled (auto mode only), instead of switching abruptly at sunrise/sunset, all capable lamps blend from a warm **Transition Warm Kelvin** at the horizon up to the day color temperature, with brightness interpolated from the night to the day level, recreating outdoor light. Below the low elevation the night (blue) profile applies; above the high elevation the day profile applies.
-
-### Day profile
+### Horizon transition
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| Day Kelvin Minimum | Warmest (evening) | `2700` |
-| Day Kelvin Maximum | Coolest (midday) | `4000` |
-| Day Brightness Minimum | % | `35` |
-| Day Brightness Maximum | % | `100` |
-| Cover Kelvin Warm Shift | Kelvin subtracted at 100% closed average | `300` |
+| Progressive Transition | Blend across a sun elevation band near the horizon | `false` |
+| Transition Elevation Low | Night side of the band | `-6` |
+| Transition Elevation High | Day side of the band | `6` |
+| Transition Warm Kelvin | Warmest CT at the horizon (golden hour) | `2200` |
+
+When enabled (auto mode only), lamps blend across the elevation band. Outside the band, morning/day/evening/night apply normally — after dusk and before night start, **evening** is used instead of full day brightness.
 
 ### Manual control (dashboard helpers)
 
@@ -161,8 +199,10 @@ When **Manual Override Hold** is on, turning on at least one light of the group 
 
 With default settings, the automation expects:
 
-- `input_select.living_area_lighting_mode` — options: `auto`, `day`, `night`, `off`
+- `input_select.living_area_lighting_mode` — options: `auto`, `morning`, `day`, `evening`, `night`, `off`
 - `input_boolean.living_area_lighting_hold` — when `on`, the automation does not change lights
+
+**Migration:** existing helpers created before 1.3.0 only have `auto/day/night/off`. Re-run the companion script after deleting the old package helper, or edit the `input_select` options to add `morning` and `evening`.
 
 ### Automatic helper creation (recommended)
 
@@ -243,6 +283,17 @@ One automation instance for an open living + dining area:
 
 - Covers must report `current_position`. Template or switch-only covers without position do not contribute to the average.
 
+### Lights turn on at 100% after sunset while night starts later
+
+- Enable **Evening Profile** (default on). Evening uses its own brightness max (default 55%), not day max.
+- Confirm **Night Start** is your simulation time (e.g. 22:30) and **Evening Trigger** is sunset (or elevation).
+- Re-import/reload the blueprint after upgrading to 1.3.0+.
+
+### Lights turn on while covers are still open at dusk
+
+- Set **Open Covers Privacy Policy** to `block` (default) or `cap`.
+- Adjust **Cover Open Privacy Threshold** (default 50% open).
+
 ### Lights turn off while I am in the room
 
 - Check **Developer Tools → States** for cover `current_position` (25% open = `25`, not `75`).
@@ -259,6 +310,25 @@ One automation instance for an open living + dining area:
 - As a fallback, create helpers in the UI and set **Manual Mode Helper Override** / **Manual Hold Helper Override**.
 
 ## Changelog
+
+### 1.5.0
+
+- Per-mode **Preset** (`local` / shared packs) and **Animation** on Night / Morning / Day / Evening sections.
+- Empty/`local` preset uses that section’s manual config (including animation).
+- Removed the single global Profile Preset selector.
+
+### 1.4.0
+
+- Add **profile presets** (`local` / `starlight_blue` / `ember_red` / `soft_day`) via package helpers.
+- Add pluggable **animations** (`none`, `leaf_cloud`) with per-lamp brightness sway.
+- Optional **Follow Global Profile Hub** for shared morning/day/evening/night mode.
+
+### 1.3.0
+
+- Add **morning** and **evening** profiles (kelvin + brightness min/max) so a late fixed night start no longer forces full **day** brightness after sunset.
+- Add **profile schedule** triggers (`sunrise` / `sunset` / `sun_elevation` / `fixed_time`) with postpone delays for night, evening, and morning.
+- Add **open-cover privacy** policy: `block` or brightness `cap` when covers are mostly open.
+- Manual mode helper options: `auto`, `morning`, `day`, `evening`, `night`, `off`.
 
 ### 1.2.0
 

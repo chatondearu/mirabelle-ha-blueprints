@@ -64,7 +64,9 @@ sequence:
             name: {{ mode_helper_name_value }}
             options:
               - auto
+              - morning
               - day
+              - evening
               - night
               - "off"
             initial: auto
@@ -112,4 +114,4 @@ sequence:
                 Automatic helper creation failed. Add shell_command
                 cda_write_living_area_lighting_helper_package to configuration.yaml
                 (see docs/living-area-adaptive-lighting.md), or create helpers manually:
-                {{ mode_entity }} (options: auto, day, night, off) and {{ hold_entity }}.
+                {{ mode_entity }} (options: auto, morning, day, evening, night, off) and {{ hold_entity }}.

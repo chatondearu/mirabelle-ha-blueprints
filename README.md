@@ -19,6 +19,7 @@ A collection of custom blueprints for Home Assistant.
 - [[CDA] 🔔 Scheduled Bell Sound](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fscheduled_bell_sound.yaml)
 - [[CDA] 💡 Presence Based Lighting](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fpresence_based_lighting.yaml)
 - [[CDA] 🛋️ Living Area Adaptive Lighting](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fliving-area-adaptive-lighting.yaml)
+- [[CDA] 🛋️ Living Area Lighting Hub](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fliving-area-lighting-hub.yaml)
 - [[CDA] 🪟 Cover Control](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_control.yaml)
 - [[CDA] 🌞 Smart Cover Solar & Thermal Optimization](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_solar_thermal_optimization.yaml)
 - [[CDA] 🔁 HVAC Season Manager](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fhvac-season-manager.yaml)
@@ -159,6 +160,19 @@ Automatically control lights based on presence detection with configurable delay
 Adaptive day and night lighting for living areas with computed profiles (blue starlight at night, warm adaptive day light from sun, lux, and cover shading). Supports zone occupancy, optional person home checks, and automatic dashboard helper creation (`input_select` mode + `input_boolean` hold).
 
 [View Documentation](docs/living-area-adaptive-lighting.md)
+
+### Living Area Lighting Hub
+
+[CDA] 🛋️ Living Area Lighting Hub
+Publishes a shared morning/day/evening/night profile for rooms that follow the hub.
+
+[View Documentation](docs/living-area-lighting-hub.md)
+
+### LAL Profile Presets
+
+Companion script to create shared profile preset helpers (starlight blue, ember red, soft day) plus optional animations.
+
+[View Documentation](docs/lal-profile-presets.md)
 
 ### Create Living Area Lighting Helpers
 
