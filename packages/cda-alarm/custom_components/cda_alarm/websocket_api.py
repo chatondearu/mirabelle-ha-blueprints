@@ -390,7 +390,7 @@ async def ws_get_dashboard(
         connection.send_error(msg["id"], "unauthorized", "Dashboard access denied")
         return
 
-    panel_entity_id = msg.get("panel_entity_id") or _panel_entity_id(hass, entry)
+    panel_entity_id = _panel_entity_id(hass, entry)
     payload = build_dashboard(hass, entry, panel_entity_id)
     payload["can_configure"] = _connection_user(connection)[0]
     connection.send_result(msg["id"], payload)
