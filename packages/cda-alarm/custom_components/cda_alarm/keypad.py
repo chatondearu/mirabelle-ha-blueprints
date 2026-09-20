@@ -20,9 +20,7 @@ from homeassistant.core import Event, EventStateChangedData, HomeAssistant, call
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.event import async_track_state_change_event
 
-from .codes import match_code
 from .const import (
-    CONF_CODES,
     CONF_ENABLE_KEYPAD_FEEDBACK,
     CONF_FRIENT_DEVICE_ID,
     CONF_KEYPAD_ENDPOINT,
@@ -121,13 +119,8 @@ def async_setup_keypad_listener(
     """Listen for arm commands from the configured Frient keypad."""
     config = {**entry.data, **entry.options}
     device_id = config.get(CONF_FRIENT_DEVICE_ID)
-    codes = config.get(CONF_CODES, [])
     feedback_enabled = bool(config.get(CONF_ENABLE_KEYPAD_FEEDBACK, False))
     keypad_endpoint = config.get(CONF_KEYPAD_ENDPOINT, DEFAULT_KEYPAD_ENDPOINT)
-    code_required = any(
-        item.get("pin") or item.get("rfid") or item.get("nfc_tag_id")
-        for item in codes
-    )
     last_status: int | None = None
 
     async def _async_push_status(panel_status: int) -> None:
@@ -176,13 +169,6 @@ def async_setup_keypad_listener(
             return
 
         code = _extract_code(params, args)
-        # The same keypad field carries a PIN or an RFID badge id.
-        if (
-            code_required
-            and match_code(codes, pin=code, rfid=code, nfc_tag_id=code) is None
-        ):
-            return
-
         hass.async_create_task(
             _async_execute_keypad_action(
                 hass,

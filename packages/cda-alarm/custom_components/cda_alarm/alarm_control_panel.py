@@ -270,6 +270,7 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity, RestoreEntity):
             )
             return
 
+        self._arm_failure = None
         self._arm_mode = target_state
         self._attr_alarm_state = target_state
         self.async_write_ha_state()

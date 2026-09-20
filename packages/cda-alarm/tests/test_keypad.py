@@ -18,13 +18,19 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_capture_events,
+)
 
 from custom_components.cda_alarm.const import (
+    ATTR_ARM_FAILURE,
     CONF_ENABLE_KEYPAD_FEEDBACK,
     CONF_FRIENT_DEVICE_ID,
     CONF_KEYPAD_ENDPOINT,
     DOMAIN,
+    EVENT_ARM_FAILED,
+    REASON_INVALID_CODE,
 )
 
 KEYPAD_IEEE = "00:0d:6f:00:0a:90:69:e7"
@@ -124,13 +130,37 @@ async def test_frient_event_ignores_wrong_device(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_frient_event_ignores_bad_code(hass: HomeAssistant) -> None:
-    entity_id = await _setup_panel(hass)
+async def test_frient_event_reports_bad_code_and_restores_feedback(
+    hass: HomeAssistant,
+) -> None:
+    calls: list[ServiceCall] = []
 
-    _fire_keypad_event(hass, arm_mode=3, code="0000")
+    async def capture_feedback(call: ServiceCall) -> None:
+        calls.append(call)
+
+    hass.services.async_register(ZHA_DOMAIN, ZHA_FEEDBACK_SERVICE, capture_feedback)
+    entity_id = await _setup_panel(
+        hass,
+        **{
+            CONF_ENABLE_KEYPAD_FEEDBACK: True,
+            CONF_KEYPAD_ENDPOINT: 44,
+        },
+    )
+    events = async_capture_events(hass, EVENT_ARM_FAILED)
+    device_id = dr.async_get(hass).async_get_device(
+        identifiers={(ZHA_DOMAIN, KEYPAD_IEEE)}
+    ).id
+
+    _fire_keypad_event(hass, arm_mode=3, code="0000", device_id=device_id)
     await hass.async_block_till_done()
 
-    assert hass.states.get(entity_id).state == STATE_ALARM_DISARMED
+    state = hass.states.get(entity_id)
+    assert state.state == STATE_ALARM_DISARMED
+    assert state.attributes[ATTR_ARM_FAILURE]["reason"] == REASON_INVALID_CODE
+    assert len(events) == 1
+    assert events[0].data["reason"] == REASON_INVALID_CODE
+    assert len(calls) == 1
+    assert calls[0].data["args"] == [0, 0, 0, 0]
 
 
 @pytest.mark.asyncio
