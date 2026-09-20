@@ -10,16 +10,16 @@ from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN
 from .keypad import async_setup_keypad_listener
+from .sensors import merge_runtime_config
 
 PLATFORMS = [Platform.ALARM_CONTROL_PANEL]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up CDA Alarm from a config entry."""
-    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
-        **entry.data,
-        **entry.options,
-    }
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = merge_runtime_config(
+        {**entry.data, **entry.options}
+    )
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     panel_entity_id = er.async_get(hass).async_get_entity_id(
