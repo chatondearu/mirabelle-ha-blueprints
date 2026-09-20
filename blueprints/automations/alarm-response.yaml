@@ -21,7 +21,7 @@ blueprint:
         alarm_entity:
           name: Alarm Panel (source of truth)
           description: The panel whose `triggered` state starts the response (e.g. Alarmo).
-          default: alarm_control_panel.alarmo
+          default: alarm_control_panel.cda_alarm
           selector:
             entity:
               domain: alarm_control_panel
@@ -74,6 +74,52 @@ blueprint:
           default: ""
           selector:
             text:
+    noise:
+      name: Noise (media players)
+      icon: mdi:speaker-multiple
+      input:
+        noise_media_players:
+          name: Noise Media Players
+          description: >
+            Speakers used for the custom alarm sound. Unavailable and unknown
+            players are skipped.
+          default: []
+          selector:
+            entity:
+              domain: media_player
+              multiple: true
+        alarm_sound_content_id:
+          name: Alarm Sound Content ID
+          description: >
+            Media source ID or URL for the alarm sound. Leave empty to skip
+            custom sound playback.
+          default: ""
+          selector:
+            text:
+        noise_volume:
+          name: Noise Volume
+          description: Volume applied before playing the custom alarm sound.
+          default: 0.9
+          selector:
+            number:
+              min: 0
+              max: 1
+              step: 0.05
+              mode: slider
+        enable_alarm_tts:
+          name: Enable Alarm Voice Message
+          description: >
+            Speak an alarm message on the theatrical TTS media players after
+            starting the custom alarm sound.
+          default: false
+          selector:
+            boolean:
+        alarm_tts_message:
+          name: Alarm Voice Message
+          default: "Alarm triggered. Check your Home Assistant notification."
+          selector:
+            text:
+              multiline: true
     mobile:
       name: Phone notification
       icon: mdi:cellphone-message
@@ -188,7 +234,7 @@ trigger:
     id: alarm_triggered
   - platform: state
     entity_id: !input alarm_entity
-    to: disarmed
+    from: triggered
     id: alarm_cleared
   - platform: event
     event_type: mobile_app_notification_action
@@ -199,6 +245,14 @@ variables:
   sirens: !input sirens
   siren_duration: !input siren_duration
   siren_tone: !input siren_tone
+  noise_media_players: !input noise_media_players
+  alarm_sound_content_id: !input alarm_sound_content_id
+  noise_volume: !input noise_volume
+  enable_alarm_tts: !input enable_alarm_tts
+  alarm_tts_message: !input alarm_tts_message
+  tts_media_players: !input tts_media_players
+  available_tts_media_players: >-
+    {{ tts_media_players | reject('is_state', 'unavailable') | reject('is_state', 'unknown') | list }}
   mobile_notify_service: !input mobile_notify_service
   # Support one or several comma-separated notify services.
   mobile_services: >-
@@ -248,7 +302,43 @@ action:
                     entity_id: "{{ repeat.item }}"
                   data: "{{ siren_call_data }}"
 
-          # 2) Critical, actionable phone notification (works in silent mode).
+          # 2) Best-effort media noise layer. Sirens have already started.
+          - repeat:
+              for_each: "{{ noise_media_players }}"
+              sequence:
+                - condition: template
+                  value_template: >-
+                    {{ states(repeat.item) not in ['unavailable', 'unknown'] }}
+                - service: media_player.volume_set
+                  continue_on_error: true
+                  target:
+                    entity_id: "{{ repeat.item }}"
+                  data:
+                    volume_level: "{{ noise_volume }}"
+                - if:
+                    - "{{ alarm_sound_content_id != '' }}"
+                  then:
+                    - service: media_player.play_media
+                      continue_on_error: true
+                      target:
+                        entity_id: "{{ repeat.item }}"
+                      data:
+                        media_content_id: "{{ alarm_sound_content_id }}"
+                        media_content_type: music
+
+          - if:
+              - "{{ enable_alarm_tts and available_tts_media_players | count > 0 }}"
+            then:
+              - service: tts.speak
+                continue_on_error: true
+                target:
+                  entity_id: tts.google_en_com
+                data:
+                  cache: true
+                  media_player_entity_id: "{{ available_tts_media_players }}"
+                  message: "{{ alarm_tts_message }}"
+
+          # 3) Critical, actionable phone notification (works in silent mode).
           - repeat:
               for_each: "{{ mobile_services }}"
               sequence:
@@ -277,7 +367,7 @@ action:
                         - action: CDA_ALARM_SILENCE
                           title: Silence
 
-          # 3) Telegram text alert — guaranteed (no media dependency).
+          # 4) Telegram text alert — guaranteed (no media dependency).
           - if:
               - "{{ telegram_chat_id != '' }}"
             then:
@@ -299,7 +389,7 @@ action:
                       title: "🚨 Alarm triggered"
                       message: "Triggered by: {{ triggered_sensor_name }}"
 
-          # 4) Camera snapshot + Telegram photo — best-effort.
+          # 5) Camera snapshot + Telegram photo — best-effort.
           - if:
               - "{{ telegram_chat_id != '' and enable_telegram_photo and target_camera != '' }}"
             then:
@@ -329,7 +419,7 @@ action:
                       file: "{{ snapshot_path }}"
                       caption: "🚨 {{ triggered_sensor_name }}"
 
-          # 5) Optional theatrical light show (opt-in).
+          # 6) Optional theatrical light show (opt-in).
           - if:
               - "{{ enable_light_show }}"
             then:
@@ -350,7 +440,7 @@ action:
                     - delay:
                         milliseconds: 300
 
-          # 6) Optional voice message (opt-in).
+          # 7) Optional theatrical voice message (opt-in).
           - if:
               - "{{ enable_tts }}"
             then:
@@ -372,6 +462,13 @@ action:
               for_each: "{{ sirens }}"
               sequence:
                 - service: siren.turn_off
+                  continue_on_error: true
+                  target:
+                    entity_id: "{{ repeat.item }}"
+          - repeat:
+              for_each: "{{ noise_media_players }}"
+              sequence:
+                - service: media_player.media_stop
                   continue_on_error: true
                   target:
                     entity_id: "{{ repeat.item }}"
@@ -414,6 +511,13 @@ action:
                       for_each: "{{ sirens }}"
                       sequence:
                         - service: siren.turn_off
+                          continue_on_error: true
+                          target:
+                            entity_id: "{{ repeat.item }}"
+                  - repeat:
+                      for_each: "{{ noise_media_players }}"
+                      sequence:
+                        - service: media_player.media_stop
                           continue_on_error: true
                           target:
                             entity_id: "{{ repeat.item }}"
