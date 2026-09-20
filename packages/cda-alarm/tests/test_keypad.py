@@ -73,16 +73,20 @@ def _fire_keypad_event(
     hass: HomeAssistant,
     *,
     arm_mode: int,
-    code: str = "1234",
+    code: str | None = "1234",
+    code_field: str = "code",
     device_id: str = "device-frient-1",
 ) -> None:
+    params: dict[str, object] = {"arm_mode": arm_mode}
+    if code is not None:
+        params[code_field] = code
     hass.bus.async_fire(
         "zha_event",
         {
             "device_id": device_id,
             "command": "arm",
             "args": [],
-            "params": {"arm_mode": arm_mode, "code": code},
+            "params": params,
         },
     )
 
@@ -225,3 +229,74 @@ async def test_frient_feedback_failure_does_not_block_arming(
 
     assert hass.states.get(entity_id).state == STATE_ALARM_ARMED_HOME
     assert attempts == 1
+
+
+@pytest.mark.asyncio
+async def test_frient_event_arms_with_rfid_badge(hass: HomeAssistant) -> None:
+    entity_id = await _setup_panel(
+        hass,
+        codes=[{"name": "bob", "rfid": "AA:BB:CC:DD"}],
+    )
+
+    _fire_keypad_event(hass, arm_mode=3, code="AA:BB:CC:DD")
+    await hass.async_block_till_done()
+
+    assert hass.states.get(entity_id).state == STATE_ALARM_ARMED_AWAY
+
+
+@pytest.mark.asyncio
+async def test_frient_event_accepts_arm_disarm_code_field(
+    hass: HomeAssistant,
+) -> None:
+    entity_id = await _setup_panel(hass)
+
+    _fire_keypad_event(hass, arm_mode=3, code_field="arm_disarm_code")
+    await hass.async_block_till_done()
+
+    assert hass.states.get(entity_id).state == STATE_ALARM_ARMED_AWAY
+
+
+@pytest.mark.asyncio
+async def test_frient_event_without_code_arms_when_no_codes_configured(
+    hass: HomeAssistant,
+) -> None:
+    entity_id = await _setup_panel(hass, codes=[])
+
+    _fire_keypad_event(hass, arm_mode=3, code=None)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(entity_id).state == STATE_ALARM_ARMED_AWAY
+
+
+@pytest.mark.asyncio
+async def test_frient_feedback_reports_rejected_arm_as_disarmed(
+    hass: HomeAssistant,
+) -> None:
+    calls: list[ServiceCall] = []
+
+    async def capture_feedback(call: ServiceCall) -> None:
+        calls.append(call)
+
+    hass.services.async_register(ZHA_DOMAIN, ZHA_FEEDBACK_SERVICE, capture_feedback)
+    hass.states.async_set("binary_sensor.front_door", "on", {})
+    entity_id = await _setup_panel(
+        hass,
+        **{
+            "sensors_away": ["binary_sensor.front_door"],
+            CONF_ENABLE_KEYPAD_FEEDBACK: True,
+            CONF_KEYPAD_ENDPOINT: 44,
+        },
+    )
+
+    _fire_keypad_event(
+        hass,
+        arm_mode=3,
+        device_id=dr.async_get(hass).async_get_device(
+            identifiers={(ZHA_DOMAIN, KEYPAD_IEEE)}
+        ).id,
+    )
+    await hass.async_block_till_done()
+
+    assert hass.states.get(entity_id).state == STATE_ALARM_DISARMED
+    assert len(calls) == 1
+    assert calls[0].data["args"] == [0, 0, 0, 0]
