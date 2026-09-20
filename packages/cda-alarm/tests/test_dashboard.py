@@ -45,3 +45,29 @@ async def test_build_dashboard_groups_by_area(hass: HomeAssistant) -> None:
     assert snap["highlighted_camera"] == "camera.kitchen"
     assert snap["state"] == "triggered"
     assert "can_configure" not in snap
+    assert snap["code_required"] is False
+
+
+@pytest.mark.asyncio
+async def test_build_dashboard_exposes_code_required(hass: HomeAssistant) -> None:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={
+            "name": "CDA Alarm",
+            "sensor_assignments": [],
+            "cameras": [],
+            "sensor_camera_map": {},
+            "access": {"mode": "admin", "user_ids": []},
+            "codes": [{"name": "alice", "pin": "1234"}],
+        },
+    )
+    entry.add_to_hass(hass)
+    hass.states.async_set(
+        "alarm_control_panel.cda_alarm",
+        "armed_away",
+        {"code_format": "number", "code_arm_required": True},
+    )
+
+    snap = build_dashboard(hass, entry, "alarm_control_panel.cda_alarm")
+    assert snap["code_required"] is True
+    assert snap["attributes"].get("code_format") == "number"
