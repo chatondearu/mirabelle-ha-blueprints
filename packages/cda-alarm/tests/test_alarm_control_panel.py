@@ -338,3 +338,32 @@ async def test_arm_failure_is_cleared_on_next_arm(hass: HomeAssistant) -> None:
     state = hass.states.get(entity_id)
     assert state.state == STATE_ALARM_ARMED_AWAY
     assert state.attributes[ATTR_ARM_FAILURE] is None
+
+
+@pytest.mark.asyncio
+async def test_delayed_arm_success_clears_failure_from_later_attempt(
+    hass: HomeAssistant,
+) -> None:
+    entity_id = await _setup_panel(hass, exit_delay=0.02)
+    await hass.services.async_call(
+        ALARM_DOMAIN,
+        SERVICE_ALARM_ARM_AWAY,
+        {ATTR_ENTITY_ID: entity_id, ATTR_CODE: "1234"},
+        blocking=True,
+    )
+    assert hass.states.get(entity_id).state == STATE_ALARM_ARMING
+
+    await hass.services.async_call(
+        ALARM_DOMAIN,
+        SERVICE_ALARM_ARM_AWAY,
+        {ATTR_ENTITY_ID: entity_id, ATTR_CODE: "0000"},
+        blocking=True,
+    )
+    assert hass.states.get(entity_id).attributes[ATTR_ARM_FAILURE] is not None
+
+    await asyncio.sleep(0.03)
+    await hass.async_block_till_done()
+
+    state = hass.states.get(entity_id)
+    assert state.state == STATE_ALARM_ARMED_AWAY
+    assert state.attributes[ATTR_ARM_FAILURE] is None
