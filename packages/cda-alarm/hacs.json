@@ -1,0 +1,9 @@
+{
+  "name": "CDA Alarm",
+  "render_readme": true,
+  "domains": ["alarm_control_panel"],
+  "homeassistant": "2025.5.3",
+  "iot_class": "Local Push",
+  "content_in_root": false,
+  "authors": ["chatondearu"]
+}
