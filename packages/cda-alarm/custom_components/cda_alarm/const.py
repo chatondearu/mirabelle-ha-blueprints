@@ -20,3 +20,10 @@ DEFAULT_BLOCK_ARM_IF_OPEN = True
 DEFAULT_KEYPAD_ENDPOINT = 44
 
 ATTR_OPEN_SENSORS = "open_sensors"
+ATTR_ARM_MODE = "arm_mode"
+ATTR_ARM_FAILURE = "arm_failure"
+
+EVENT_ARM_FAILED = f"{DOMAIN}_arm_failed"
+
+REASON_OPEN_SENSORS = "open_sensors"
+REASON_INVALID_CODE = "invalid_code"
