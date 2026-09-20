@@ -168,13 +168,28 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity):
         self._cancel_exit_delay = async_call_later(
             self.hass,
             exit_delay,
-            lambda _now: self._finish_arming(target_state),
+            callback(lambda _now: self._finish_arming(target_state)),
         )
 
     @callback
     def _finish_arming(self, target_state: AlarmControlPanelState) -> None:
         """Complete arming after the exit delay."""
         self._cancel_exit_delay = None
+        open_sensors = self._get_open_sensors(self._active_sensors)
+        if (
+            self._config.get(CONF_BLOCK_ARM_IF_OPEN, DEFAULT_BLOCK_ARM_IF_OPEN)
+            and open_sensors
+        ):
+            _LOGGER.warning(
+                "Refusing to arm CDA Alarm because sensors are open: %s",
+                ", ".join(open_sensors),
+            )
+            self._active_sensors = []
+            self._open_sensors = {}
+            self._attr_alarm_state = AlarmControlPanelState.DISARMED
+            self.async_write_ha_state()
+            return
+
         self._attr_alarm_state = target_state
         self.async_write_ha_state()
 
