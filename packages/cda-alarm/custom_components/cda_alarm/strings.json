@@ -11,35 +11,10 @@
     }
   },
   "options": {
-    "error": {
-      "invalid_codes": "Codes must be a JSON array of objects containing only name, pin, rfid, and nfc_tag_id string fields."
-    },
     "step": {
       "init": {
-        "title": "CDA Alarm options",
-        "description": "Select all sensors once, then set delays and codes. On the next screen you choose Away / Home / Night for each sensor. Codes JSON example: [{\"name\":\"Alice\",\"pin\":\"1234\",\"rfid\":\"tag-id\",\"nfc_tag_id\":\"home-assistant-tag-id\"}].",
-        "data": {
-          "sensors": "Sensors",
-          "entry_delay": "Entry delay",
-          "exit_delay": "Exit delay",
-          "block_arm_if_open": "Block arming when a sensor is open",
-          "frient_device_id": "Frient keypad device",
-          "enable_keypad_feedback": "Enable keypad feedback",
-          "keypad_endpoint": "Keypad endpoint",
-          "codes_json": "Codes (JSON)"
-        },
-        "data_description": {
-          "sensors": "Any entities that should arm the alarm (doors, windows, motion, etc.). Modes are assigned on the next step.",
-          "entry_delay": "Seconds allowed before the alarm triggers.",
-          "exit_delay": "Seconds allowed to leave after arming.",
-          "frient_device_id": "Optional ZHA Frient keypad used by this alarm.",
-          "keypad_endpoint": "Zigbee endpoint used for keypad feedback.",
-          "codes_json": "JSON array of objects. Supported string fields are name, pin, rfid, and nfc_tag_id."
-        }
-      },
-      "assign_modes": {
-        "title": "Sensor modes",
-        "description": "For each sensor, select the arm modes that monitor it. Leave all unchecked to ignore that sensor."
+        "title": "Use the CDA Alarm sidebar",
+        "description": "Configure sensors, keypads, delays, codes, and alarm response in the sidebar panel **{panel_name}** (`{panel_path}`). Submit to keep the current options unchanged."
       }
     }
   }
