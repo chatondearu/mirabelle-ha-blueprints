@@ -133,9 +133,9 @@ class CdaAlarmPanel extends LitElement {
     cda-alarm-panel ha-device-picker,
     cda-alarm-panel ha-entity-picker,
     cda-alarm-panel ha-select,
-    cda-alarm-panel ha-textarea,
-    cda-alarm-panel ha-textfield,
-    cda-alarm-panel ha-user-picker {
+    cda-alarm-panel ha-user-picker,
+    cda-alarm-panel input[type="text"],
+    cda-alarm-panel input[type="number"] {
       width: 100%;
       box-sizing: border-box;
     }
@@ -487,6 +487,7 @@ class CdaAlarmPanel extends LitElement {
         user_ids: Array.isArray(config.access?.user_ids)
           ? [...config.access.user_ids]
           : [],
+        state_notifications: config.access?.state_notifications !== false,
       },
     };
   }
@@ -620,6 +621,40 @@ class CdaAlarmPanel extends LitElement {
     this._config = next;
   }
 
+  /** Read a text/number field value from a native or HA form event. */
+  _eventValue(event) {
+    const target = event?.target;
+    if (target && target.value !== undefined && target.value !== null) {
+      return target.value;
+    }
+    const path = typeof event?.composedPath === "function" ? event.composedPath() : [];
+    for (const node of path) {
+      if (node && node.value !== undefined && node.value !== null) {
+        return node.value;
+      }
+    }
+    return "";
+  }
+
+  /** Update a numeric option; keep empty string while the user clears the field. */
+  _setNumberField(path, raw) {
+    if (raw === "") {
+      this._setField(path, "");
+      return;
+    }
+    const number = Number(raw);
+    if (Number.isFinite(number)) {
+      this._setField(path, number);
+    }
+  }
+
+  _numberDisplay(value, fallback) {
+    if (value === "" || value === null || value === undefined) {
+      return value === "" ? "" : String(fallback);
+    }
+    return String(value);
+  }
+
   _addEntityToField(path, entityId) {
     if (!entityId) return;
     const current = path.startsWith("response.")
@@ -693,6 +728,7 @@ class CdaAlarmPanel extends LitElement {
           device_id: deviceId,
           is_default: isFirst,
           feedback: false,
+          sync_zha_panel: false,
           endpoint: 44,
         },
       ],
@@ -885,7 +921,7 @@ class CdaAlarmPanel extends LitElement {
                 autocomplete="off"
                 .value=${this._pin}
                 @input=${(event) => {
-                  this._pin = event.target.value;
+                  this._pin = this._eventValue(event);
                 }}
               />
             </label>
@@ -1058,31 +1094,27 @@ class CdaAlarmPanel extends LitElement {
         <div class="row">
           <label
             >Entry delay (s)
-            <ha-textfield
+            <input
               type="number"
               min="0"
-              label="Entry delay (s)"
-              .value=${String(this._config.entry_delay ?? 30)}
+              step="1"
+              aria-label="Entry delay (s)"
+              .value=${this._numberDisplay(this._config.entry_delay, 30)}
               @input=${(e) =>
-                this._setField(
-                  "entry_delay",
-                  Number(e.target.value)
-                )}
-            ></ha-textfield>
+                this._setNumberField("entry_delay", this._eventValue(e))}
+            />
           </label>
           <label
             >Exit delay (s)
-            <ha-textfield
+            <input
               type="number"
               min="0"
-              label="Exit delay (s)"
-              .value=${String(this._config.exit_delay ?? 60)}
+              step="1"
+              aria-label="Exit delay (s)"
+              .value=${this._numberDisplay(this._config.exit_delay, 60)}
               @input=${(e) =>
-                this._setField(
-                  "exit_delay",
-                  Number(e.target.value)
-                )}
-            ></ha-textfield>
+                this._setNumberField("exit_delay", this._eventValue(e))}
+            />
           </label>
           <label>
             <ha-switch
@@ -1148,19 +1180,34 @@ class CdaAlarmPanel extends LitElement {
                   ></ha-switch>
                   Feedback
                 </label>
+                <label>
+                  <ha-switch
+                    .checked=${Boolean(item.sync_zha_panel)}
+                    @change=${(e) =>
+                      this._updateKeypad(item.device_id, {
+                        sync_zha_panel: e.target.checked,
+                      })}
+                  ></ha-switch>
+                  Sync ZHA panel
+                </label>
                 <label
                   >Endpoint
-                  <ha-textfield
+                  <input
                     type="number"
                     min="1"
                     max="255"
-                    label="Endpoint"
-                    .value=${String(item.endpoint ?? 44)}
-                    @input=${(e) =>
-                      this._updateKeypad(item.device_id, {
-                        endpoint: Number(e.target.value),
-                      })}
-                  ></ha-textfield>
+                    step="1"
+                    aria-label="Endpoint"
+                    .value=${this._numberDisplay(item.endpoint, 44)}
+                    @input=${(e) => {
+                      const raw = this._eventValue(e);
+                      if (raw === "") return;
+                      const endpoint = Number(raw);
+                      if (Number.isFinite(endpoint)) {
+                        this._updateKeypad(item.device_id, { endpoint });
+                      }
+                    }}
+                  />
                 </label>
                 <button
                   class="danger"
@@ -1181,27 +1228,14 @@ class CdaAlarmPanel extends LitElement {
           <code>name</code>, <code>pin</code>, <code>rfid</code>,
           <code>nfc_tag_id</code>.
         </p>
-        ${customElements.get("ha-textarea")
-          ? html`
-              <ha-textarea
-                rows="8"
-                label="Codes JSON"
-                .value=${this._codesJson}
-                @input=${(e) => {
-                  this._codesJson = e.target.value;
-                }}
-              ></ha-textarea>
-            `
-          : html`
-              <textarea
-                rows="8"
-                aria-label="Codes JSON"
-                .value=${this._codesJson}
-                @input=${(e) => {
-                  this._codesJson = e.target.value;
-                }}
-              ></textarea>
-            `}
+        <textarea
+          rows="8"
+          aria-label="Codes JSON"
+          .value=${this._codesJson}
+          @input=${(e) => {
+            this._codesJson = this._eventValue(e);
+          }}
+        ></textarea>
       </div>
     `;
   }
@@ -1227,29 +1261,28 @@ class CdaAlarmPanel extends LitElement {
         <div class="row">
           <label
             >Duration (s, 0 = default)
-            <ha-textfield
+            <input
               type="number"
               min="0"
-              label="Duration (s, 0 = default)"
-              .value=${String(response.siren_duration ?? 0)}
+              step="1"
+              aria-label="Siren duration (s)"
+              .value=${this._numberDisplay(response.siren_duration, 0)}
               @input=${(e) =>
-                this._setField(
+                this._setNumberField(
                   "response.siren_duration",
-                  Number(e.target.value)
+                  this._eventValue(e)
                 )}
-            ></ha-textfield>
+            />
           </label>
           <label
             >Tone
-            <ha-textfield
-              label="Tone"
+            <input
+              type="text"
+              aria-label="Siren tone"
               .value=${response.siren_tone || ""}
               @input=${(e) =>
-                this._setField(
-                  "response.siren_tone",
-                  e.target.value
-                )}
-            ></ha-textfield>
+                this._setField("response.siren_tone", this._eventValue(e))}
+            />
           </label>
         </div>
       </div>
@@ -1264,31 +1297,32 @@ class CdaAlarmPanel extends LitElement {
         )}
         <label
           >Sound content id
-          <ha-textfield
-            label="Sound content ID"
+          <input
+            type="text"
+            aria-label="Sound content ID"
             .value=${response.alarm_sound_content_id || ""}
             @input=${(e) =>
               this._setField(
                 "response.alarm_sound_content_id",
-                e.target.value
+                this._eventValue(e)
               )}
-          ></ha-textfield>
+          />
         </label>
         <label
           >Volume (0–1)
-          <ha-textfield
+          <input
             type="number"
             min="0"
             max="1"
             step="0.05"
-            label="Volume (0–1)"
-            .value=${String(response.noise_volume ?? 0.9)}
+            aria-label="Noise volume"
+            .value=${this._numberDisplay(response.noise_volume, 0.9)}
             @input=${(e) =>
-              this._setField(
+              this._setNumberField(
                 "response.noise_volume",
-                Number(e.target.value)
+                this._eventValue(e)
               )}
-          ></ha-textfield>
+          />
         </label>
       </div>
 
@@ -1304,15 +1338,16 @@ class CdaAlarmPanel extends LitElement {
         </label>
         <label
           >Message
-          <ha-textfield
-            label="Message"
+          <input
+            type="text"
+            aria-label="TTS message"
             .value=${response.alarm_tts_message || ""}
             @input=${(e) =>
               this._setField(
                 "response.alarm_tts_message",
-                e.target.value
+                this._eventValue(e)
               )}
-          ></ha-textfield>
+          />
         </label>
         ${this._renderEntityListPicker(
           "TTS media players",
@@ -1530,6 +1565,20 @@ class CdaAlarmPanel extends LitElement {
                 : nothing}
             `
           : nothing}
+        <label>
+          <ha-switch
+            .checked=${access.state_notifications !== false}
+            @change=${(e) =>
+              this._setAccess({
+                state_notifications: e.target.checked,
+              })}
+          ></ha-switch>
+          State notifications
+        </label>
+        <p class="muted">
+          Send Companion notifications to phones of users who can open this
+          dashboard on arm, disarm, and triggered (not arming/pending).
+        </p>
       </div>
     `;
   }

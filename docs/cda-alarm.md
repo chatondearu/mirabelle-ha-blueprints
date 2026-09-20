@@ -257,6 +257,12 @@ administrators only until changed in the new **Access** tab.
 
 ## Changelog
 
+### 0.4.1
+
+- Fix config form text and number fields: use native inputs so delays, tone,
+  volume, TTS message, and codes JSON update reliably (ha-textfield binding
+  conflicted with Lit re-renders).
+
 ### 0.4.0
 
 - Added a live security Dashboard as the default sidebar tab, with alarm

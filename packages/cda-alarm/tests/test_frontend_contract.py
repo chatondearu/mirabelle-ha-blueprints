@@ -23,10 +23,12 @@ def test_access_select_uses_current_home_assistant_items() -> None:
     assert "@closed=${(e) => e.stopPropagation()}" in PANEL_SOURCE
 
 
-def test_codes_editor_uses_textarea_with_native_fallback() -> None:
-    assert 'customElements.get("ha-textarea")' in PANEL_SOURCE
-    assert "<ha-textarea" in PANEL_SOURCE
+def test_codes_editor_uses_native_textarea() -> None:
     assert "<textarea" in PANEL_SOURCE
+    assert "<ha-textarea" not in PANEL_SOURCE
+    assert "<ha-textfield" not in PANEL_SOURCE
+    assert "_setNumberField" in PANEL_SOURCE
+    assert "_eventValue" in PANEL_SOURCE
     assert "multiline" not in PANEL_SOURCE
 
 
