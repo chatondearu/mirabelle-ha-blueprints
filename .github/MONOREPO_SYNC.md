@@ -11,18 +11,14 @@ Since HACS requires integrations to be in dedicated repositories (not monorepos)
 ```
 mirabelle-ha-blueprints (monorepo)
 ├── packages/
-│   └── cover-manager/
-│       ├── custom_components/
-│       ├── hacs.json
-│       └── README.md
+│   ├── cover-manager/     → myrabelle-hacs-cover-manager
+│   ├── imeon_energy_api/  → myrabelle-hacs-imeon-energy
+│   └── cda-alarm/         → myrabelle-hacs-cda-alarm
 │
 └── .github/workflows/
-    └── sync-cover-manager.yml
-         │
-         └── Syncs to ──> myrabelle-hacs-cover-manager (sub-repository)
-                          ├── custom_components/
-                          ├── hacs.json
-                          └── README.md
+    ├── sync-cover-manager.yml
+    ├── sync-imeon-energy-api.yml
+    └── sync-cda-alarm.yml
 ```
 
 ## Setup Instructions
@@ -88,6 +84,7 @@ Sub-repository releases are driven by dedicated monorepo tags:
 
 - `cover-manager-vX.Y.Z` → `chatondearu/myrabelle-hacs-cover-manager` release `vX.Y.Z`
 - `imeon-energy-api-vX.Y.Z` → `chatondearu/myrabelle-hacs-imeon-energy` release `vX.Y.Z`
+- `cda-alarm-vX.Y.Z` → `chatondearu/myrabelle-hacs-cda-alarm` release `vX.Y.Z`
 
 The `release-hacs-subrepos.yml` workflow will:
 

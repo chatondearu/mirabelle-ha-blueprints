@@ -18,7 +18,20 @@ Frient **KEPZB-110** keypads (ZHA) can bind directly in the integration options
 
 ## Installation
 
-HACS distribution is planned; for v1 install from this monorepo:
+### HACS (recommended)
+
+1. HACS → **Integrations** → ⋮ → **Custom repositories**
+2. Add `https://github.com/chatondearu/myrabelle-hacs-cda-alarm` as **Integration**
+3. Search for **CDA Alarm** → **Download**
+4. Restart Home Assistant
+5. **Settings → Devices & services → Add integration → CDA Alarm**
+6. Open the config entry **Configure** to set sensors, delays, codes, and
+   optional Frient binding
+
+The HACS repository is synced from this monorepo (`packages/cda-alarm/`). See
+[packages/cda-alarm/HACS_SETUP.md](../packages/cda-alarm/HACS_SETUP.md).
+
+### Manual install
 
 1. Copy the integration folder into your Home Assistant config:
 
@@ -27,11 +40,7 @@ HACS distribution is planned; for v1 install from this monorepo:
      → config/custom_components/cda_alarm
    ```
 
-2. Restart Home Assistant.
-3. Go to **Settings → Devices & services → Add integration**.
-4. Search for **CDA Alarm** and create a panel (name only on first step).
-5. Open the config entry **Configure** to set sensors, delays, codes, and
-   optional Frient binding.
+2. Restart Home Assistant, then add **CDA Alarm** as above.
 
 Package overview: [packages/cda-alarm/README.md](../packages/cda-alarm/README.md).
 

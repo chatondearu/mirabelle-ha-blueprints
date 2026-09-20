@@ -5,6 +5,7 @@ on:
     tags:
       - "cover-manager-v*"
       - "imeon-energy-api-v*"
+      - "cda-alarm-v*"
   workflow_dispatch:
 
 permissions:
@@ -40,6 +41,13 @@ jobs:
               echo "release_tag=v${VERSION}" >> "$GITHUB_OUTPUT"
               echo "component=Imeon Energy API" >> "$GITHUB_OUTPUT"
               ;;
+            cda-alarm-v*)
+              VERSION="${TAG_NAME#cda-alarm-v}"
+              echo "package_dir=packages/cda-alarm" >> "$GITHUB_OUTPUT"
+              echo "sub_repo=myrabelle-hacs-cda-alarm" >> "$GITHUB_OUTPUT"
+              echo "release_tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+              echo "component=CDA Alarm" >> "$GITHUB_OUTPUT"
+              ;;
             *)
               echo "Unsupported tag: ${TAG_NAME}"
               exit 1
@@ -54,6 +62,8 @@ jobs:
 
           mkdir -p "${PREPARED_DIR}"
           cp -r "${PACKAGE_DIR}/custom_components" "${PREPARED_DIR}/"
+          find "${PREPARED_DIR}" -type d -name '__pycache__' -exec rm -rf {} + 2>/dev/null || true
+          find "${PREPARED_DIR}" -name '*.pyc' -delete 2>/dev/null || true
           cp "${PACKAGE_DIR}/hacs.json" "${PREPARED_DIR}/"
           cp "${PACKAGE_DIR}/README.md" "${PREPARED_DIR}/"
 
@@ -61,8 +71,16 @@ jobs:
             cp "${PACKAGE_DIR}/INSTALLATION.md" "${PREPARED_DIR}/"
           fi
 
+          if [ -f "${PACKAGE_DIR}/HACS_SETUP.md" ]; then
+            cp "${PACKAGE_DIR}/HACS_SETUP.md" "${PREPARED_DIR}/"
+          fi
+
           if [ -f "${PACKAGE_DIR}/TESTING.md" ]; then
             cp "${PACKAGE_DIR}/TESTING.md" "${PREPARED_DIR}/"
+          fi
+
+          if [ -f "${PACKAGE_DIR}/.gitignore" ]; then
+            cp "${PACKAGE_DIR}/.gitignore" "${PREPARED_DIR}/"
           fi
 
           if [ -f LICENSE ]; then
