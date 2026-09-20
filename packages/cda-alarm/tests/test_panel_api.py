@@ -16,8 +16,11 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.cda_alarm import websocket_api
 from custom_components.cda_alarm.const import (
+    CONF_ACCESS,
+    CONF_CAMERAS,
     CONF_KEYPADS,
     CONF_RESPONSE,
+    CONF_SENSOR_CAMERA_MAP,
     DOMAIN,
 )
 from custom_components.cda_alarm.keypad import discover_default_keypad_device_id
@@ -37,6 +40,149 @@ def _ws_handler(handler):
     while getattr(handler, "__wrapped__", None) is not None:
         handler = handler.__wrapped__
     return handler
+
+
+def _connection(*, is_admin: bool, user_id: str = "user-1") -> MagicMock:
+    """Create a websocket connection with a concrete Home Assistant user."""
+    connection = MagicMock()
+    connection.user = MagicMock(id=user_id, is_admin=is_admin)
+    return connection
+
+
+def _dashboard_entry(
+    hass: HomeAssistant, *, access_mode: str = "admin"
+) -> MockConfigEntry:
+    """Add a minimal dashboard-enabled CDA Alarm config entry."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="CDA Alarm",
+        data={
+            "name": "CDA Alarm",
+            "codes": [{"name": "Alice", "pin": "9999"}],
+            "sensor_assignments": [],
+            "access": {"mode": access_mode, "user_ids": []},
+        },
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+@pytest.mark.asyncio
+async def test_get_dashboard_denied_for_non_acl_user(hass: HomeAssistant) -> None:
+    """Dashboard access rejects a non-admin outside the configured ACL."""
+    entry = _dashboard_entry(hass)
+    connection = _connection(is_admin=False)
+
+    await _ws_handler(websocket_api.ws_get_dashboard)(
+        hass,
+        connection,
+        {
+            "id": 1,
+            "type": "cda_alarm/get_dashboard",
+            "entry_id": entry.entry_id,
+        },
+    )
+
+    connection.send_error.assert_called_once_with(
+        1, "unauthorized", "Dashboard access denied"
+    )
+    connection.send_result.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_update_config_denied_for_non_admin(hass: HomeAssistant) -> None:
+    """Configuration updates remain restricted to administrators."""
+    entry = _dashboard_entry(hass, access_mode="everyone")
+    connection = _connection(is_admin=False)
+
+    await _ws_handler(websocket_api.ws_update_config)(
+        hass,
+        connection,
+        {
+            "id": 2,
+            "type": "cda_alarm/update_config",
+            "entry_id": entry.entry_id,
+            "config": {},
+        },
+    )
+
+    connection.send_error.assert_called_once_with(
+        2, "unauthorized", "Administrator access required"
+    )
+    connection.send_result.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_get_dashboard_ok_for_everyone(hass: HomeAssistant) -> None:
+    """Everyone ACL exposes the dashboard snapshot to a non-admin."""
+    entry = _dashboard_entry(hass, access_mode="everyone")
+    connection = _connection(is_admin=False)
+
+    await _ws_handler(websocket_api.ws_get_dashboard)(
+        hass,
+        connection,
+        {
+            "id": 3,
+            "type": "cda_alarm/get_dashboard",
+            "entry_id": entry.entry_id,
+            "panel_entity_id": "alarm_control_panel.cda_alarm",
+        },
+    )
+
+    connection.send_result.assert_called_once()
+    assert "areas" in connection.send_result.call_args.args[1]
+    connection.send_error.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_non_admin_get_config_omits_codes(hass: HomeAssistant) -> None:
+    """Dashboard-authorized users receive no alarm codes from get_config."""
+    entry = _dashboard_entry(hass, access_mode="everyone")
+    connection = _connection(is_admin=False)
+
+    await _ws_handler(websocket_api.ws_get_config)(
+        hass,
+        connection,
+        {"id": 4, "type": "cda_alarm/get_config", "entry_id": entry.entry_id},
+    )
+
+    payload = connection.send_result.call_args.args[1]
+    assert "codes" not in payload
+    assert payload[CONF_ACCESS] == {"mode": "everyone"}
+
+
+@pytest.mark.asyncio
+async def test_non_admin_get_config_denied_outside_acl(hass: HomeAssistant) -> None:
+    """Configuration reads reject non-admin users outside the dashboard ACL."""
+    entry = _dashboard_entry(hass)
+    connection = _connection(is_admin=False)
+
+    await _ws_handler(websocket_api.ws_get_config)(
+        hass,
+        connection,
+        {"id": 5, "type": "cda_alarm/get_config", "entry_id": entry.entry_id},
+    )
+
+    connection.send_error.assert_called_once_with(
+        5, "unauthorized", "Dashboard access denied"
+    )
+    connection.send_result.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_admin_commands_reject_non_admin(hass: HomeAssistant) -> None:
+    """Linked automation discovery remains restricted to administrators."""
+    _dashboard_entry(hass, access_mode="everyone")
+    connection = _connection(is_admin=False)
+
+    await _ws_handler(websocket_api.ws_list_linked)(
+        hass, connection, {"id": 6, "type": "cda_alarm/list_linked"}
+    )
+
+    connection.send_error.assert_called_once_with(
+        6, "unauthorized", "Administrator access required"
+    )
+    connection.send_result.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -92,6 +238,12 @@ async def test_websocket_get_and_update_config(hass: HomeAssistant) -> None:
                 "exit_delay": 45,
                 "block_arm_if_open": False,
                 "codes": [{"name": "Alice", "pin": "9999"}],
+                "cameras": ["camera.hall", "light.invalid"],
+                "sensor_camera_map": {
+                    "binary_sensor.door": "camera.hall",
+                    "binary_sensor.window": "light.invalid",
+                },
+                "access": {"mode": "users", "user_ids": ["user-1", ""]},
                 "keypads": [
                     {
                         "device_id": "kp-1",
@@ -119,6 +271,16 @@ async def test_websocket_get_and_update_config(hass: HomeAssistant) -> None:
     assert payload["sensor_assignments"][0]["entity_id"] == "binary_sensor.door"
     assert payload["keypads"][0]["device_id"] == "kp-1"
     assert payload["response"]["sirens"] == ["siren.hall"]
+    refreshed = hass.config_entries.async_get_entry(entry.entry_id)
+    assert refreshed is not None
+    assert refreshed.options[CONF_CAMERAS] == ["camera.hall"]
+    assert refreshed.options[CONF_SENSOR_CAMERA_MAP] == {
+        "binary_sensor.door": "camera.hall"
+    }
+    assert refreshed.options[CONF_ACCESS] == {
+        "mode": "users",
+        "user_ids": ["user-1"],
+    }
 
     connection.reset_mock()
     await _ws_handler(websocket_api.ws_list_linked)(
