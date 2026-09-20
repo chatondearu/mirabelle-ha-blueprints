@@ -72,9 +72,26 @@ DATA_PANEL_REGISTERED = f"{DOMAIN}_panel_registered"
 DATA_WS_REGISTERED = f"{DOMAIN}_ws_registered"
 DATA_RESPONSE_RUNNER = "response_runner"
 
+CONF_CAMERAS = "cameras"
+CONF_SENSOR_CAMERA_MAP = "sensor_camera_map"
+CONF_ACCESS = "access"
+CONF_ACCESS_MODE = "mode"
+CONF_ACCESS_USER_IDS = "user_ids"
+
+ACCESS_MODE_ADMIN = "admin"
+ACCESS_MODE_EVERYONE = "everyone"
+ACCESS_MODE_USERS = "users"
+ACCESS_MODES = (ACCESS_MODE_ADMIN, ACCESS_MODE_EVERYONE, ACCESS_MODE_USERS)
+
+DEFAULT_ACCESS: dict = {
+    CONF_ACCESS_MODE: ACCESS_MODE_ADMIN,
+    CONF_ACCESS_USER_IDS: [],
+}
+
 WS_TYPE_GET_CONFIG = f"{DOMAIN}/get_config"
 WS_TYPE_UPDATE_CONFIG = f"{DOMAIN}/update_config"
 WS_TYPE_LIST_LINKED = f"{DOMAIN}/list_linked"
+WS_TYPE_GET_DASHBOARD = f"{DOMAIN}/get_dashboard"
 
 CDA_BLUEPRINT_MARKERS = (
     "alarm-response",
