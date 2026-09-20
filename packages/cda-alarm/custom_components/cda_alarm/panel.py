@@ -36,7 +36,7 @@ async def async_setup_panel(hass: HomeAssistant) -> None:
         sidebar_icon="mdi:shield-home",
         module_url=f"{FRONTEND_URL_BASE}/cda-alarm-panel.js",
         embed_iframe=False,
-        require_admin=True,
+        require_admin=False,
         config={"entry_domain": DOMAIN},
     )
     hass.data[DATA_PANEL_REGISTERED] = True

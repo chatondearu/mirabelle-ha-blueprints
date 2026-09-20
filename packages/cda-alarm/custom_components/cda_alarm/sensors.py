@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from .access import normalize_access
+from .cameras import normalize_cameras, normalize_sensor_camera_map
 from .const import (
+    CONF_ACCESS,
+    CONF_CAMERAS,
     CONF_ENABLE_KEYPAD_FEEDBACK,
     CONF_FRIENT_DEVICE_ID,
     CONF_KEYPAD_DEVICE_ID,
@@ -15,6 +19,7 @@ from .const import (
     CONF_KEYPADS,
     CONF_RESPONSE,
     CONF_SENSOR_ASSIGNMENTS,
+    CONF_SENSOR_CAMERA_MAP,
     CONF_SENSORS_AWAY,
     CONF_SENSORS_HOME,
     CONF_SENSORS_NIGHT,
@@ -186,4 +191,9 @@ def merge_runtime_config(config: dict[str, Any]) -> dict[str, Any]:
         merged[CONF_KEYPAD_ENDPOINT] = DEFAULT_KEYPAD_ENDPOINT
 
     merged[CONF_RESPONSE] = normalize_response(merged.get(CONF_RESPONSE))
+    merged[CONF_CAMERAS] = normalize_cameras(merged.get(CONF_CAMERAS))
+    merged[CONF_SENSOR_CAMERA_MAP] = normalize_sensor_camera_map(
+        merged.get(CONF_SENSOR_CAMERA_MAP)
+    )
+    merged[CONF_ACCESS] = normalize_access(merged.get(CONF_ACCESS))
     return merged

@@ -9,8 +9,11 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
 
+from .access import normalize_access
 from .const import (
+    CONF_ACCESS,
     CONF_BLOCK_ARM_IF_OPEN,
+    CONF_CAMERAS,
     CONF_CODES,
     CONF_ENABLE_KEYPAD_FEEDBACK,
     CONF_ENTRY_DELAY,
@@ -21,6 +24,7 @@ from .const import (
     CONF_NAME,
     CONF_RESPONSE,
     CONF_SENSOR_ASSIGNMENTS,
+    CONF_SENSOR_CAMERA_MAP,
     CONF_SENSORS_AWAY,
     CONF_SENSORS_HOME,
     CONF_SENSORS_NIGHT,
@@ -64,6 +68,9 @@ class CdaAlarmConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_KEYPAD_ENDPOINT: DEFAULT_KEYPAD_ENDPOINT,
                     CONF_KEYPADS: [],
                     CONF_RESPONSE: normalize_response(None),
+                    CONF_CAMERAS: [],
+                    CONF_SENSOR_CAMERA_MAP: {},
+                    CONF_ACCESS: normalize_access(None),
                 },
             )
 
