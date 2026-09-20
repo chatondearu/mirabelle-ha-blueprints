@@ -115,10 +115,15 @@ See [Imeon Energy API Installation Guide](packages/imeon_energy_api/INSTALLATION
 (replaces Alarmo): unified PIN/RFID/NFC codes, Frient keypad input binding, and
 `open_sensors` for **[CDA] Alarm Response**.
 
-**Installation (manual, v1):** copy
-`packages/cda-alarm/custom_components/cda_alarm` to
-`config/custom_components/cda_alarm`, restart Home Assistant, then add the
-integration under **Settings → Devices & services**. HACS sync is planned.
+**HACS installation:**
+  - Add custom repository: `https://github.com/chatondearu/myrabelle-hacs-cda-alarm`
+  - Category: Integration
+  - Search for "CDA Alarm" and download
+  - Restart Home Assistant, then add the integration under **Settings → Devices & services**
+
+**Note**: CDA Alarm is automatically synced from this monorepo to the dedicated
+sub-repository. See [Monorepo Sync Documentation](.github/MONOREPO_SYNC.md) and
+[HACS_SETUP.md](packages/cda-alarm/HACS_SETUP.md).
 
 See [CDA Alarm documentation](docs/cda-alarm.md) for configuration, Frient
 binding, codes JSON, and migration from Alarmo.
