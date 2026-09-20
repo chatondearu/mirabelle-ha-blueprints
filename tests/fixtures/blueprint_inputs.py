@@ -26,6 +26,10 @@ AUTOMATION_INPUTS: dict[str, dict[str, Any]] = {
     "alarm-response.yaml": {
         "alarm_entity": ALARM,
         "sirens": ["siren.test"],
+        "noise_media_players": [MEDIA_PLAYER],
+        "alarm_sound_content_id": "media-source://media_source/local/alarm.mp3",
+        "noise_volume": 0.9,
+        "enable_alarm_tts": False,
         "mobile_notify_service": "notify.mobile_app_test, notify.mobile_app_test2",
         "telegram_chat_id": "-1001234567890",
         "default_camera": "camera.test",
