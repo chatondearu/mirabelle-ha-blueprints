@@ -51,9 +51,8 @@ Alarm config entry.
 
 | Option | Description | Default |
 | --- | --- | --- |
-| Sensors (away) | `binary_sensor` entities monitored in away mode | `[]` |
-| Sensors (home) | Sensors monitored in home mode | `[]` |
-| Sensors (night) | Sensors monitored in night mode | `[]` |
+| Sensors | Entities monitored by the alarm (any domain) | `[]` |
+| Sensor modes | On the next options screen: Away / Home / Night per sensor | all modes |
 | Entry delay | Seconds before a tripped sensor triggers the alarm | `30` |
 | Exit delay | Seconds after arm before sensors are active | `60` |
 | Block arm if open | Refuse arm when a monitored sensor is open | `true` |
@@ -61,6 +60,9 @@ Alarm config entry.
 | Enable keypad feedback | Best-effort LED/buzzer sync via ZHA (experimental) | `false` |
 | Keypad IAS ACE endpoint | Endpoint for IAS ACE feedback (44 on KEPZB-110) | `44` |
 | Codes (JSON) | PIN, RFID, and NFC tag entries (see below) | `[]` |
+
+Pick sensors once in **Configure**, then assign modes on the following screen so
+the same door or motion entity is not selected three times.
 
 The panel entity id is derived from the panel name (e.g. `cda_alarm`).
 

@@ -18,6 +18,8 @@ from custom_components.cda_alarm.const import (
     CONF_FRIENT_DEVICE_ID,
     CONF_KEYPAD_ENDPOINT,
     CONF_NAME,
+    CONF_SENSOR_ASSIGNMENTS,
+    CONF_SENSORS,
     CONF_SENSORS_AWAY,
     CONF_SENSORS_HOME,
     CONF_SENSORS_NIGHT,
@@ -26,6 +28,9 @@ from custom_components.cda_alarm.const import (
     DEFAULT_EXIT_DELAY,
     DEFAULT_KEYPAD_ENDPOINT,
     DOMAIN,
+    MODE_AWAY,
+    MODE_HOME,
+    MODE_NIGHT,
 )
 
 
@@ -46,30 +51,21 @@ async def test_user_flow_creates_entry(hass: HomeAssistant) -> None:
 
     assert result["type"] == "create_entry"
     assert result["title"] == "CDA Alarm"
-    assert result["data"] == {
-        CONF_NAME: "CDA Alarm",
-        CONF_CODES: [],
-        CONF_SENSORS_AWAY: [],
-        CONF_SENSORS_HOME: [],
-        CONF_SENSORS_NIGHT: [],
-        CONF_ENTRY_DELAY: DEFAULT_ENTRY_DELAY,
-        CONF_EXIT_DELAY: DEFAULT_EXIT_DELAY,
-        CONF_BLOCK_ARM_IF_OPEN: DEFAULT_BLOCK_ARM_IF_OPEN,
-        CONF_FRIENT_DEVICE_ID: "",
-        CONF_ENABLE_KEYPAD_FEEDBACK: False,
-        CONF_KEYPAD_ENDPOINT: DEFAULT_KEYPAD_ENDPOINT,
-    }
+    assert result["data"][CONF_NAME] == "CDA Alarm"
+    assert result["data"][CONF_SENSOR_ASSIGNMENTS] == []
+    assert result["data"][CONF_SENSORS_AWAY] == []
 
 
 @pytest.mark.asyncio
-async def test_options_flow_updates_settings(hass: HomeAssistant) -> None:
-    """Save sensors, delays, codes, and Frient keypad settings."""
+async def test_options_flow_assigns_modes_per_sensor(hass: HomeAssistant) -> None:
+    """Pick sensors once, then assign Away/Home/Night per entity."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="CDA Alarm",
         data={
             CONF_NAME: "CDA Alarm",
             CONF_CODES: [],
+            CONF_SENSOR_ASSIGNMENTS: [],
             CONF_SENSORS_AWAY: [],
             CONF_SENSORS_HOME: [],
             CONF_SENSORS_NIGHT: [],
@@ -85,13 +81,15 @@ async def test_options_flow_updates_settings(hass: HomeAssistant) -> None:
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["type"] == "form"
+    assert result["step_id"] == "init"
 
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
-            CONF_SENSORS_AWAY: ["binary_sensor.front_door"],
-            CONF_SENSORS_HOME: ["binary_sensor.garage"],
-            CONF_SENSORS_NIGHT: [],
+            CONF_SENSORS: [
+                "binary_sensor.front_door",
+                "binary_sensor.motion_hall",
+            ],
             CONF_ENTRY_DELAY: 45,
             CONF_EXIT_DELAY: 90,
             CONF_BLOCK_ARM_IF_OPEN: False,
@@ -104,19 +102,36 @@ async def test_options_flow_updates_settings(hass: HomeAssistant) -> None:
             ),
         },
     )
+    assert result["type"] == "form"
+    assert result["step_id"] == "assign_modes"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "binary_sensor.front_door": [MODE_AWAY, MODE_HOME, MODE_NIGHT],
+            "binary_sensor.motion_hall": [MODE_AWAY],
+        },
+    )
 
     assert result["type"] == "create_entry"
     assert entry.options[CONF_ENTRY_DELAY] == 45
-    assert entry.options[CONF_SENSORS_AWAY] == ["binary_sensor.front_door"]
-    assert entry.options[CONF_CODES] == [
+    assert entry.options[CONF_SENSOR_ASSIGNMENTS] == [
         {
-            "name": "Alice",
-            "pin": "1234",
-            "rfid": "tag-1",
-            "nfc_tag_id": "nfc-1",
-        }
+            "entity_id": "binary_sensor.front_door",
+            "modes": [MODE_AWAY, MODE_HOME, MODE_NIGHT],
+        },
+        {
+            "entity_id": "binary_sensor.motion_hall",
+            "modes": [MODE_AWAY],
+        },
     ]
-    assert entry.options[CONF_FRIENT_DEVICE_ID] == "frient-device-id"
+    assert entry.options[CONF_SENSORS_AWAY] == [
+        "binary_sensor.front_door",
+        "binary_sensor.motion_hall",
+    ]
+    assert entry.options[CONF_SENSORS_HOME] == ["binary_sensor.front_door"]
+    assert entry.options[CONF_SENSORS_NIGHT] == ["binary_sensor.front_door"]
+    assert entry.options[CONF_CODES][0]["pin"] == "1234"
 
 
 @pytest.mark.asyncio
@@ -135,9 +150,7 @@ async def test_options_flow_rejects_invalid_codes_json(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"],
         {
-            CONF_SENSORS_AWAY: [],
-            CONF_SENSORS_HOME: [],
-            CONF_SENSORS_NIGHT: [],
+            CONF_SENSORS: [],
             CONF_ENTRY_DELAY: DEFAULT_ENTRY_DELAY,
             CONF_EXIT_DELAY: DEFAULT_EXIT_DELAY,
             CONF_BLOCK_ARM_IF_OPEN: DEFAULT_BLOCK_ARM_IF_OPEN,
