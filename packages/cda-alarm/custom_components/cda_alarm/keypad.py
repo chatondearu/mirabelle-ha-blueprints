@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Mapping
 import logging
+import time
 from typing import Any
 
 from homeassistant.components.alarm_control_panel import (
@@ -66,6 +67,9 @@ _ZHA_MIRROR_SERVICES = {
     AlarmControlPanelState.ARMED_AWAY: SERVICE_ALARM_ARM_AWAY,
     AlarmControlPanelState.TRIGGERED: SERVICE_ALARM_TRIGGER,
 }
+
+# Ignore keypad arm events echoed by our own ZHA panel mirror service calls.
+_MIRROR_ECHO_SUPPRESS_SECONDS = 2.5
 
 
 def _panel_status(state: str | None) -> int:
@@ -218,6 +222,9 @@ def async_setup_keypad_listener(
     last_mirrored_state: dict[str, str | None] = {
         device_id: None for device_id in keypad_by_id
     }
+    suppress_events_until: dict[str, float] = {
+        device_id: 0.0 for device_id in keypad_by_id
+    }
 
     async def _async_push_status(device_id: str, panel_status: int) -> None:
         item = keypad_by_id.get(device_id)
@@ -240,6 +247,11 @@ def async_setup_keypad_listener(
         if last_mirrored_state.get(device_id) == state:
             return
         last_mirrored_state[device_id] = state
+        # Mirror calls can make the physical keypad emit arm zha_events; ignore
+        # those echoes so CDA does not re-apply them and loop.
+        suppress_events_until[device_id] = (
+            time.monotonic() + _MIRROR_ECHO_SUPPRESS_SECONDS
+        )
         await _async_mirror_zha_panel(hass, device_id, state)
 
     async def _async_push_all(state: str) -> None:
@@ -263,6 +275,11 @@ def async_setup_keypad_listener(
             or device_id not in keypad_by_id
             or event.data.get("command") != "arm"
         ):
+            return
+        if time.monotonic() < suppress_events_until.get(device_id, 0.0):
+            _LOGGER.debug(
+                "Ignoring Frient keypad arm event during ZHA mirror echo window"
+            )
             return
         params = event.data.get("params")
         if not isinstance(params, Mapping):

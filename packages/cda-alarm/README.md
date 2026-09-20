@@ -45,7 +45,7 @@ Copy `custom_components/cda_alarm` into your HA
 - Sidebar configuration (Sensors / General / Response / Cameras / Access / Linked)
 - Standard `alarm_control_panel` services (`arm_home` / `away` / `night`, disarm)
 - Unified codes (PIN, RFID, NFC) via a structured General-tab editor
-- PIN dialog on Dashboard arm/disarm when credentials are configured
+- PIN dialog on Dashboard **disarm** when credentials are configured (arm is PIN-free)
 - Hard-block arm when sensors are open (configurable)
 - Entry / exit delays with `cda_alarm_arm_failed` event on failed arm
 - Multi-keypad list with default discovery fallback

@@ -611,7 +611,8 @@ class CdaAlarmPanel extends LitElement {
 
   async _requestAlarm(service) {
     if (!this.hass || !this._dashboard?.panel_entity_id) return;
-    if (this._dashboard?.code_required) {
+    // PIN is required only when disarming and credentials are configured.
+    if (service === "alarm_disarm" && this._dashboard?.code_required) {
       this._pendingService = service;
       this._dialogPin = "";
       this._pinDialogOpen = true;

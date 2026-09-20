@@ -176,16 +176,35 @@ async def test_disarm_with_code(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_reject_bad_code(hass: HomeAssistant) -> None:
+async def test_arm_does_not_require_code(hass: HomeAssistant) -> None:
     entity_id = await _setup_panel(hass)
+    await hass.services.async_call(
+        ALARM_DOMAIN,
+        SERVICE_ALARM_ARM_AWAY,
+        {ATTR_ENTITY_ID: entity_id},
+        blocking=True,
+    )
+    assert hass.states.get(entity_id).state == STATE_ALARM_ARMED_AWAY
+    assert hass.states.get(entity_id).attributes.get("code_arm_required") is False
+
+
+@pytest.mark.asyncio
+async def test_reject_bad_disarm_code(hass: HomeAssistant) -> None:
+    entity_id = await _setup_panel(hass)
+    await hass.services.async_call(
+        ALARM_DOMAIN,
+        SERVICE_ALARM_ARM_AWAY,
+        {ATTR_ENTITY_ID: entity_id},
+        blocking=True,
+    )
     with pytest.raises(HomeAssistantError, match="Invalid code"):
         await hass.services.async_call(
             ALARM_DOMAIN,
-            SERVICE_ALARM_ARM_AWAY,
+            SERVICE_ALARM_DISARM,
             {ATTR_ENTITY_ID: entity_id, ATTR_CODE: "0000"},
             blocking=True,
         )
-    assert hass.states.get(entity_id).state == STATE_ALARM_DISARMED
+    assert hass.states.get(entity_id).state == STATE_ALARM_ARMED_AWAY
 
 
 @pytest.mark.asyncio
@@ -386,22 +405,25 @@ async def test_delayed_arm_success_clears_failure_from_later_attempt(
     hass: HomeAssistant,
 ) -> None:
     entity_id = await _setup_panel(hass, exit_delay=0.02)
+    hass.states.async_set("binary_sensor.front_door", "on", {})
     await hass.services.async_call(
         ALARM_DOMAIN,
         SERVICE_ALARM_ARM_AWAY,
-        {ATTR_ENTITY_ID: entity_id, ATTR_CODE: "1234"},
+        {ATTR_ENTITY_ID: entity_id},
+        blocking=True,
+    )
+    assert hass.states.get(entity_id).state == STATE_ALARM_DISARMED
+    assert hass.states.get(entity_id).attributes[ATTR_ARM_FAILURE] is not None
+
+    hass.states.async_set("binary_sensor.front_door", "off", {})
+    await hass.async_block_till_done()
+    await hass.services.async_call(
+        ALARM_DOMAIN,
+        SERVICE_ALARM_ARM_AWAY,
+        {ATTR_ENTITY_ID: entity_id},
         blocking=True,
     )
     assert hass.states.get(entity_id).state == STATE_ALARM_ARMING
-
-    with pytest.raises(HomeAssistantError, match="Invalid code"):
-        await hass.services.async_call(
-            ALARM_DOMAIN,
-            SERVICE_ALARM_ARM_AWAY,
-            {ATTR_ENTITY_ID: entity_id, ATTR_CODE: "0000"},
-            blocking=True,
-        )
-    assert hass.states.get(entity_id).attributes[ATTR_ARM_FAILURE] is not None
 
     await asyncio.sleep(0.03)
     await hass.async_block_till_done()

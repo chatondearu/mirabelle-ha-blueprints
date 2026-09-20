@@ -40,7 +40,6 @@ from .const import (
     DEFAULT_EXIT_DELAY,
     DOMAIN,
     EVENT_ARM_FAILED,
-    REASON_INVALID_CODE,
     REASON_OPEN_SENSORS,
 )
 
@@ -93,7 +92,8 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity, RestoreEntity):
             code.get("pin") or code.get("rfid") or code.get("nfc_tag_id")
             for code in self._codes
         )
-        self._attr_code_arm_required = self._has_credentials
+        # PIN / badge is required to disarm only; arming never needs a code.
+        self._attr_code_arm_required = False
         if has_pin:
             self._attr_code_format = CodeFormat.NUMBER
         elif self._has_credentials:
@@ -216,11 +216,8 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity, RestoreEntity):
         target_state: AlarmControlPanelState,
         code: str | None,
     ) -> None:
-        """Validate and begin arming for a target mode."""
-        if not self._is_valid_code(code):
-            _LOGGER.warning("Rejected CDA Alarm arm request with invalid code")
-            self._async_report_arm_failure(REASON_INVALID_CODE, target_state)
-            raise HomeAssistantError("Invalid code")
+        """Begin arming for a target mode (no code required)."""
+        del code  # Arming never validates PIN / RFID / NFC.
 
         sensors = list(self._config.get(MODE_SENSORS[target_state], []))
         open_sensors = self._get_open_sensors(sensors)
