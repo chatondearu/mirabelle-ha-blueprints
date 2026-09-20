@@ -1,6 +1,6 @@
 /**
  * CDA Alarm sidebar panel (Lit, CDN).
- * Tabs: Sensors | General | Response | Linked
+ * Tabs: Dashboard | Sensors | General | Response | Cameras | Access | Linked
  */
 import {
   LitElement,
@@ -44,6 +44,10 @@ class CdaAlarmPanel extends LitElement {
     _error: { state: true },
     _message: { state: true },
     _newEntity: { state: true },
+    _newMapSensor: { state: true },
+    _newMapCamera: { state: true },
+    _newUserId: { state: true },
+    _users: { state: true },
     _codesJson: { state: true },
   };
 
@@ -126,6 +130,14 @@ class CdaAlarmPanel extends LitElement {
       background: var(--input-fill-color, transparent);
       color: var(--primary-text-color);
     }
+    cda-alarm-panel ha-device-picker,
+    cda-alarm-panel ha-entity-picker,
+    cda-alarm-panel ha-select,
+    cda-alarm-panel ha-textfield,
+    cda-alarm-panel ha-user-picker {
+      width: 100%;
+      box-sizing: border-box;
+    }
     cda-alarm-panel textarea {
       min-height: 140px;
       font-family: ui-monospace, monospace;
@@ -185,6 +197,22 @@ class CdaAlarmPanel extends LitElement {
       border-radius: 6px;
       padding: 12px;
       margin-bottom: 10px;
+    }
+    cda-alarm-panel .picker-list {
+      width: 100%;
+    }
+    cda-alarm-panel .picker-list-item,
+    cda-alarm-panel .mapping-row,
+    cda-alarm-panel .user-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--divider-color);
+    }
+    cda-alarm-panel .mapping-row ha-entity-picker {
+      flex: 1 1 240px;
     }
     cda-alarm-panel ul.linked {
       list-style: none;
@@ -274,6 +302,10 @@ class CdaAlarmPanel extends LitElement {
     this._error = "";
     this._message = "";
     this._newEntity = "";
+    this._newMapSensor = "";
+    this._newMapCamera = "";
+    this._newUserId = "";
+    this._users = [];
     this._codesJson = "[]";
     this._dashboardReloadTimer = null;
     this._dashboardLoadPromise = null;
@@ -435,6 +467,18 @@ class CdaAlarmPanel extends LitElement {
         : [],
       response: { ...emptyResponse(), ...(config.response || {}) },
       codes: Array.isArray(config.codes) ? config.codes : [],
+      cameras: Array.isArray(config.cameras) ? [...config.cameras] : [],
+      sensor_camera_map:
+        config.sensor_camera_map &&
+        typeof config.sensor_camera_map === "object"
+          ? { ...config.sensor_camera_map }
+          : {},
+      access: {
+        mode: config.access?.mode || "admin",
+        user_ids: Array.isArray(config.access?.user_ids)
+          ? [...config.access.user_ids]
+          : [],
+      },
     };
   }
 
@@ -456,7 +500,33 @@ class CdaAlarmPanel extends LitElement {
     this._message = "";
     if (tab === "linked") {
       await this._loadLinked();
+    } else if (tab === "access") {
+      await this._loadUsers();
     }
+  }
+
+  async _loadUsers() {
+    const users = new Map();
+    const addUsers = (items) => {
+      for (const user of items || []) {
+        if (user?.id) {
+          users.set(user.id, { id: user.id, name: user.name || user.id });
+        }
+      }
+    };
+    addUsers(Object.values(this.hass?.users || {}));
+    addUsers(this.hass?.user ? [this.hass.user] : []);
+    try {
+      const result = await this.hass.connection.sendMessagePromise({
+        type: "config/auth/list",
+      });
+      addUsers(Array.isArray(result) ? result : result?.users);
+    } catch {
+      // Some Home Assistant roles do not expose the full user list.
+    }
+    this._users = [...users.values()].sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
   }
 
   async _controlAlarm(service) {
@@ -482,11 +552,6 @@ class CdaAlarmPanel extends LitElement {
     return name ? `${name} (${entityId})` : entityId;
   }
 
-  _availableEntities() {
-    if (!this.hass?.states) return [];
-    return Object.keys(this.hass.states).sort();
-  }
-
   _addSensor() {
     const entityId = (this._newEntity || "").trim();
     if (!entityId || !this._config) return;
@@ -509,11 +574,14 @@ class CdaAlarmPanel extends LitElement {
   }
 
   _removeSensor(entityId) {
+    const sensorCameraMap = { ...this._config.sensor_camera_map };
+    delete sensorCameraMap[entityId];
     this._config = {
       ...this._config,
       sensor_assignments: this._config.sensor_assignments.filter(
         (item) => item.entity_id !== entityId
       ),
+      sensor_camera_map: sensorCameraMap,
     };
   }
 
@@ -543,11 +611,63 @@ class CdaAlarmPanel extends LitElement {
     this._config = next;
   }
 
-  _parseEntityList(text) {
-    return String(text || "")
-      .split(/[\n,]+/)
-      .map((item) => item.trim())
-      .filter(Boolean);
+  _addEntityToField(path, entityId) {
+    if (!entityId) return;
+    const current = path.startsWith("response.")
+      ? this._config.response[path.slice(9)]
+      : this._config[path];
+    if ((current || []).includes(entityId)) return;
+    this._setField(path, [...(current || []), entityId]);
+  }
+
+  _removeEntityFromField(path, entityId) {
+    const current = path.startsWith("response.")
+      ? this._config.response[path.slice(9)]
+      : this._config[path];
+    this._setField(
+      path,
+      (current || []).filter((item) => item !== entityId)
+    );
+    if (path === "cameras") {
+      const sensorCameraMap = Object.fromEntries(
+        Object.entries(this._config.sensor_camera_map).filter(
+          ([, camera]) => camera !== entityId
+        )
+      );
+      this._setField("sensor_camera_map", sensorCameraMap);
+    }
+  }
+
+  _setSensorCamera(sensorId, cameraId) {
+    if (!sensorId || !cameraId) return;
+    this._setField("sensor_camera_map", {
+      ...this._config.sensor_camera_map,
+      [sensorId]: cameraId,
+    });
+  }
+
+  _removeSensorCamera(sensorId) {
+    const sensorCameraMap = { ...this._config.sensor_camera_map };
+    delete sensorCameraMap[sensorId];
+    this._setField("sensor_camera_map", sensorCameraMap);
+  }
+
+  _setAccess(patch) {
+    this._setField("access", { ...this._config.access, ...patch });
+  }
+
+  _addAccessUser(userId) {
+    if (!userId || this._config.access.user_ids.includes(userId)) return;
+    this._setAccess({
+      user_ids: [...this._config.access.user_ids, userId],
+    });
+    this._newUserId = "";
+  }
+
+  _removeAccessUser(userId) {
+    this._setAccess({
+      user_ids: this._config.access.user_ids.filter((id) => id !== userId),
+    });
   }
 
   _addKeypad(deviceId) {
@@ -621,6 +741,9 @@ class CdaAlarmPanel extends LitElement {
         codes,
         keypads: this._config.keypads,
         response: this._config.response,
+        cameras: this._config.cameras,
+        sensor_camera_map: this._config.sensor_camera_map,
+        access: this._config.access,
       };
       const updated = await this.hass.connection.sendMessagePromise({
         type: WS_UPDATE,
@@ -679,7 +802,14 @@ class CdaAlarmPanel extends LitElement {
         ${[
           "dashboard",
           ...(this._isAdmin
-            ? ["sensors", "general", "response", "linked"]
+            ? [
+                "sensors",
+                "general",
+                "response",
+                "cameras",
+                "access",
+                "linked",
+              ]
             : []),
         ].map(
           (tab) => html`
@@ -696,6 +826,8 @@ class CdaAlarmPanel extends LitElement {
       ${this._tab === "sensors" ? this._renderSensors() : nothing}
       ${this._tab === "general" ? this._renderGeneral() : nothing}
       ${this._tab === "response" ? this._renderResponse() : nothing}
+      ${this._tab === "cameras" ? this._renderCameras() : nothing}
+      ${this._tab === "access" ? this._renderAccess() : nothing}
       ${this._tab === "linked" ? this._renderLinked() : nothing}
       ${this._isAdmin &&
       this._config &&
@@ -847,24 +979,20 @@ class CdaAlarmPanel extends LitElement {
   }
 
   _renderSensors() {
-    const entities = this._availableEntities();
     return html`
       <div class="card">
         <p class="muted">
           Add entities once, then choose Away / Home / Night for each.
         </p>
         <div class="row">
-          <select
+          <ha-entity-picker
+            .hass=${this.hass}
             .value=${this._newEntity}
-            @change=${(e) => {
-              this._newEntity = e.target.value;
+            label="Sensor entity"
+            @value-changed=${(e) => {
+              this._newEntity = e.detail?.value ?? e.target.value;
             }}
-          >
-            <option value="">Select entity…</option>
-            ${entities.map(
-              (id) => html`<option value=${id}>${this._entityLabel(id)}</option>`
-            )}
-          </select>
+          ></ha-entity-picker>
           <button class="secondary" @click=${this._addSensor}>Add</button>
         </div>
         ${this._config.sensor_assignments.map(
@@ -913,31 +1041,38 @@ class CdaAlarmPanel extends LitElement {
         <div class="row">
           <label
             >Entry delay (s)
-            <input
+            <ha-textfield
               type="number"
               min="0"
+              label="Entry delay (s)"
               .value=${String(this._config.entry_delay ?? 30)}
-              @change=${(e) =>
-                this._setField("entry_delay", Number(e.target.value))}
-            />
+              @value-changed=${(e) =>
+                this._setField(
+                  "entry_delay",
+                  Number(e.detail?.value ?? e.target.value)
+                )}
+            ></ha-textfield>
           </label>
           <label
             >Exit delay (s)
-            <input
+            <ha-textfield
               type="number"
               min="0"
+              label="Exit delay (s)"
               .value=${String(this._config.exit_delay ?? 60)}
-              @change=${(e) =>
-                this._setField("exit_delay", Number(e.target.value))}
-            />
+              @value-changed=${(e) =>
+                this._setField(
+                  "exit_delay",
+                  Number(e.detail?.value ?? e.target.value)
+                )}
+            ></ha-textfield>
           </label>
           <label>
-            <input
-              type="checkbox"
+            <ha-switch
               .checked=${Boolean(this._config.block_arm_if_open)}
               @change=${(e) =>
                 this._setField("block_arm_if_open", e.target.checked)}
-            />
+            ></ha-switch>
             Block arm if a sensor is open
           </label>
         </div>
@@ -977,39 +1112,38 @@ class CdaAlarmPanel extends LitElement {
               <strong>${this._deviceName(item.device_id)}</strong>
               <div class="row">
                 <label>
-                  <input
-                    type="checkbox"
+                  <ha-switch
                     .checked=${Boolean(item.is_default)}
                     @change=${(e) =>
                       this._updateKeypad(item.device_id, {
                         is_default: e.target.checked,
                       })}
-                  />
+                  ></ha-switch>
                   Default
                 </label>
                 <label>
-                  <input
-                    type="checkbox"
+                  <ha-switch
                     .checked=${Boolean(item.feedback)}
                     @change=${(e) =>
                       this._updateKeypad(item.device_id, {
                         feedback: e.target.checked,
                       })}
-                  />
+                  ></ha-switch>
                   Feedback
                 </label>
                 <label
                   >Endpoint
-                  <input
+                  <ha-textfield
                     type="number"
                     min="1"
                     max="255"
+                    label="Endpoint"
                     .value=${String(item.endpoint ?? 44)}
-                    @change=${(e) =>
+                    @value-changed=${(e) =>
                       this._updateKeypad(item.device_id, {
-                        endpoint: Number(e.target.value),
+                        endpoint: Number(e.detail?.value ?? e.target.value),
                       })}
-                  />
+                  ></ha-textfield>
                 </label>
                 <button
                   class="danger"
@@ -1030,12 +1164,15 @@ class CdaAlarmPanel extends LitElement {
           <code>name</code>, <code>pin</code>, <code>rfid</code>,
           <code>nfc_tag_id</code>.
         </p>
-        <textarea
+        <ha-textfield
+          multiline
+          rows="8"
+          label="Codes JSON"
           .value=${this._codesJson}
-          @input=${(e) => {
-            this._codesJson = e.target.value;
+          @value-changed=${(e) => {
+            this._codesJson = e.detail?.value ?? e.target.value;
           }}
-        ></textarea>
+        ></ha-textfield>
       </div>
     `;
   }
@@ -1052,115 +1189,317 @@ class CdaAlarmPanel extends LitElement {
     return html`
       <div class="card">
         <h3>Sirens</h3>
-        <label
-          >Siren entities (comma or newline separated)
-          <textarea
-            .value=${(response.sirens || []).join("\n")}
-            @change=${(e) =>
-              this._setField(
-                "response.sirens",
-                this._parseEntityList(e.target.value)
-              )}
-          ></textarea>
-        </label>
+        ${this._renderEntityListPicker(
+          "Siren entities",
+          "response.sirens",
+          response.sirens,
+          ["siren"]
+        )}
         <div class="row">
           <label
             >Duration (s, 0 = default)
-            <input
+            <ha-textfield
               type="number"
               min="0"
+              label="Duration (s, 0 = default)"
               .value=${String(response.siren_duration ?? 0)}
-              @change=${(e) =>
+              @value-changed=${(e) =>
                 this._setField(
                   "response.siren_duration",
-                  Number(e.target.value)
+                  Number(e.detail?.value ?? e.target.value)
                 )}
-            />
+            ></ha-textfield>
           </label>
           <label
             >Tone
-            <input
-              type="text"
+            <ha-textfield
+              label="Tone"
               .value=${response.siren_tone || ""}
-              @change=${(e) =>
-                this._setField("response.siren_tone", e.target.value)}
-            />
+              @value-changed=${(e) =>
+                this._setField(
+                  "response.siren_tone",
+                  e.detail?.value ?? e.target.value
+                )}
+            ></ha-textfield>
           </label>
         </div>
       </div>
 
       <div class="card">
         <h3>Noise media</h3>
-        <label
-          >Media players
-          <textarea
-            .value=${(response.noise_media_players || []).join("\n")}
-            @change=${(e) =>
-              this._setField(
-                "response.noise_media_players",
-                this._parseEntityList(e.target.value)
-              )}
-          ></textarea>
-        </label>
+        ${this._renderEntityListPicker(
+          "Media players",
+          "response.noise_media_players",
+          response.noise_media_players,
+          ["media_player"]
+        )}
         <label
           >Sound content id
-          <input
-            type="text"
+          <ha-textfield
+            label="Sound content ID"
             .value=${response.alarm_sound_content_id || ""}
-            @change=${(e) =>
-              this._setField("response.alarm_sound_content_id", e.target.value)}
-          />
+            @value-changed=${(e) =>
+              this._setField(
+                "response.alarm_sound_content_id",
+                e.detail?.value ?? e.target.value
+              )}
+          ></ha-textfield>
         </label>
         <label
           >Volume (0–1)
-          <input
+          <ha-textfield
             type="number"
             min="0"
             max="1"
             step="0.05"
+            label="Volume (0–1)"
             .value=${String(response.noise_volume ?? 0.9)}
-            @change=${(e) =>
-              this._setField("response.noise_volume", Number(e.target.value))}
-          />
+            @value-changed=${(e) =>
+              this._setField(
+                "response.noise_volume",
+                Number(e.detail?.value ?? e.target.value)
+              )}
+          ></ha-textfield>
         </label>
       </div>
 
       <div class="card">
         <h3>TTS</h3>
         <label>
-          <input
-            type="checkbox"
+          <ha-switch
             .checked=${Boolean(response.enable_alarm_tts)}
             @change=${(e) =>
               this._setField("response.enable_alarm_tts", e.target.checked)}
-          />
+          ></ha-switch>
           Enable alarm TTS
         </label>
         <label
           >Message
-          <input
-            type="text"
+          <ha-textfield
+            label="Message"
             .value=${response.alarm_tts_message || ""}
-            @change=${(e) =>
-              this._setField("response.alarm_tts_message", e.target.value)}
-          />
-        </label>
-        <label
-          >TTS media players
-          <textarea
-            .value=${(response.tts_media_players || []).join("\n")}
-            @change=${(e) =>
+            @value-changed=${(e) =>
               this._setField(
-                "response.tts_media_players",
-                this._parseEntityList(e.target.value)
+                "response.alarm_tts_message",
+                e.detail?.value ?? e.target.value
               )}
-          ></textarea>
+          ></ha-textfield>
         </label>
+        ${this._renderEntityListPicker(
+          "TTS media players",
+          "response.tts_media_players",
+          response.tts_media_players,
+          ["media_player"]
+        )}
         <p class="muted">
           Response starts when the panel enters <code>triggered</code> and stops
           on disarm / leave-triggered. Clear sirens/noise on
           <strong>[CDA] Alarm Response</strong> to avoid double sound.
         </p>
+      </div>
+    `;
+  }
+
+  _renderEntityListPicker(label, path, values = [], domains = []) {
+    return html`
+      <div class="picker-list">
+        <ha-entity-picker
+          .hass=${this.hass}
+          .value=${""}
+          .includeDomains=${domains}
+          .excludeEntities=${values}
+          .label=${label}
+          @value-changed=${(e) =>
+            this._addEntityToField(
+              path,
+              e.detail?.value ?? e.target.value
+            )}
+        ></ha-entity-picker>
+        ${values.map(
+          (entityId) => html`
+            <div class="picker-list-item">
+              <span>${this._entityLabel(entityId)}</span>
+              <button
+                class="danger"
+                @click=${() => this._removeEntityFromField(path, entityId)}
+              >
+                Remove
+              </button>
+            </div>
+          `
+        )}
+      </div>
+    `;
+  }
+
+  _renderCameras() {
+    const sensorIds = this._config.sensor_assignments.map(
+      (item) => item.entity_id
+    );
+    const mappedSensors = Object.keys(this._config.sensor_camera_map);
+    return html`
+      <div class="card">
+        <h3>Cameras</h3>
+        <p class="muted">
+          Add cameras shown on the dashboard, then optionally map alarm sensors
+          to the camera that should be highlighted.
+        </p>
+        ${this._renderEntityListPicker(
+          "Add camera",
+          "cameras",
+          this._config.cameras,
+          ["camera"]
+        )}
+      </div>
+      <div class="card">
+        <h3>Sensor camera mapping</h3>
+        ${mappedSensors.map(
+          (sensorId) => html`
+            <div class="mapping-row">
+              <ha-entity-picker
+                .hass=${this.hass}
+                .value=${sensorId}
+                .includeEntities=${sensorIds}
+                label="Sensor"
+                disabled
+              ></ha-entity-picker>
+              <ha-entity-picker
+                .hass=${this.hass}
+                .value=${this._config.sensor_camera_map[sensorId]}
+                .includeDomains=${["camera"]}
+                .includeEntities=${this._config.cameras}
+                label="Camera"
+                @value-changed=${(e) =>
+                  this._setSensorCamera(
+                    sensorId,
+                    e.detail?.value ?? e.target.value
+                  )}
+              ></ha-entity-picker>
+              <button
+                class="danger"
+                @click=${() => this._removeSensorCamera(sensorId)}
+              >
+                Remove
+              </button>
+            </div>
+          `
+        )}
+        <div class="mapping-row">
+          <ha-entity-picker
+            .hass=${this.hass}
+            .value=${this._newMapSensor}
+            .includeEntities=${sensorIds}
+            .excludeEntities=${mappedSensors}
+            label="Sensor"
+            @value-changed=${(e) => {
+              this._newMapSensor = e.detail?.value ?? e.target.value;
+            }}
+          ></ha-entity-picker>
+          <ha-entity-picker
+            .hass=${this.hass}
+            .value=${this._newMapCamera}
+            .includeDomains=${["camera"]}
+            .includeEntities=${this._config.cameras}
+            label="Camera"
+            @value-changed=${(e) => {
+              this._newMapCamera = e.detail?.value ?? e.target.value;
+            }}
+          ></ha-entity-picker>
+          <button
+            class="secondary"
+            ?disabled=${!this._newMapSensor || !this._newMapCamera}
+            @click=${() => {
+              this._setSensorCamera(
+                this._newMapSensor,
+                this._newMapCamera
+              );
+              this._newMapSensor = "";
+              this._newMapCamera = "";
+            }}
+          >
+            Add
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  _renderAccess() {
+    const access = this._config.access;
+    const selectedUsers = new Set(access.user_ids);
+    const availableUsers = this._users.filter(
+      (user) => !selectedUsers.has(user.id)
+    );
+    return html`
+      <div class="card">
+        <h3>Dashboard access</h3>
+        <ha-select
+          label="Access mode"
+          .value=${access.mode}
+          @value-changed=${(e) =>
+            this._setAccess({
+              mode: e.detail?.value ?? e.target.value,
+            })}
+        >
+          <mwc-list-item value="admin">Administrators only</mwc-list-item>
+          <mwc-list-item value="everyone">Everyone</mwc-list-item>
+          <mwc-list-item value="users">Selected users</mwc-list-item>
+        </ha-select>
+        ${access.mode === "users"
+          ? html`
+              <div class="row">
+                ${customElements.get("ha-user-picker")
+                  ? html`
+                      <ha-user-picker
+                        .hass=${this.hass}
+                        .users=${availableUsers}
+                        .value=${this._newUserId}
+                        label="Add user"
+                        @value-changed=${(e) =>
+                          this._addAccessUser(
+                            e.detail?.value ?? e.target.value
+                          )}
+                      ></ha-user-picker>
+                    `
+                  : html`
+                      <select
+                        .value=${this._newUserId}
+                        @change=${(e) =>
+                          this._addAccessUser(e.target.value)}
+                      >
+                        <option value="">Add user…</option>
+                        ${availableUsers.map(
+                          (user) => html`
+                            <option value=${user.id}>${user.name}</option>
+                          `
+                        )}
+                      </select>
+                    `}
+              </div>
+              ${access.user_ids.map((userId) => {
+                const user = this._users.find((item) => item.id === userId);
+                return html`
+                  <div class="user-row">
+                    <span>${user?.name || userId}</span>
+                    <button
+                      class="danger"
+                      @click=${() => this._removeAccessUser(userId)}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                `;
+              })}
+              ${!this._users.length
+                ? html`
+                    <p class="muted">
+                      The Home Assistant user list is unavailable. Existing
+                      assignments can still be removed.
+                    </p>
+                  `
+                : nothing}
+            `
+          : nothing}
       </div>
     `;
   }
