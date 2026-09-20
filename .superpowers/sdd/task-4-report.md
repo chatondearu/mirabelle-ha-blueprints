@@ -42,3 +42,37 @@ Result: `59 passed in 1.74s`.
 
 - `packages/cda-alarm/custom_components/cda_alarm/websocket_api.py`
 - `packages/cda-alarm/tests/test_panel_api.py`
+
+## Important Review Fix: Panel Entity Isolation
+
+The dashboard handler now ignores the client-supplied `panel_entity_id` and
+always resolves the alarm panel registered to the ACL-authorized config entry.
+
+### RED
+
+Command:
+
+```bash
+nix develop -c bash -c 'PYTHONPATH=packages/cda-alarm python -m pytest packages/cda-alarm/tests/test_panel_api.py::test_get_dashboard_ignores_client_panel_entity_id -q'
+```
+
+Result: `1 failed in 0.23s`. The response exposed the state selected by the
+client-supplied unrelated entity ID.
+
+### GREEN
+
+Focused command:
+
+```bash
+nix develop -c bash -c 'PYTHONPATH=packages/cda-alarm python -m pytest packages/cda-alarm/tests/test_dashboard.py packages/cda-alarm/tests/test_panel_api.py -q'
+```
+
+Result: `13 passed in 0.35s`.
+
+Full package command:
+
+```bash
+nix develop -c bash -c 'PYTHONPATH=packages/cda-alarm python -m pytest packages/cda-alarm/tests -q'
+```
+
+Result: `60 passed in 1.68s`.

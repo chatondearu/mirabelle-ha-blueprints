@@ -12,6 +12,7 @@ from homeassistant.components.alarm_control_panel import (
 )
 from homeassistant.const import ATTR_ENTITY_ID, STATE_ALARM_TRIGGERED
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.cda_alarm import websocket_api
@@ -132,6 +133,39 @@ async def test_get_dashboard_ok_for_everyone(hass: HomeAssistant) -> None:
     connection.send_result.assert_called_once()
     assert "areas" in connection.send_result.call_args.args[1]
     connection.send_error.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_get_dashboard_ignores_client_panel_entity_id(
+    hass: HomeAssistant,
+) -> None:
+    """Dashboard reads only the panel entity registered to its config entry."""
+    entry = _dashboard_entry(hass, access_mode="everyone")
+    panel = er.async_get(hass).async_get_or_create(
+        ALARM_DOMAIN,
+        DOMAIN,
+        entry.entry_id,
+        suggested_object_id="entry_panel",
+    )
+    hass.states.async_set(panel.entity_id, "armed_away")
+    hass.states.async_set("sensor.unrelated_secret", "secret-state")
+    connection = _connection(is_admin=False)
+
+    await _ws_handler(websocket_api.ws_get_dashboard)(
+        hass,
+        connection,
+        {
+            "id": 7,
+            "type": "cda_alarm/get_dashboard",
+            "entry_id": entry.entry_id,
+            "panel_entity_id": "sensor.unrelated_secret",
+        },
+    )
+
+    payload = connection.send_result.call_args.args[1]
+    assert payload["panel_entity_id"] == panel.entity_id
+    assert payload["state"] == "armed_away"
+    assert payload["state"] != "secret-state"
 
 
 @pytest.mark.asyncio
