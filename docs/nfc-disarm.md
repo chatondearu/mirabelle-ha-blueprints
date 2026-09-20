@@ -1,10 +1,9 @@
 # [CDA] 🏷️ NFC Tag → Disarm Alarm
 
-Disarm an alarm panel (e.g. **Alarmo**) when an **authorized NFC tag** is
+Disarm **CDA Alarm** or another alarm panel when an **authorized NFC tag** is
 scanned with the Home Assistant Companion app (or a fixed NFC reader). It lets
 you give **each person their own tag** without configuring multiple keypad
-codes — useful when the physical keypad (e.g. Frient via ZHA) only supports a
-single code.
+codes.
 
 ## Why use this
 
@@ -22,8 +21,8 @@ single code.
 
 - Home Assistant **2025.5.3** or later, with the **Companion app** (for scanning
   NFC tags) or a fixed NFC reader that registers HA tags.
-- An alarm panel that supports `alarm_control_panel.alarm_disarm` (Alarmo
-  recommended).
+- CDA Alarm or another panel that supports
+  `alarm_control_panel.alarm_disarm`.
 - One or more **NFC tags** registered in HA (see below).
 
 ## Step 1 — Register your NFC tag
@@ -49,10 +48,19 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 
 | Parameter | Description | Default |
 | --- | --- | --- |
-| Alarm Panel | Panel to disarm | `alarm_control_panel.alarmo` |
+| Alarm Panel | Panel to disarm | `alarm_control_panel.cda_alarm` |
 | Authorized NFC Tag IDs | Registered tag IDs allowed to disarm, comma-separated | `""` |
 | Disarm Code | Code sent when disarming (leave empty if none) | `""` |
 | Notify Service(s) | Optional notify service(s), comma-separated, for a disarm confirmation | `""` |
+
+## Migrating to CDA Alarm
+
+Select `alarm_control_panel.cda_alarm` as the alarm panel. Move alarm PINs,
+RFID identifiers, and NFC tag identities to **Settings → Devices & services →
+CDA Alarm → Configure** so codes live in the CDA Alarm options. Keep the tag
+IDs that may trigger this automation in **Authorized NFC Tag IDs**. If CDA
+Alarm requires a PIN, set **Disarm Code** to one of the PINs configured in its
+options.
 
 ## How it works
 
@@ -66,10 +74,12 @@ is ignored.
 | Symptom | Check |
 | --- | --- |
 | Nothing happens on scan | Confirm the tag is **registered** (Settings → Tags) and its ID is in the authorized list (exact match). |
-| Disarm rejected | The disarm code must be valid for the panel (e.g. a real Alarmo user code). |
+| Disarm rejected | For CDA Alarm, the disarm code must match a PIN stored in the integration options. |
 | No confirmation notification | Verify the exact `notify.*` service name; the disarm still happens regardless. |
 
 ## Changelog
 
 - Initial version: disarm an alarm panel from one or more authorized NFC tags,
   with an optional disarm confirmation notification.
+- CDA Alarm retarget: use `alarm_control_panel.cda_alarm` by default and
+  document centralized code management.
