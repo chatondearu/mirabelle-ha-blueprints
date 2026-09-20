@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+import voluptuous as vol
 from homeassistant.components.alarm_control_panel import (
     DOMAIN as ALARM_DOMAIN,
     SERVICE_ALARM_DISARM,
@@ -136,7 +137,7 @@ async def test_get_dashboard_ok_for_everyone(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_dashboard_ignores_client_panel_entity_id(
+async def test_get_dashboard_uses_registered_panel_entity_id(
     hass: HomeAssistant,
 ) -> None:
     """Dashboard reads only the panel entity registered to its config entry."""
@@ -158,7 +159,6 @@ async def test_get_dashboard_ignores_client_panel_entity_id(
             "id": 7,
             "type": "cda_alarm/get_dashboard",
             "entry_id": entry.entry_id,
-            "panel_entity_id": "sensor.unrelated_secret",
         },
     )
 
@@ -166,6 +166,18 @@ async def test_get_dashboard_ignores_client_panel_entity_id(
     assert payload["panel_entity_id"] == panel.entity_id
     assert payload["state"] == "armed_away"
     assert payload["state"] != "secret-state"
+
+
+def test_get_dashboard_schema_rejects_client_panel_entity_id() -> None:
+    """Dashboard clients cannot select an arbitrary panel entity."""
+    with pytest.raises(vol.MultipleInvalid):
+        websocket_api.ws_get_dashboard._ws_schema(
+            {
+                "id": 7,
+                "type": "cda_alarm/get_dashboard",
+                "panel_entity_id": "sensor.unrelated_secret",
+            }
+        )
 
 
 @pytest.mark.asyncio

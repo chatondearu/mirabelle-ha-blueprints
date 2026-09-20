@@ -133,6 +133,7 @@ class CdaAlarmPanel extends LitElement {
     cda-alarm-panel ha-device-picker,
     cda-alarm-panel ha-entity-picker,
     cda-alarm-panel ha-select,
+    cda-alarm-panel ha-textarea,
     cda-alarm-panel ha-textfield,
     cda-alarm-panel ha-user-picker {
       width: 100%;
@@ -310,6 +311,7 @@ class CdaAlarmPanel extends LitElement {
     this._dashboardReloadTimer = null;
     this._dashboardLoadPromise = null;
     this._dashboardReloadPending = false;
+    this._nextDashboardRetryAt = 0;
   }
 
   createRenderRoot() {
@@ -326,7 +328,12 @@ class CdaAlarmPanel extends LitElement {
 
   updated(changed) {
     if (!changed.has("hass") || !this.hass) return;
-    if (!this._dashboard && !this._loading && !this._denied) {
+    if (
+      !this._dashboard &&
+      !this._loading &&
+      !this._denied &&
+      Date.now() >= this._nextDashboardRetryAt
+    ) {
       this._load();
       return;
     }
@@ -386,6 +393,7 @@ class CdaAlarmPanel extends LitElement {
   _handleDashboardError(err) {
     if (err?.code !== "unauthorized" && !/access denied/i.test(err?.message)) {
       this._error = err?.message || String(err);
+      this._nextDashboardRetryAt = Date.now() + 5000;
       return false;
     }
     this._denied = true;
@@ -407,6 +415,7 @@ class CdaAlarmPanel extends LitElement {
     const wasAdmin = this._isAdmin;
     this._dashboard = dashboard;
     this._denied = false;
+    this._nextDashboardRetryAt = 0;
     this._isAdmin = Boolean(dashboard.can_configure);
     if (!this._isAdmin) {
       this._config = null;
@@ -952,26 +961,34 @@ class CdaAlarmPanel extends LitElement {
       ${(dashboard.cameras || []).length
         ? html`
             <div class="camera-grid">
-              ${dashboard.cameras.map(
-                (camera) => html`
+              ${dashboard.cameras.map((camera) => {
+                const accessToken =
+                  this.hass?.states?.[camera.entity_id]?.attributes?.access_token;
+                return html`
                   <article
                     class="card camera-tile ${camera.entity_id ===
                     dashboard.highlighted_camera
                       ? "highlighted"
                       : ""}"
                   >
-                    <img
-                      src=${`/api/camera_proxy/${camera.entity_id}`}
-                      alt=${camera.name}
-                      loading="lazy"
-                    />
+                    ${accessToken
+                      ? html`
+                          <img
+                            src=${`/api/camera_proxy/${camera.entity_id}?token=${encodeURIComponent(
+                              accessToken
+                            )}`}
+                            alt=${camera.name}
+                            loading="lazy"
+                          />
+                        `
+                      : nothing}
                     <div class="camera-caption">
                       <strong>${camera.name}</strong>
                       <div class="muted">${camera.state}</div>
                     </div>
                   </article>
-                `
-              )}
+                `;
+              })}
             </div>
           `
         : html`<p class="muted">No cameras are configured.</p>`}
@@ -1164,15 +1181,27 @@ class CdaAlarmPanel extends LitElement {
           <code>name</code>, <code>pin</code>, <code>rfid</code>,
           <code>nfc_tag_id</code>.
         </p>
-        <ha-textfield
-          multiline
-          rows="8"
-          label="Codes JSON"
-          .value=${this._codesJson}
-          @input=${(e) => {
-            this._codesJson = e.target.value;
-          }}
-        ></ha-textfield>
+        ${customElements.get("ha-textarea")
+          ? html`
+              <ha-textarea
+                rows="8"
+                label="Codes JSON"
+                .value=${this._codesJson}
+                @input=${(e) => {
+                  this._codesJson = e.target.value;
+                }}
+              ></ha-textarea>
+            `
+          : html`
+              <textarea
+                rows="8"
+                aria-label="Codes JSON"
+                .value=${this._codesJson}
+                @input=${(e) => {
+                  this._codesJson = e.target.value;
+                }}
+              ></textarea>
+            `}
       </div>
     `;
   }
@@ -1436,14 +1465,15 @@ class CdaAlarmPanel extends LitElement {
         <ha-select
           label="Access mode"
           .value=${access.mode}
+          @closed=${(e) => e.stopPropagation()}
           @selected=${(e) =>
             this._setAccess({
               mode: e.target.value,
             })}
         >
-          <mwc-list-item value="admin">Administrators only</mwc-list-item>
-          <mwc-list-item value="everyone">Everyone</mwc-list-item>
-          <mwc-list-item value="users">Selected users</mwc-list-item>
+          <ha-list-item value="admin">Administrators only</ha-list-item>
+          <ha-list-item value="everyone">Everyone</ha-list-item>
+          <ha-list-item value="users">Selected users</ha-list-item>
         </ha-select>
         ${access.mode === "users"
           ? html`

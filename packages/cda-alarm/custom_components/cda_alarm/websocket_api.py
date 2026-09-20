@@ -372,7 +372,6 @@ async def ws_list_linked(
     {
         vol.Required("type"): WS_TYPE_GET_DASHBOARD,
         vol.Optional("entry_id"): cv.string,
-        vol.Optional("panel_entity_id"): cv.string,
     }
 )
 @websocket_api.async_response

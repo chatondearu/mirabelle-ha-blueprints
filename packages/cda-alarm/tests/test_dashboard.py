@@ -44,3 +44,4 @@ async def test_build_dashboard_groups_by_area(hass: HomeAssistant) -> None:
     assert "Unassigned" in names
     assert snap["highlighted_camera"] == "camera.kitchen"
     assert snap["state"] == "triggered"
+    assert "can_configure" not in snap

@@ -25,8 +25,8 @@ Frient **KEPZB-110** keypads (ZHA) bind in the sidebar **General** tab
 3. Search for **CDA Alarm** → **Download**
 4. Restart Home Assistant
 5. **Settings → Devices & services → Add integration → CDA Alarm**
-6. Open the **CDA Alarm** sidebar panel to set sensors, delays, codes, keypads,
-   and response actions
+6. Open the **CDA Alarm** sidebar panel to use the security Dashboard and
+   configure sensors, keypads, delays, codes, cameras, access, and response
 
 The HACS repository is synced from this monorepo (`packages/cda-alarm/`). See
 [packages/cda-alarm/HACS_SETUP.md](../packages/cda-alarm/HACS_SETUP.md).
@@ -252,7 +252,7 @@ administrators only until changed in the new **Access** tab.
 | Invalid codes JSON | Only `name`, `pin`, `rfid`, `nfc_tag_id`; must be a JSON array |
 | Double sirens / noise | Clear blueprint sirens if Response tab is configured |
 | Alarm Response silent | Panel entity in blueprint; panel reaches `triggered`; notify targets set |
-| No sidebar panel | Restart after install; admin user; custom panel registered |
+| No sidebar panel | Restart after install; refresh the browser; verify the CDA Alarm integration is loaded and the custom panel is registered |
 | No `open_sensors` on trigger | Sensors assigned to the active mode; entities report open/`on` |
 
 ## Changelog
