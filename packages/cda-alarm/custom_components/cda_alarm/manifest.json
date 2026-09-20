@@ -2,10 +2,12 @@
   "domain": "cda_alarm",
   "name": "CDA Alarm",
   "documentation": "https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/docs/cda-alarm.md",
-  "codeowners": ["@chatondearu"],
+  "codeowners": [
+    "@chatondearu"
+  ],
   "dependencies": [],
   "requirements": [],
-  "version": "0.4.0",
+  "version": "0.4.1",
   "config_flow": true,
   "iot_class": "local_push"
 }
