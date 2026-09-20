@@ -45,6 +45,7 @@ def test_dashboard_pin_dialog_markers() -> None:
     assert "_pendingService" in PANEL_SOURCE
     assert "Enter PIN" in PANEL_SOURCE
     assert "code_required" in PANEL_SOURCE
+    assert 'service === "alarm_disarm" && this._dashboard?.code_required' in PANEL_SOURCE
 
 
 def test_failed_dashboard_load_has_retry_backoff() -> None:

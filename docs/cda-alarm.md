@@ -66,8 +66,8 @@ Dashboard when allowed by the configured access policy. The options flow under
 The **Dashboard** is the default tab. It shows arm/disarm controls, the current
 alarm state, and monitored sensors grouped by their Home Assistant area.
 Entities without an area appear under **Unassigned**. States update live while
-the panel is open. If codes are configured, arm and disarm open a **PIN dialog**;
-enter a valid PIN (or matching RFID / NFC value) to continue.
+the panel is open. Arming never requires a PIN. If codes are configured, **Disarm**
+opens a PIN dialog; enter a valid PIN (or matching RFID / NFC value) to continue.
 
 ### Cameras
 
@@ -175,8 +175,8 @@ matched against `pin`, then `rfid`, then `nfc_tag_id`. A badge that a keypad
 reports in its code field therefore works without a PIN entry.
 
 If no entry defines a `pin`, an `rfid`, or an `nfc_tag_id`, the panel does not
-require a code for disarm/arm via services (keypad still sends codes when
-configured). Invalid or missing codes raise a service error (`Invalid code`).
+require a code for disarm via services. Arming never requires a code. Invalid or
+missing disarm codes raise a service error (`Invalid code`).
 
 Store real codes only in Home Assistant (config entry options), never in git.
 
@@ -263,6 +263,13 @@ administrators only until changed in the new **Access** tab.
 | No `open_sensors` on trigger | Sensors assigned to the active mode; entities report open/`on` |
 
 ## Changelog
+
+### 0.5.2
+
+- Arming never requires a PIN; only disarm validates credentials.
+- Dashboard PIN dialog opens for disarm only.
+- Ignore Frient keypad `zha_event` echoes during ZHA panel mirror to stop
+  armed/disarmed loops after trigger/disarm.
 
 ### 0.5.1
 
