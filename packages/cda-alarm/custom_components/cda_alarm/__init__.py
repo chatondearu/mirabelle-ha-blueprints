@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+from homeassistant.components.alarm_control_panel import DOMAIN as ALARM_DOMAIN
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 
 from .const import DOMAIN
+from .keypad import async_setup_keypad_listener
 
 PLATFORMS = [Platform.ALARM_CONTROL_PANEL]
 
@@ -19,6 +22,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     }
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    panel_entity_id = er.async_get(hass).async_get_entity_id(
+        ALARM_DOMAIN,
+        DOMAIN,
+        entry.entry_id,
+    )
+    if panel_entity_id is not None:
+        entry.async_on_unload(
+            async_setup_keypad_listener(hass, entry, panel_entity_id)
+        )
     return True
 
 
