@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
@@ -147,3 +150,15 @@ async def test_options_flow_rejects_invalid_codes_json(
 
     assert result["type"] == "form"
     assert result["errors"] == {"codes_json": "invalid_codes"}
+
+
+def test_manifest_declares_config_flow() -> None:
+    """Integration manifest must advertise UI config flow to Home Assistant."""
+    manifest_path = (
+        Path(__file__).resolve().parent.parent
+        / "custom_components"
+        / "cda_alarm"
+        / "manifest.json"
+    )
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest.get("config_flow") is True
