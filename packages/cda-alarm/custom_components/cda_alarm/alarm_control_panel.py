@@ -14,12 +14,16 @@ from homeassistant.components.alarm_control_panel import (
     CodeFormat,
 )
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import ATTR_ENTITY_ID
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event
+from homeassistant.helpers.restore_state import RestoreEntity
 
 from .codes import match_code
 from .const import (
+    ATTR_ARM_FAILURE,
+    ATTR_ARM_MODE,
     ATTR_OPEN_SENSORS,
     CONF_BLOCK_ARM_IF_OPEN,
     CONF_CODES,
@@ -33,6 +37,9 @@ from .const import (
     DEFAULT_ENTRY_DELAY,
     DEFAULT_EXIT_DELAY,
     DOMAIN,
+    EVENT_ARM_FAILED,
+    REASON_INVALID_CODE,
+    REASON_OPEN_SENSORS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -42,6 +49,12 @@ MODE_SENSORS = {
     AlarmControlPanelState.ARMED_AWAY: CONF_SENSORS_AWAY,
     AlarmControlPanelState.ARMED_HOME: CONF_SENSORS_HOME,
     AlarmControlPanelState.ARMED_NIGHT: CONF_SENSORS_NIGHT,
+}
+RESTORABLE_STATES = {
+    *MODE_SENSORS,
+    AlarmControlPanelState.ARMING,
+    AlarmControlPanelState.PENDING,
+    AlarmControlPanelState.TRIGGERED,
 }
 
 
@@ -54,7 +67,7 @@ async def async_setup_entry(
     async_add_entities([CdaAlarmControlPanel(entry, hass.data[DOMAIN][entry.entry_id])])
 
 
-class CdaAlarmControlPanel(AlarmControlPanelEntity):
+class CdaAlarmControlPanel(AlarmControlPanelEntity, RestoreEntity):
     """Represent a CDA Alarm control panel."""
 
     _attr_alarm_state = AlarmControlPanelState.DISARMED
@@ -72,21 +85,36 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity):
         self._attr_name = config.get(CONF_NAME, entry.title)
         self._attr_unique_id = entry.entry_id
         self._codes = config.get(CONF_CODES, [])
-        self._has_pin = any(code.get("pin") for code in self._codes)
-        self._attr_code_arm_required = self._has_pin
-        self._attr_code_format = CodeFormat.NUMBER if self._has_pin else None
+        has_pin = any(code.get("pin") for code in self._codes)
+        self._has_credentials = any(
+            code.get("pin") or code.get("rfid") or code.get("nfc_tag_id")
+            for code in self._codes
+        )
+        self._attr_code_arm_required = self._has_credentials
+        if has_pin:
+            self._attr_code_format = CodeFormat.NUMBER
+        elif self._has_credentials:
+            self._attr_code_format = CodeFormat.TEXT
+        else:
+            self._attr_code_format = None
         self._active_sensors: list[str] = []
         self._open_sensors: dict[str, str] = {}
+        self._arm_mode: AlarmControlPanelState | None = None
+        self._arm_failure: dict[str, Any] | None = None
         self._cancel_exit_delay: Callable[[], None] | None = None
         self._cancel_entry_delay: Callable[[], None] | None = None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         """Return panel-specific state attributes."""
-        return {ATTR_OPEN_SENSORS: self._open_sensors}
+        return {
+            ATTR_OPEN_SENSORS: self._open_sensors,
+            ATTR_ARM_MODE: self._arm_mode.value if self._arm_mode else None,
+            ATTR_ARM_FAILURE: self._arm_failure,
+        }
 
     async def async_added_to_hass(self) -> None:
-        """Subscribe to configured sensor changes."""
+        """Subscribe to configured sensor changes and restore the last state."""
         await super().async_added_to_hass()
         self.async_on_remove(self._cancel_delays)
         sensors = {
@@ -102,6 +130,49 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity):
                     self._async_sensor_changed,
                 )
             )
+        await self._async_restore_last_state()
+
+    async def _async_restore_last_state(self) -> None:
+        """Restore the armed state across a reload or a restart."""
+        last_state = await self.async_get_last_state()
+        if last_state is None:
+            return
+        try:
+            restored = AlarmControlPanelState(last_state.state)
+        except ValueError:
+            return
+        if restored not in RESTORABLE_STATES:
+            return
+
+        arm_mode = (
+            restored
+            if restored in MODE_SENSORS
+            else _parse_arm_mode(last_state.attributes.get(ATTR_ARM_MODE))
+        )
+        if arm_mode is None:
+            if restored is not AlarmControlPanelState.TRIGGERED:
+                # Without a known mode there is nothing meaningful to watch.
+                return
+        else:
+            self._arm_mode = arm_mode
+            self._active_sensors = list(self._config.get(MODE_SENSORS[arm_mode], []))
+
+        self._attr_alarm_state = restored
+        if restored is AlarmControlPanelState.ARMING and arm_mode is not None:
+            self._schedule_exit_delay(arm_mode)
+            return
+        self._async_reevaluate_sensors()
+
+    @callback
+    def _async_reevaluate_sensors(self) -> None:
+        """Re-check monitored sensors, e.g. after restoring an armed state."""
+        if self._attr_alarm_state not in MODE_SENSORS:
+            return
+        open_sensors = self._get_open_sensors(self._active_sensors)
+        if not open_sensors:
+            return
+        self._open_sensors = open_sensors
+        self._start_entry_delay()
 
     async def async_alarm_arm_away(self, code: str | None = None) -> None:
         """Arm the alarm in away mode."""
@@ -123,6 +194,8 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity):
         self._cancel_delays()
         self._active_sensors = []
         self._open_sensors = {}
+        self._arm_mode = None
+        self._arm_failure = None
         self._attr_alarm_state = AlarmControlPanelState.DISARMED
         self.async_write_ha_state()
 
@@ -141,33 +214,41 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity):
         """Validate and begin arming for a target mode."""
         if not self._is_valid_code(code):
             _LOGGER.warning("Rejected CDA Alarm arm request with invalid code")
+            self._async_report_arm_failure(REASON_INVALID_CODE, target_state)
             return
 
         sensors = list(self._config.get(MODE_SENSORS[target_state], []))
         open_sensors = self._get_open_sensors(sensors)
-        if (
-            self._config.get(CONF_BLOCK_ARM_IF_OPEN, DEFAULT_BLOCK_ARM_IF_OPEN)
-            and open_sensors
-        ):
-            _LOGGER.warning(
-                "Refusing to arm CDA Alarm because sensors are open: %s",
-                ", ".join(open_sensors),
+        if self._block_arm_if_open and open_sensors:
+            self._log_open_sensors(open_sensors)
+            self._async_report_arm_failure(
+                REASON_OPEN_SENSORS,
+                target_state,
+                open_sensors,
             )
             return
 
         self._cancel_delays()
         self._active_sensors = sensors
         self._open_sensors = {}
+        self._arm_failure = None
         exit_delay = float(self._config.get(CONF_EXIT_DELAY, DEFAULT_EXIT_DELAY))
         if exit_delay <= 0:
             self._finish_arming(target_state)
             return
 
+        self._arm_mode = target_state
         self._attr_alarm_state = AlarmControlPanelState.ARMING
         self.async_write_ha_state()
+        self._schedule_exit_delay(target_state)
+
+    @callback
+    def _schedule_exit_delay(self, target_state: AlarmControlPanelState) -> None:
+        """Arm the panel once the configured exit delay has elapsed."""
+        exit_delay = float(self._config.get(CONF_EXIT_DELAY, DEFAULT_EXIT_DELAY))
         self._cancel_exit_delay = async_call_later(
             self.hass,
-            exit_delay,
+            max(exit_delay, 0),
             callback(lambda _now: self._finish_arming(target_state)),
         )
 
@@ -176,22 +257,56 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity):
         """Complete arming after the exit delay."""
         self._cancel_exit_delay = None
         open_sensors = self._get_open_sensors(self._active_sensors)
-        if (
-            self._config.get(CONF_BLOCK_ARM_IF_OPEN, DEFAULT_BLOCK_ARM_IF_OPEN)
-            and open_sensors
-        ):
-            _LOGGER.warning(
-                "Refusing to arm CDA Alarm because sensors are open: %s",
-                ", ".join(open_sensors),
-            )
+        if self._block_arm_if_open and open_sensors:
+            self._log_open_sensors(open_sensors)
             self._active_sensors = []
             self._open_sensors = {}
+            self._arm_mode = None
             self._attr_alarm_state = AlarmControlPanelState.DISARMED
-            self.async_write_ha_state()
+            self._async_report_arm_failure(
+                REASON_OPEN_SENSORS,
+                target_state,
+                open_sensors,
+            )
             return
 
+        self._arm_mode = target_state
         self._attr_alarm_state = target_state
         self.async_write_ha_state()
+
+    @property
+    def _block_arm_if_open(self) -> bool:
+        """Return whether arming is refused while a sensor is open."""
+        return bool(
+            self._config.get(CONF_BLOCK_ARM_IF_OPEN, DEFAULT_BLOCK_ARM_IF_OPEN)
+        )
+
+    @callback
+    def _async_report_arm_failure(
+        self,
+        reason: str,
+        target_state: AlarmControlPanelState,
+        open_sensors: dict[str, str] | None = None,
+    ) -> None:
+        """Expose an arming failure as an attribute and a bus event."""
+        self._arm_failure = {
+            "reason": reason,
+            "mode": target_state.value,
+            ATTR_OPEN_SENSORS: dict(open_sensors or {}),
+        }
+        self.async_write_ha_state()
+        self.hass.bus.async_fire(
+            EVENT_ARM_FAILED,
+            {ATTR_ENTITY_ID: self.entity_id, **self._arm_failure},
+        )
+
+    @staticmethod
+    def _log_open_sensors(open_sensors: dict[str, str]) -> None:
+        """Log the sensors that prevent arming."""
+        _LOGGER.warning(
+            "Refusing to arm CDA Alarm because sensors are open: %s",
+            ", ".join(open_sensors),
+        )
 
     @callback
     def _async_sensor_changed(self, event: Event[EventStateChangedData]) -> None:
@@ -208,9 +323,13 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity):
 
         self._open_sensors = self._get_open_sensors(self._active_sensors)
         self.async_write_ha_state()
+        self._start_entry_delay()
+
+    @callback
+    def _start_entry_delay(self) -> None:
+        """Start the entry delay unless one is already running."""
         if self._cancel_entry_delay is not None:
             return
-
         entry_delay = float(self._config.get(CONF_ENTRY_DELAY, DEFAULT_ENTRY_DELAY))
         if entry_delay <= 0:
             self._finish_entry_delay()
@@ -239,8 +358,11 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity):
         }
 
     def _is_valid_code(self, code: str | None) -> bool:
-        """Return whether a supplied PIN is valid."""
-        return not self._has_pin or match_code(self._codes, pin=code) is not None
+        """Return whether a supplied PIN, RFID badge, or NFC tag id is valid."""
+        if not self._has_credentials:
+            return True
+        # The same string can be a PIN, an RFID badge, or an NFC tag id.
+        return match_code(self._codes, pin=code, rfid=code, nfc_tag_id=code) is not None
 
     @callback
     def _cancel_delays(self) -> None:
@@ -251,3 +373,12 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity):
         if self._cancel_entry_delay is not None:
             self._cancel_entry_delay()
             self._cancel_entry_delay = None
+
+
+def _parse_arm_mode(value: Any) -> AlarmControlPanelState | None:
+    """Return the restored arm mode when it maps to a monitored mode."""
+    try:
+        mode = AlarmControlPanelState(value)
+    except ValueError:
+        return None
+    return mode if mode in MODE_SENSORS else None
