@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
+
 import pytest
 from homeassistant.components.alarm_control_panel import (
     DOMAIN as ALARM_DOMAIN,
@@ -13,6 +16,7 @@ from homeassistant.const import (
     ATTR_CODE,
     ATTR_ENTITY_ID,
     STATE_ALARM_ARMED_AWAY,
+    STATE_ALARM_ARMING,
     STATE_ALARM_DISARMED,
     STATE_ALARM_TRIGGERED,
 )
@@ -80,6 +84,67 @@ async def test_block_arm_when_sensor_open(hass: HomeAssistant) -> None:
         blocking=True,
     )
     assert hass.states.get(entity_id).state == STATE_ALARM_DISARMED
+
+
+@pytest.mark.asyncio
+async def test_arm_away_after_exit_delay(hass: HomeAssistant) -> None:
+    entity_id = await _setup_panel(hass, exit_delay=0.01)
+    await hass.services.async_call(
+        ALARM_DOMAIN,
+        SERVICE_ALARM_ARM_AWAY,
+        {ATTR_ENTITY_ID: entity_id, ATTR_CODE: "1234"},
+        blocking=True,
+    )
+    assert hass.states.get(entity_id).state == STATE_ALARM_ARMING
+
+    await asyncio.sleep(0.02)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(entity_id).state == STATE_ALARM_ARMED_AWAY
+
+
+@pytest.mark.asyncio
+async def test_block_arm_when_sensor_opens_during_exit_delay(
+    hass: HomeAssistant,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    entity_id = await _setup_panel(hass, exit_delay=0.01)
+    await hass.services.async_call(
+        ALARM_DOMAIN,
+        SERVICE_ALARM_ARM_AWAY,
+        {ATTR_ENTITY_ID: entity_id, ATTR_CODE: "1234"},
+        blocking=True,
+    )
+    assert hass.states.get(entity_id).state == STATE_ALARM_ARMING
+
+    hass.states.async_set("binary_sensor.front_door", "on", {})
+    await hass.async_block_till_done()
+    with caplog.at_level(logging.WARNING):
+        await asyncio.sleep(0.02)
+        await hass.async_block_till_done()
+
+    assert hass.states.get(entity_id).state == STATE_ALARM_DISARMED
+    assert "Refusing to arm CDA Alarm because sensors are open" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_entry_delay_triggers_alarm(hass: HomeAssistant) -> None:
+    entity_id = await _setup_panel(hass, entry_delay=0.01)
+    await hass.services.async_call(
+        ALARM_DOMAIN,
+        SERVICE_ALARM_ARM_AWAY,
+        {ATTR_ENTITY_ID: entity_id, ATTR_CODE: "1234"},
+        blocking=True,
+    )
+
+    hass.states.async_set("binary_sensor.front_door", "on", {})
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == STATE_ALARM_ARMED_AWAY
+
+    await asyncio.sleep(0.02)
+    await hass.async_block_till_done()
+
+    assert hass.states.get(entity_id).state == STATE_ALARM_TRIGGERED
 
 
 @pytest.mark.asyncio
