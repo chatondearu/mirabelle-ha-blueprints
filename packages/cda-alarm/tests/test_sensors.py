@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 from custom_components.cda_alarm.const import (
+    CONF_ACCESS,
+    CONF_CAMERAS,
     CONF_SENSOR_ASSIGNMENTS,
+    CONF_SENSOR_CAMERA_MAP,
     CONF_SENSORS_AWAY,
     CONF_SENSORS_HOME,
     CONF_SENSORS_NIGHT,
@@ -69,3 +72,10 @@ def test_merge_runtime_config_prefers_assignments() -> None:
     )
     assert merged[CONF_SENSORS_AWAY] == []
     assert merged[CONF_SENSORS_NIGHT] == ["binary_sensor.door"]
+
+
+def test_merge_runtime_config_includes_cameras_and_access() -> None:
+    merged = merge_runtime_config({})
+    assert merged[CONF_CAMERAS] == []
+    assert merged[CONF_SENSOR_CAMERA_MAP] == {}
+    assert merged[CONF_ACCESS]["mode"] == "admin"
