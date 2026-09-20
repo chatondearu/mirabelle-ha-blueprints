@@ -45,8 +45,8 @@ Alarm config entry.
 | Sensors (away) | `binary_sensor` entities monitored in away mode | `[]` |
 | Sensors (home) | Sensors monitored in home mode | `[]` |
 | Sensors (night) | Sensors monitored in night mode | `[]` |
-| Entry delay | Seconds before a tripped sensor triggers the alarm | `0` |
-| Exit delay | Seconds after arm before sensors are active | `0` |
+| Entry delay | Seconds before a tripped sensor triggers the alarm | `30` |
+| Exit delay | Seconds after arm before sensors are active | `60` |
 | Block arm if open | Refuse arm when a monitored sensor is open | `true` |
 | Frient device | ZHA device for KEPZB-110 keypad (optional) | none |
 | Enable keypad feedback | Best-effort LED/buzzer sync via ZHA (experimental) | `false` |
@@ -98,8 +98,13 @@ Example:
 ]
 ```
 
-If no entry defines a `pin`, the panel does not require a code for disarm/arm
-via services (keypad still sends codes when configured).
+A code supplied to `alarm_arm_*` / `alarm_disarm` (or sent by the keypad) is
+matched against `pin`, then `rfid`, then `nfc_tag_id`. A badge that a keypad
+reports in its code field therefore works without a PIN entry.
+
+If no entry defines a `pin`, an `rfid`, or an `nfc_tag_id`, the panel does not
+require a code for disarm/arm via services (keypad still sends codes when
+configured).
 
 Store real codes only in Home Assistant (config entry options), never in git.
 
@@ -108,6 +113,35 @@ Store real codes only in Home Assistant (config entry options), never in git.
 When the alarm triggers, the panel exposes attribute `open_sensors`: a map of
 entity id → friendly name for monitored sensors that were open. **[CDA] Alarm
 Response** uses this for camera mapping and notifications.
+
+### Arm failures
+
+Arming can be refused because the code is invalid or because a monitored sensor
+is open — including at the *end* of the exit delay, where the service call has
+already returned successfully. Both are reported:
+
+- Event `cda_alarm_arm_failed` on the Home Assistant bus, with data
+  `entity_id`, `reason` (`invalid_code` or `open_sensors`), `mode` (the
+  requested state, e.g. `armed_away`), and `open_sensors`.
+- Attribute `arm_failure` on the panel holding the same payload. It is cleared
+  on the next successful arm and on disarm.
+
+Example automation trigger:
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: cda_alarm_arm_failed
+    event_data:
+      reason: open_sensors
+```
+
+### State restore
+
+The panel inherits `RestoreEntity`: `arming`, `armed_home`, `armed_night`,
+`armed_away`, `pending`, and `triggered` survive an integration reload or a
+Home Assistant restart. After restoring, monitored sensors are re-evaluated, so
+a door opened while Home Assistant was down still starts the entry delay.
 
 ## Related blueprints
 
@@ -137,6 +171,7 @@ the same keypad.
 | Issue | Things to check |
 | --- | --- |
 | Cannot arm | **Block arm if open** and open monitored sensors; review logs |
+| Arm silently failed | Listen to `cda_alarm_arm_failed` or read the `arm_failure` attribute |
 | Keypad does nothing | Correct ZHA device, endpoint `44`, codes JSON matches PIN/RFID |
 | Double arm/disarm | Disable fallback blueprint when native Frient binding is set |
 | Invalid codes JSON | Only `name`, `pin`, `rfid`, `nfc_tag_id`; must be a JSON array |
@@ -149,3 +184,8 @@ the same keypad.
 
 - Initial v1: `alarm_control_panel`, unified codes, per-mode sensors, delays,
   hard-block arm when open, Frient ZHA input binding, `open_sensors` attribute.
+- State restore across reload/restart with sensor re-evaluation.
+- PIN, RFID, and NFC tag ids accepted on the same code field.
+- `cda_alarm_arm_failed` event and `arm_failure` attribute.
+- Keypad LED feedback derived from the real panel state.
+- English and French translations.
