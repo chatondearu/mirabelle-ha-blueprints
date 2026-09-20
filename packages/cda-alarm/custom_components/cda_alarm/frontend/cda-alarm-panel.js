@@ -1046,10 +1046,10 @@ class CdaAlarmPanel extends LitElement {
               min="0"
               label="Entry delay (s)"
               .value=${String(this._config.entry_delay ?? 30)}
-              @value-changed=${(e) =>
+              @input=${(e) =>
                 this._setField(
                   "entry_delay",
-                  Number(e.detail?.value ?? e.target.value)
+                  Number(e.target.value)
                 )}
             ></ha-textfield>
           </label>
@@ -1060,10 +1060,10 @@ class CdaAlarmPanel extends LitElement {
               min="0"
               label="Exit delay (s)"
               .value=${String(this._config.exit_delay ?? 60)}
-              @value-changed=${(e) =>
+              @input=${(e) =>
                 this._setField(
                   "exit_delay",
-                  Number(e.detail?.value ?? e.target.value)
+                  Number(e.target.value)
                 )}
             ></ha-textfield>
           </label>
@@ -1139,9 +1139,9 @@ class CdaAlarmPanel extends LitElement {
                     max="255"
                     label="Endpoint"
                     .value=${String(item.endpoint ?? 44)}
-                    @value-changed=${(e) =>
+                    @input=${(e) =>
                       this._updateKeypad(item.device_id, {
-                        endpoint: Number(e.detail?.value ?? e.target.value),
+                        endpoint: Number(e.target.value),
                       })}
                   ></ha-textfield>
                 </label>
@@ -1169,8 +1169,8 @@ class CdaAlarmPanel extends LitElement {
           rows="8"
           label="Codes JSON"
           .value=${this._codesJson}
-          @value-changed=${(e) => {
-            this._codesJson = e.detail?.value ?? e.target.value;
+          @input=${(e) => {
+            this._codesJson = e.target.value;
           }}
         ></ha-textfield>
       </div>
@@ -1203,10 +1203,10 @@ class CdaAlarmPanel extends LitElement {
               min="0"
               label="Duration (s, 0 = default)"
               .value=${String(response.siren_duration ?? 0)}
-              @value-changed=${(e) =>
+              @input=${(e) =>
                 this._setField(
                   "response.siren_duration",
-                  Number(e.detail?.value ?? e.target.value)
+                  Number(e.target.value)
                 )}
             ></ha-textfield>
           </label>
@@ -1215,10 +1215,10 @@ class CdaAlarmPanel extends LitElement {
             <ha-textfield
               label="Tone"
               .value=${response.siren_tone || ""}
-              @value-changed=${(e) =>
+              @input=${(e) =>
                 this._setField(
                   "response.siren_tone",
-                  e.detail?.value ?? e.target.value
+                  e.target.value
                 )}
             ></ha-textfield>
           </label>
@@ -1238,10 +1238,10 @@ class CdaAlarmPanel extends LitElement {
           <ha-textfield
             label="Sound content ID"
             .value=${response.alarm_sound_content_id || ""}
-            @value-changed=${(e) =>
+            @input=${(e) =>
               this._setField(
                 "response.alarm_sound_content_id",
-                e.detail?.value ?? e.target.value
+                e.target.value
               )}
           ></ha-textfield>
         </label>
@@ -1254,10 +1254,10 @@ class CdaAlarmPanel extends LitElement {
             step="0.05"
             label="Volume (0–1)"
             .value=${String(response.noise_volume ?? 0.9)}
-            @value-changed=${(e) =>
+            @input=${(e) =>
               this._setField(
                 "response.noise_volume",
-                Number(e.detail?.value ?? e.target.value)
+                Number(e.target.value)
               )}
           ></ha-textfield>
         </label>
@@ -1278,10 +1278,10 @@ class CdaAlarmPanel extends LitElement {
           <ha-textfield
             label="Message"
             .value=${response.alarm_tts_message || ""}
-            @value-changed=${(e) =>
+            @input=${(e) =>
               this._setField(
                 "response.alarm_tts_message",
-                e.detail?.value ?? e.target.value
+                e.target.value
               )}
           ></ha-textfield>
         </label>
@@ -1436,9 +1436,9 @@ class CdaAlarmPanel extends LitElement {
         <ha-select
           label="Access mode"
           .value=${access.mode}
-          @value-changed=${(e) =>
+          @selected=${(e) =>
             this._setAccess({
-              mode: e.detail?.value ?? e.target.value,
+              mode: e.target.value,
             })}
         >
           <mwc-list-item value="admin">Administrators only</mwc-list-item>
