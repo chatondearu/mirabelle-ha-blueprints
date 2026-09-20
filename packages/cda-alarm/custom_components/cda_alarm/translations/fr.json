@@ -1,0 +1,46 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Créer une centrale CDA Alarm",
+        "description": "Choisissez le nom affiché pour cette centrale d'alarme.",
+        "data": {
+          "name": "Nom"
+        }
+      }
+    }
+  },
+  "options": {
+    "error": {
+      "invalid_codes": "Les codes doivent être un tableau JSON d'objets contenant uniquement les champs texte name, pin, rfid et nfc_tag_id."
+    },
+    "step": {
+      "init": {
+        "title": "Options CDA Alarm",
+        "description": "Configurez les capteurs, les délais et l'accès par clavier. Les codes utilisent un tableau JSON, par exemple : [{\"name\":\"Alice\",\"pin\":\"1234\",\"rfid\":\"tag-id\",\"nfc_tag_id\":\"home-assistant-tag-id\"}].",
+        "data": {
+          "sensors_away": "Capteurs absence",
+          "sensors_home": "Capteurs présence",
+          "sensors_night": "Capteurs nuit",
+          "entry_delay": "Délai d'entrée",
+          "exit_delay": "Délai de sortie",
+          "block_arm_if_open": "Bloquer l'armement si un capteur est ouvert",
+          "frient_device_id": "Clavier Frient",
+          "enable_keypad_feedback": "Activer le retour clavier",
+          "keypad_endpoint": "Endpoint du clavier",
+          "codes_json": "Codes (JSON)"
+        },
+        "data_description": {
+          "sensors_away": "Capteurs binaires surveillés en mode absence.",
+          "sensors_home": "Capteurs binaires surveillés en mode présence.",
+          "sensors_night": "Capteurs binaires surveillés en mode nuit.",
+          "entry_delay": "Secondes accordées avant le déclenchement de l'alarme.",
+          "exit_delay": "Secondes accordées pour sortir après l'armement.",
+          "frient_device_id": "Clavier Frient ZHA optionnel utilisé par cette alarme.",
+          "keypad_endpoint": "Endpoint Zigbee utilisé pour le retour clavier.",
+          "codes_json": "Tableau JSON d'objets. Les champs texte acceptés sont name, pin, rfid et nfc_tag_id."
+        }
+      }
+    }
+  }
+}
