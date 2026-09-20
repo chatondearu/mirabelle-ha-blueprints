@@ -26,6 +26,7 @@ _PANEL_ATTRIBUTE_KEYS = (
     ATTR_ARM_FAILURE,
     ATTR_ARM_MODE,
     "code_format",
+    "code_arm_required",
 )
 _OPEN_STATES = {"on", "open"}
 
@@ -96,6 +97,10 @@ def build_dashboard(
     ]
     areas = sorted(grouped.values(), key=lambda item: item["name"].lower())
 
+    code_format = panel_attributes.get("code_format")
+    code_arm_required = bool(panel_attributes.get("code_arm_required"))
+    code_required = bool(code_format) or code_arm_required
+
     return {
         "entry_id": entry.entry_id,
         "panel_entity_id": panel_entity_id,
@@ -105,4 +110,5 @@ def build_dashboard(
         "cameras": cameras,
         "highlighted_camera": highlighted_camera,
         "access": {CONF_ACCESS_MODE: config[CONF_ACCESS][CONF_ACCESS_MODE]},
+        "code_required": code_required,
     }
