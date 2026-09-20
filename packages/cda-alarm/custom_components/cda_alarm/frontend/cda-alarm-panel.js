@@ -10,6 +10,7 @@ import {
 } from "https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js";
 
 const WS_GET = "cda_alarm/get_config";
+const WS_DASHBOARD = "cda_alarm/get_dashboard";
 const WS_UPDATE = "cda_alarm/update_config";
 const WS_LINKED = "cda_alarm/list_linked";
 const MODES = ["away", "home", "night"];
@@ -31,6 +32,11 @@ class CdaAlarmPanel extends LitElement {
     hass: { attribute: false },
     narrow: { type: Boolean },
     _tab: { state: true },
+    _dashboard: { state: true },
+    _isAdmin: { state: true },
+    _denied: { state: true },
+    _pin: { state: true },
+    _arming: { state: true },
     _config: { state: true },
     _linked: { state: true },
     _loading: { state: true },
@@ -42,7 +48,7 @@ class CdaAlarmPanel extends LitElement {
   };
 
   static styles = css`
-    :host {
+    cda-alarm-panel {
       display: block;
       padding: 16px;
       max-width: 960px;
@@ -50,15 +56,15 @@ class CdaAlarmPanel extends LitElement {
       font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif);
       color: var(--primary-text-color);
     }
-    h1 {
+    cda-alarm-panel h1 {
       margin: 0 0 8px;
       font-size: 1.6rem;
     }
-    .subtitle {
+    cda-alarm-panel .subtitle {
       color: var(--secondary-text-color);
       margin-bottom: 16px;
     }
-    .tabs {
+    cda-alarm-panel .tabs {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
@@ -66,7 +72,7 @@ class CdaAlarmPanel extends LitElement {
       border-bottom: 1px solid var(--divider-color);
       padding-bottom: 8px;
     }
-    .tabs button {
+    cda-alarm-panel .tabs button {
       background: transparent;
       border: 1px solid var(--divider-color);
       border-radius: 6px;
@@ -74,12 +80,12 @@ class CdaAlarmPanel extends LitElement {
       cursor: pointer;
       color: var(--primary-text-color);
     }
-    .tabs button.active {
+    cda-alarm-panel .tabs button.active {
       background: var(--primary-color);
       color: var(--text-primary-color, #fff);
       border-color: var(--primary-color);
     }
-    .card {
+    cda-alarm-panel .card {
       background: var(--card-background-color, var(--ha-card-background, #fff));
       border-radius: 8px;
       padding: 16px;
@@ -87,14 +93,14 @@ class CdaAlarmPanel extends LitElement {
       border: 1px solid var(--divider-color);
       margin-bottom: 16px;
     }
-    .row {
+    cda-alarm-panel .row {
       display: flex;
       flex-wrap: wrap;
       gap: 12px;
       align-items: center;
       margin-bottom: 12px;
     }
-    .sensor-row {
+    cda-alarm-panel .sensor-row {
       display: grid;
       grid-template-columns: minmax(180px, 1fr) repeat(3, auto) auto;
       gap: 8px;
@@ -102,16 +108,16 @@ class CdaAlarmPanel extends LitElement {
       padding: 8px 0;
       border-bottom: 1px solid var(--divider-color);
     }
-    label {
+    cda-alarm-panel label {
       display: flex;
       align-items: center;
       gap: 6px;
       font-size: 0.95rem;
     }
-    input[type="text"],
-    input[type="number"],
-    select,
-    textarea {
+    cda-alarm-panel input[type="text"],
+    cda-alarm-panel input[type="number"],
+    cda-alarm-panel select,
+    cda-alarm-panel textarea {
       width: 100%;
       box-sizing: border-box;
       padding: 8px;
@@ -120,72 +126,72 @@ class CdaAlarmPanel extends LitElement {
       background: var(--input-fill-color, transparent);
       color: var(--primary-text-color);
     }
-    textarea {
+    cda-alarm-panel textarea {
       min-height: 140px;
       font-family: ui-monospace, monospace;
     }
-    .actions {
+    cda-alarm-panel .actions {
       display: flex;
       gap: 8px;
       flex-wrap: wrap;
       margin-top: 16px;
     }
-    button.primary,
-    button.secondary,
-    button.danger {
+    cda-alarm-panel button.primary,
+    cda-alarm-panel button.secondary,
+    cda-alarm-panel button.danger {
       border: none;
       border-radius: 6px;
       padding: 10px 14px;
       cursor: pointer;
     }
-    button.primary {
+    cda-alarm-panel button.primary {
       background: var(--primary-color);
       color: var(--text-primary-color, #fff);
     }
-    button.secondary {
+    cda-alarm-panel button.secondary {
       background: var(--secondary-background-color, #eee);
       color: var(--primary-text-color);
     }
-    button.danger {
+    cda-alarm-panel button.danger {
       background: var(--error-color, #db4437);
       color: #fff;
     }
-    button:disabled {
+    cda-alarm-panel button:disabled {
       opacity: 0.6;
       cursor: not-allowed;
     }
-    .banner {
+    cda-alarm-panel .banner {
       padding: 10px 12px;
       border-radius: 6px;
       margin-bottom: 12px;
     }
-    .banner.error {
+    cda-alarm-panel .banner.error {
       background: rgba(219, 68, 55, 0.15);
       color: var(--error-color, #db4437);
     }
-    .banner.ok {
+    cda-alarm-panel .banner.ok {
       background: rgba(15, 157, 88, 0.15);
       color: var(--success-color, #0f9d58);
     }
-    .muted {
+    cda-alarm-panel .muted {
       color: var(--secondary-text-color);
       font-size: 0.9rem;
     }
-    a {
+    cda-alarm-panel a {
       color: var(--primary-color);
     }
-    .keypad-card {
+    cda-alarm-panel .keypad-card {
       border: 1px solid var(--divider-color);
       border-radius: 6px;
       padding: 12px;
       margin-bottom: 10px;
     }
-    ul.linked {
+    cda-alarm-panel ul.linked {
       list-style: none;
       padding: 0;
       margin: 0;
     }
-    ul.linked li {
+    cda-alarm-panel ul.linked li {
       padding: 10px 0;
       border-bottom: 1px solid var(--divider-color);
       display: flex;
@@ -193,11 +199,74 @@ class CdaAlarmPanel extends LitElement {
       gap: 12px;
       flex-wrap: wrap;
     }
+    cda-alarm-panel .alarm-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    cda-alarm-panel .state-badge {
+      display: inline-block;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: var(--secondary-background-color, #eee);
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+    cda-alarm-panel .dashboard-grid,
+    cda-alarm-panel .camera-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    cda-alarm-panel .area-card {
+      margin-bottom: 0;
+    }
+    cda-alarm-panel .area-card ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    cda-alarm-panel .area-card li {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--divider-color);
+    }
+    cda-alarm-panel .sensor-open {
+      color: var(--error-color, #db4437);
+      font-weight: 600;
+    }
+    cda-alarm-panel .camera-tile {
+      overflow: hidden;
+      padding: 0;
+    }
+    cda-alarm-panel .camera-tile.highlighted {
+      border: 3px solid var(--error-color, #db4437);
+      box-shadow: 0 0 0 2px color-mix(in srgb, var(--error-color) 25%, transparent);
+    }
+    cda-alarm-panel .camera-tile img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+      background: var(--secondary-background-color, #eee);
+    }
+    cda-alarm-panel .camera-caption {
+      padding: 12px;
+    }
   `;
 
   constructor() {
     super();
-    this._tab = "sensors";
+    this._tab = "dashboard";
+    this._dashboard = null;
+    this._isAdmin = false;
+    this._denied = false;
+    this._pin = "";
+    this._arming = false;
     this._config = null;
     this._linked = null;
     this._loading = false;
@@ -208,8 +277,12 @@ class CdaAlarmPanel extends LitElement {
     this._codesJson = "[]";
   }
 
+  createRenderRoot() {
+    return this;
+  }
+
   updated(changed) {
-    if (changed.has("hass") && this.hass && !this._config && !this._loading) {
+    if (changed.has("hass") && this.hass && !this._dashboard && !this._loading) {
       this._load();
     }
   }
@@ -218,19 +291,49 @@ class CdaAlarmPanel extends LitElement {
     if (!this.hass) return;
     this._loading = true;
     this._error = "";
+    this._denied = false;
     try {
-      const config = await this.hass.connection.sendMessagePromise({
-        type: WS_GET,
+      const dashboard = await this.hass.connection.sendMessagePromise({
+        type: WS_DASHBOARD,
       });
-      this._config = this._normalizeConfig(config);
-      this._codesJson = JSON.stringify(this._config.codes || [], null, 2);
+      this._dashboard = dashboard;
+      this._isAdmin = Boolean(dashboard.can_configure);
+      if (this._isAdmin) {
+        const config = await this.hass.connection.sendMessagePromise({
+          type: WS_GET,
+          entry_id: dashboard.entry_id,
+        });
+        this._config = this._normalizeConfig(config);
+        this._codesJson = JSON.stringify(this._config.codes || [], null, 2);
+      } else {
+        this._config = null;
+        if (this._tab !== "dashboard") this._tab = "dashboard";
+      }
       if (this._tab === "linked") {
         await this._loadLinked();
       }
     } catch (err) {
-      this._error = err?.message || String(err);
+      if (err?.code === "unauthorized" || /access denied/i.test(err?.message)) {
+        this._denied = true;
+        this._dashboard = null;
+        this._config = null;
+      } else {
+        this._error = err?.message || String(err);
+      }
     } finally {
       this._loading = false;
+    }
+  }
+
+  async _reloadDashboard() {
+    if (!this.hass) return;
+    try {
+      this._dashboard = await this.hass.connection.sendMessagePromise({
+        type: WS_DASHBOARD,
+        entry_id: this._dashboard?.entry_id,
+      });
+    } catch (err) {
+      this._error = err?.message || String(err);
     }
   }
 
@@ -264,10 +367,28 @@ class CdaAlarmPanel extends LitElement {
   }
 
   async _setTab(tab) {
+    if (tab !== "dashboard" && !this._isAdmin) return;
     this._tab = tab;
     this._message = "";
     if (tab === "linked") {
       await this._loadLinked();
+    }
+  }
+
+  async _controlAlarm(service) {
+    if (!this.hass || !this._dashboard?.panel_entity_id) return;
+    this._arming = true;
+    this._error = "";
+    try {
+      await this.hass.callService("alarm_control_panel", service, {
+        entity_id: this._dashboard.panel_entity_id,
+        code: this._pin || undefined,
+      });
+      await this._reloadDashboard();
+    } catch (err) {
+      this._error = err?.message || String(err);
+    } finally {
+      this._arming = false;
     }
   }
 
@@ -433,13 +554,24 @@ class CdaAlarmPanel extends LitElement {
   }
 
   render() {
-    if (this._loading && !this._config) {
-      return html`<div class="card">Loading CDA Alarm…</div>`;
+    const styles = html`<style>${CdaAlarmPanel.styles.cssText}</style>`;
+    if (this._loading && !this._dashboard) {
+      return html`${styles}<div class="card">Loading CDA Alarm…</div>`;
     }
-    if (!this._config) {
+    if (this._denied) {
       return html`
+        ${styles}
         <div class="card">
-          <p>No CDA Alarm config entry found. Add the integration first.</p>
+          <h1>Access denied</h1>
+          <p>You do not have permission to view the CDA Alarm dashboard.</p>
+        </div>
+      `;
+    }
+    if (!this._dashboard) {
+      return html`
+        ${styles}
+        <div class="card">
+          <p>No CDA Alarm dashboard is available.</p>
           ${this._error
             ? html`<div class="banner error">${this._error}</div>`
             : nothing}
@@ -448,9 +580,10 @@ class CdaAlarmPanel extends LitElement {
     }
 
     return html`
+      ${styles}
       <h1>CDA Alarm</h1>
       <p class="subtitle">
-        Unified configuration for sensors, keypads, delays, and alarm response.
+        Monitor and control your security system.
       </p>
       ${this._error
         ? html`<div class="banner error">${this._error}</div>`
@@ -459,7 +592,12 @@ class CdaAlarmPanel extends LitElement {
         ? html`<div class="banner ok">${this._message}</div>`
         : nothing}
       <div class="tabs">
-        ${["sensors", "general", "response", "linked"].map(
+        ${[
+          "dashboard",
+          ...(this._isAdmin
+            ? ["sensors", "general", "response", "linked"]
+            : []),
+        ].map(
           (tab) => html`
             <button
               class=${this._tab === tab ? "active" : ""}
@@ -470,11 +608,14 @@ class CdaAlarmPanel extends LitElement {
           `
         )}
       </div>
+      ${this._tab === "dashboard" ? this._renderDashboard() : nothing}
       ${this._tab === "sensors" ? this._renderSensors() : nothing}
       ${this._tab === "general" ? this._renderGeneral() : nothing}
       ${this._tab === "response" ? this._renderResponse() : nothing}
       ${this._tab === "linked" ? this._renderLinked() : nothing}
-      ${this._tab !== "linked"
+      ${this._isAdmin &&
+      this._config &&
+      !["dashboard", "linked"].includes(this._tab)
         ? html`
             <div class="actions">
               <button
@@ -494,6 +635,130 @@ class CdaAlarmPanel extends LitElement {
             </div>
           `
         : nothing}
+    `;
+  }
+
+  _renderDashboard() {
+    const dashboard = this._dashboard;
+    const stateLabel = String(dashboard.state || "unavailable").replaceAll(
+      "_",
+      " "
+    );
+    return html`
+      <div class="card">
+        <div class="alarm-header">
+          <div>
+            <h2>Alarm</h2>
+            <span class="state-badge">${stateLabel}</span>
+          </div>
+          <div>
+            <label>
+              PIN
+              <input
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                .value=${this._pin}
+                @input=${(event) => {
+                  this._pin = event.target.value;
+                }}
+              />
+            </label>
+          </div>
+        </div>
+        <div class="actions">
+          <button
+            class="primary"
+            ?disabled=${this._arming}
+            @click=${() => this._controlAlarm("alarm_arm_away")}
+          >
+            Arm away
+          </button>
+          <button
+            class="secondary"
+            ?disabled=${this._arming}
+            @click=${() => this._controlAlarm("alarm_arm_home")}
+          >
+            Arm home
+          </button>
+          <button
+            class="secondary"
+            ?disabled=${this._arming}
+            @click=${() => this._controlAlarm("alarm_arm_night")}
+          >
+            Arm night
+          </button>
+          <button
+            class="danger"
+            ?disabled=${this._arming}
+            @click=${() => this._controlAlarm("alarm_disarm")}
+          >
+            Disarm
+          </button>
+          <button
+            class="secondary"
+            ?disabled=${this._arming}
+            @click=${this._reloadDashboard}
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      <h2>Areas</h2>
+      ${(dashboard.areas || []).length
+        ? html`
+            <div class="dashboard-grid">
+              ${dashboard.areas.map(
+                (area) => html`
+                  <section class="card area-card">
+                    <h3>${area.name}</h3>
+                    <ul>
+                      ${(area.sensors || []).map(
+                        (sensor) => html`
+                          <li>
+                            <span>${sensor.name}</span>
+                            <span class=${sensor.open ? "sensor-open" : ""}>
+                              ${sensor.state}
+                            </span>
+                          </li>
+                        `
+                      )}
+                    </ul>
+                  </section>
+                `
+              )}
+            </div>
+          `
+        : html`<p class="muted">No alarm sensors are configured.</p>`}
+
+      <h2>Cameras</h2>
+      ${(dashboard.cameras || []).length
+        ? html`
+            <div class="camera-grid">
+              ${dashboard.cameras.map(
+                (camera) => html`
+                  <article
+                    class="card camera-tile ${camera.entity_id ===
+                    dashboard.highlighted_camera
+                      ? "highlighted"
+                      : ""}"
+                  >
+                    <img
+                      src=${`/api/camera_proxy/${camera.entity_id}`}
+                      alt=${camera.name}
+                      loading="lazy"
+                    />
+                    <div class="camera-caption">
+                      <strong>${camera.name}</strong>
+                      <div class="muted">${camera.state}</div>
+                    </div>
+                  </article>
+                `
+              )}
+            </div>
+          `
+        : html`<p class="muted">No cameras are configured.</p>`}
     `;
   }
 
