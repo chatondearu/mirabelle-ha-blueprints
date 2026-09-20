@@ -105,5 +105,4 @@ def build_dashboard(
         "cameras": cameras,
         "highlighted_camera": highlighted_camera,
         "access": {CONF_ACCESS_MODE: config[CONF_ACCESS][CONF_ACCESS_MODE]},
-        "can_configure": True,
     }
