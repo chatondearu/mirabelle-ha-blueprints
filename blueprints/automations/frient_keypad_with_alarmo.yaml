@@ -1,80 +1,62 @@
 blueprint:
   homeassistant:
     min_version: 2025.5.3
-  name: "[CDA] 🔢 Keypad Frient (KEPZB-110) for Alarmo (FR/EN)"
+  name: "[CDA] 🔢 Frient Keypad Fallback for Alarm Panels"
   description: >
-    Bridge a Frient KEPZB-110 Zigbee keypad (via ZHA) with an Alarmo central
-    (or any other alarm_control_panel) used as the single source of truth.
+    Forward Frient KEPZB-110 keypad commands from ZHA to CDA Alarm or another
+    alarm_control_panel used as the single source of truth.
 
-    PIN codes and RFID badges are validated by the mirrored panel (Alarmo):
-    the keypad only forwards the typed code, so manage your codes in Alarmo.
+    Prefer the native CDA Alarm Frient binding by configuring frient_device_id.
+    Use this blueprint only as a fallback when that binding is not configured;
+    do not run both for the same keypad.
 
-    Optional, experimental keypad feedback can push the panel status back to the
-    keypad LEDs/buzzer via raw IAS ACE cluster commands. This is best-effort
-    because ZHA does not fully implement the IAS ACE "central" role yet
-    (see https://github.com/zigpy/zha-device-handlers/issues/4365).
+    PIN codes and RFID badges are validated by the target panel. When using
+    CDA Alarm, manage them in the integration options.
+
+    This blueprint never arms or disarms the Frient ZHA alarm panel. Optional,
+    experimental feedback can push the target panel status to the keypad
+    LEDs/buzzer via raw IAS ACE cluster commands. This is best-effort because
+    ZHA does not fully implement the IAS ACE "central" role yet.
 
     Original blueprint by Darktoinon (Home Assistant community forum), adapted
     and maintained here.
   domain: automation
   input:
     devices:
-      name: Devices / Appareils
+      name: Devices
       icon: mdi:dialpad
       input:
         keypad:
           name: Frient Keypad
           description: >
             The Frient KEPZB-110 keypad (ZHA device).
-            Le clavier Frient KEPZB-110 (appareil ZHA).
           selector:
             device:
               integration: zha
-        alarm_panel:
-          name: Frient Alarm Panel
-          description: >
-            The Frient alarm panel to control (the ZHA alarm_control_panel
-            entity backed by the keypad).
-            Le panneau d'alarme Frient à contrôler.
-          selector:
-            entity:
-              domain: alarm_control_panel
         mirror_alarm_panel:
-          name: Alarm Panel to Mirror (Alarmo or other)
+          name: Target Alarm Panel
           description: >
-            The alarm panel used as the source of truth (e.g. Alarmo).
-            Le panneau d'alarme servant de source de vérité (ex: Alarmo).
-          default: alarm_control_panel.alarmo
+            The alarm panel used as the single source of truth. CDA Alarm is
+            the default.
+          default: alarm_control_panel.cda_alarm
           selector:
             entity:
               domain: alarm_control_panel
     codes:
-      name: Codes / Codes
+      name: Codes
       icon: mdi:form-textbox-password
       input:
-        default_pin:
-          name: Frient Panel Disarm Code / Code de désarmement du panneau Frient
-          description: >
-            Code sent to the Frient alarm panel when (dis)arming it from Alarmo.
-            Leave empty if your Frient panel does not require a code.
-            Code envoyé au panneau Frient lors de l'armement/désarmement.
-          default: ""
-          selector:
-            text:
-              type: password
         mirror_default_pin:
-          name: Default Code for Mirrored Alarm / Code par défaut pour la centrale
+          name: Default Code for Target Alarm
           description: >
-            Fallback code used on the mirrored panel (Alarmo) when the keypad
-            event does not carry a code.
-            Code par défaut utilisé sur la centrale (Alarmo) si l'événement du
-            clavier ne transmet pas de code.
+            Fallback code used on the target panel when the keypad event does
+            not carry a code.
           default: ""
           selector:
             text:
               type: password
     feedback:
-      name: Keypad Feedback (experimental) / Retour clavier (expérimental)
+      name: Keypad Feedback (experimental)
       icon: mdi:led-on
       input:
         enable_keypad_feedback:
@@ -83,8 +65,6 @@ blueprint:
             Push the alarm status back to the keypad via raw IAS ACE commands.
             Experimental and best-effort due to ZHA limitations; disabled by
             default. Never blocks arming/disarming if it fails.
-            Renvoie l'état de l'alarme au clavier via des commandes IAS ACE
-            brutes. Expérimental, désactivé par défaut.
           default: false
           selector:
             boolean:
@@ -94,7 +74,6 @@ blueprint:
             Zigbee endpoint of the IAS ACE cluster on the keypad. On the
             KEPZB-110 this is typically 44 (visible in the zha_event
             `endpoint_id`). Adjust if your device differs.
-            Endpoint Zigbee du cluster IAS ACE du clavier (44 sur le KEPZB-110).
           default: 44
           selector:
             number:
@@ -102,9 +81,8 @@ blueprint:
               max: 255
               mode: box
 
-# Alarmo is the source of truth. The keypad arms/disarms Alarmo; Alarmo state
-# changes are then mirrored onto the Frient panel (and optionally the keypad
-# LEDs). There is no trigger on the Frient panel itself, so no feedback loop.
+# The keypad forwards commands to the target panel. Target state changes are
+# used only for optional keypad feedback; the Frient ZHA panel is never changed.
 trigger:
   - platform: event
     event_type: zha_event
@@ -122,7 +100,6 @@ variables:
   enable_keypad_feedback: !input enable_keypad_feedback
   keypad_endpoint: !input keypad_endpoint
   keypad_device: !input keypad
-  alarm_panel_entity: !input alarm_panel
   # ZHA stores the IEEE address as the device identifier ("zha", "xx:xx:..").
   keypad_ieee: >-
     {% set ids = device_attr(keypad_device, 'identifiers') | list %}
@@ -132,7 +109,7 @@ mode: single
 
 action:
   - choose:
-      # --- Keypad -> Alarmo ----------------------------------------------------
+      # --- Keypad -> target alarm panel ---------------------------------------
       - conditions:
           - condition: trigger
             id: keypad_event
@@ -186,55 +163,13 @@ action:
                     data:
                       code: "{{ keypad_code }}"
 
-      # --- Alarmo -> Frient panel (+ optional keypad feedback) -----------------
+      # --- Target panel -> optional keypad feedback ---------------------------
       - conditions:
           - condition: trigger
             id: mirror_state_change
         sequence:
           - variables:
               mirror_state: "{{ trigger.to_state.state }}"
-          # Only act when the Frient panel is not already in the target state,
-          # which avoids redundant service calls and keypad re-arm beeps.
-          - choose:
-              - conditions:
-                  - "{{ mirror_state == 'disarmed' and states(alarm_panel_entity) != 'disarmed' }}"
-                sequence:
-                  - service: alarm_control_panel.alarm_disarm
-                    target:
-                      entity_id: !input alarm_panel
-                    data:
-                      code: !input default_pin
-              - conditions:
-                  - "{{ mirror_state == 'armed_home' and states(alarm_panel_entity) != 'armed_home' }}"
-                sequence:
-                  - service: alarm_control_panel.alarm_arm_home
-                    target:
-                      entity_id: !input alarm_panel
-                    data:
-                      code: !input default_pin
-              - conditions:
-                  - "{{ mirror_state == 'armed_night' and states(alarm_panel_entity) != 'armed_night' }}"
-                sequence:
-                  - service: alarm_control_panel.alarm_arm_night
-                    target:
-                      entity_id: !input alarm_panel
-                    data:
-                      code: !input default_pin
-              - conditions:
-                  - "{{ mirror_state == 'armed_away' and states(alarm_panel_entity) != 'armed_away' }}"
-                sequence:
-                  - service: alarm_control_panel.alarm_arm_away
-                    target:
-                      entity_id: !input alarm_panel
-                    data:
-                      code: !input default_pin
-              - conditions:
-                  - "{{ mirror_state == 'triggered' and states(alarm_panel_entity) != 'triggered' }}"
-                sequence:
-                  - service: alarm_control_panel.alarm_trigger
-                    target:
-                      entity_id: !input alarm_panel
-
           # Best-effort keypad LED/buzzer feedback via raw IAS ACE
           # panel_status_changed (cluster 0x0501 = 1281, command 0x04).
           # args = [panel_status, seconds_remaining, audible_notification,

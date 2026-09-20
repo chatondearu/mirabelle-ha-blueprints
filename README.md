@@ -27,7 +27,7 @@ A collection of custom blueprints for Home Assistant.
 - [[CDA] 💧 Garden Zone Irrigation](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fgarden-zone-irrigation.yaml)
 - [[CDA] 🪟 Blind Cover Template](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_cover.yaml)
 - [[CDA] 🪟 Blind State Tracker](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fcover_state_tracker.yaml)
-- [[CDA] 🔢 Keypad Frient (KEPZB-110) for Alarmo (FR/EN)](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Ffrient_keypad_with_alarmo.yaml)
+- [[CDA] 🔢 Frient Keypad Fallback for Alarm Panels](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Ffrient_keypad_with_alarmo.yaml)
 
 #### Scripts
 
@@ -121,7 +121,7 @@ Reliable response when an alarm panel (e.g. Alarmo) is triggered: sirens, a crit
 ### NFC Tag → Disarm Alarm
 
 [CDA] 🏷️ NFC Tag → Disarm Alarm
-Disarm an alarm panel (e.g. Alarmo) when an authorized NFC tag is scanned with the Companion app. Give each person their own tag without configuring multiple keypad codes; the automation supplies the disarm code and ignores unlisted tags.
+Disarm CDA Alarm or another alarm panel when an authorized NFC tag is scanned with the Companion app. CDA Alarm is selected by default.
 
 [View Documentation](docs/nfc-disarm.md)
 
@@ -212,11 +212,11 @@ Track the state of a blind controlled by a single switch.
 
 [View Documentation](docs/blind_states.md)
 
-### Keypad Frient for Alarmo
+### Frient Keypad Fallback for Alarm Panels
 
-[CDA] 🔢 Keypad Frient (KEPZB-110) for Alarmo (FR/EN)
+[CDA] 🔢 Frient Keypad Fallback for Alarm Panels
 
-Bridge a Frient KEPZB-110 keypad (via ZHA) with an Alarmo central used as the single source of truth: the keypad forwards codes to Alarmo (which validates PINs/RFID), Alarmo state changes are mirrored onto the Frient panel, and optional best-effort feedback updates the keypad LEDs. English and French UI strings.
+Prefer CDA Alarm's native Frient binding. This optional fallback forwards Frient KEPZB-110 keypad commands to CDA Alarm or another target panel without arming or disarming the Frient ZHA panel. Optional best-effort LED feedback remains available.
 
 Originally based on a community blueprint by Darktoinon (Home Assistant forum), now adapted and maintained here under the `[CDA]` naming convention.
 

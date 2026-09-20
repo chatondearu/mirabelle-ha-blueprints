@@ -3,9 +3,9 @@ blueprint:
     min_version: 2025.5.3
   name: "[CDA] 🏷️ NFC Tag → Disarm Alarm"
   description: >
-    Disarm an alarm panel (e.g. Alarmo) when an authorized NFC tag is scanned
-    with the Home Assistant Companion app (or a fixed NFC reader). Give each
-    person their own tag without needing multiple keypad codes.
+    Disarm CDA Alarm or another alarm panel when an authorized NFC tag is
+    scanned with the Home Assistant Companion app (or a fixed NFC reader).
+    Give each person their own tag without needing multiple keypad codes.
 
     The automation supplies the disarm code itself, so a tag works as a physical
     "key": keep it secure, because a lost tag can disarm the alarm (remove it
@@ -21,8 +21,8 @@ blueprint:
       input:
         alarm_entity:
           name: Alarm Panel (source of truth)
-          description: The panel to disarm (e.g. Alarmo).
-          default: alarm_control_panel.alarmo
+          description: The panel to disarm. CDA Alarm is the default.
+          default: alarm_control_panel.cda_alarm
           selector:
             entity:
               domain: alarm_control_panel
