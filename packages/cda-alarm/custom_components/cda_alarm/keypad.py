@@ -21,17 +21,21 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.event import async_track_state_change_event
 
 from .const import (
-    CONF_ENABLE_KEYPAD_FEEDBACK,
-    CONF_FRIENT_DEVICE_ID,
-    CONF_KEYPAD_ENDPOINT,
+    CONF_KEYPAD_DEVICE_ID,
+    CONF_KEYPAD_ENDPOINT_KEY,
+    CONF_KEYPAD_FEEDBACK,
+    CONF_KEYPADS,
     DEFAULT_KEYPAD_ENDPOINT,
+    DOMAIN,
 )
+from .sensors import merge_runtime_config, resolve_active_keypads
 
 _LOGGER = logging.getLogger(__name__)
 
 _ZHA_DOMAIN = "zha"
 _ZHA_FEEDBACK_SERVICE = "issue_zigbee_cluster_command"
 _CODE_FIELDS = ("code", "arm_disarm_code")
+_FRIENT_MODEL_MARKERS = ("kepzb", "frient")
 
 _ARM_MODE_SERVICES = {
     0: SERVICE_ALARM_DISARM,
@@ -40,7 +44,6 @@ _ARM_MODE_SERVICES = {
     3: SERVICE_ALARM_ARM_AWAY,
 }
 
-# IAS ACE panel status values reported back to the keypad.
 _PANEL_STATUS_BY_STATE = {
     AlarmControlPanelState.DISARMED: 0,
     AlarmControlPanelState.ARMED_HOME: 1,
@@ -68,6 +71,33 @@ def _extract_code(params: Mapping[str, Any], args: Mapping[str, Any]) -> str | N
             value = source.get(field)
             if value is not None and str(value) != "":
                 return str(value)
+    return None
+
+
+def discover_default_keypad_device_id(hass: HomeAssistant) -> str | None:
+    """Return the first ZHA device that looks like a Frient KEPZB keypad."""
+    registry = dr.async_get(hass)
+    for device in registry.devices.values():
+        if device.via_device_id is None and not any(
+            domain == _ZHA_DOMAIN for domain, _ in device.identifiers
+        ):
+            # Still allow via_device_id devices; check identifiers below.
+            pass
+        if not any(domain == _ZHA_DOMAIN for domain, _ in device.identifiers):
+            continue
+        haystack = " ".join(
+            filter(
+                None,
+                [
+                    device.model,
+                    device.name,
+                    device.name_by_user,
+                    device.manufacturer,
+                ],
+            )
+        ).lower()
+        if any(marker in haystack for marker in _FRIENT_MODEL_MARKERS):
+            return device.id
     return None
 
 
@@ -116,39 +146,54 @@ def async_setup_keypad_listener(
     entry: ConfigEntry,
     panel_entity_id: str,
 ) -> Callable[[], None]:
-    """Listen for arm commands from the configured Frient keypad."""
-    config = {**entry.data, **entry.options}
-    device_id = config.get(CONF_FRIENT_DEVICE_ID)
-    feedback_enabled = bool(config.get(CONF_ENABLE_KEYPAD_FEEDBACK, False))
-    keypad_endpoint = config.get(CONF_KEYPAD_ENDPOINT, DEFAULT_KEYPAD_ENDPOINT)
-    last_status: int | None = None
+    """Listen for arm commands from configured (or default) Frient keypads."""
+    stored = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    config = stored if isinstance(stored, dict) else merge_runtime_config(
+        {**entry.data, **entry.options}
+    )
+    keypads = resolve_active_keypads(
+        config.get(CONF_KEYPADS) or [],
+        discovered_default=discover_default_keypad_device_id(hass),
+    )
+    keypad_by_id = {
+        item[CONF_KEYPAD_DEVICE_ID]: item for item in keypads if item.get(CONF_KEYPAD_DEVICE_ID)
+    }
+    last_status: dict[str, int | None] = {
+        device_id: None for device_id in keypad_by_id
+    }
 
-    async def _async_push_status(panel_status: int) -> None:
-        """Push a panel status to the keypad, skipping repeated values."""
-        nonlocal last_status
-        if not feedback_enabled or not device_id or last_status == panel_status:
+    async def _async_push_status(device_id: str, panel_status: int) -> None:
+        """Push a panel status to one keypad when feedback is enabled."""
+        item = keypad_by_id.get(device_id)
+        if item is None or not item.get(CONF_KEYPAD_FEEDBACK):
             return
-        last_status = panel_status
+        if last_status.get(device_id) == panel_status:
+            return
+        last_status[device_id] = panel_status
         await _async_push_keypad_feedback(
             hass,
             device_id,
-            keypad_endpoint,
+            int(item.get(CONF_KEYPAD_ENDPOINT_KEY, DEFAULT_KEYPAD_ENDPOINT)),
             panel_status,
         )
 
+    async def _async_push_all(panel_status: int) -> None:
+        for device_id in keypad_by_id:
+            await _async_push_status(device_id, panel_status)
+
     @callback
     def _async_panel_state_changed(event: Event[EventStateChangedData]) -> None:
-        """Mirror panel state changes on the keypad LEDs."""
         new_state = event.data["new_state"]
         if new_state is None:
             return
-        hass.async_create_task(_async_push_status(_panel_status(new_state.state)))
+        hass.async_create_task(_async_push_all(_panel_status(new_state.state)))
 
     @callback
     def _async_handle_zha_event(event: Event[dict[str, Any]]) -> None:
+        device_id = event.data.get("device_id")
         if (
             not device_id
-            or event.data.get("device_id") != device_id
+            or device_id not in keypad_by_id
             or event.data.get("command") != "arm"
         ):
             return
@@ -169,18 +214,22 @@ def async_setup_keypad_listener(
             return
 
         code = _extract_code(params, args)
+
+        async def _push_for_device(status: int) -> None:
+            await _async_push_status(device_id, status)
+
         hass.async_create_task(
             _async_execute_keypad_action(
                 hass,
                 service,
                 panel_entity_id,
                 code,
-                _async_push_status,
+                _push_for_device,
             ),
         )
 
     unsubscribes = [hass.bus.async_listen("zha_event", _async_handle_zha_event)]
-    if feedback_enabled and device_id:
+    if any(item.get(CONF_KEYPAD_FEEDBACK) for item in keypad_by_id.values()):
         unsubscribes.append(
             async_track_state_change_event(
                 hass,
@@ -209,9 +258,6 @@ async def _async_execute_keypad_action(
     if code is not None:
         data[ATTR_CODE] = code
     await hass.services.async_call(ALARM_DOMAIN, service, data, blocking=True)
-
-    # Feedback must reflect the outcome, not the requested mode: a rejected arm
-    # leaves the panel disarmed.
     await hass.async_block_till_done()
     panel_state = hass.states.get(panel_entity_id)
     await push_status(_panel_status(panel_state.state if panel_state else None))

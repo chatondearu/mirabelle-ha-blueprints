@@ -5,7 +5,7 @@ Home Assistant custom integration that replaces **Alarmo** with a single
 per-mode sensors, entry and exit delays, and an `open_sensors` attribute for
 **[CDA] Alarm Response**.
 
-Frient **KEPZB-110** keypads (ZHA) can bind directly in the integration options
+Frient **KEPZB-110** keypads (ZHA) bind in the sidebar **General** tab
 (input-only — the Frient ZHA panel entity is never armed or disarmed).
 
 ## Prerequisites
@@ -25,8 +25,8 @@ Frient **KEPZB-110** keypads (ZHA) can bind directly in the integration options
 3. Search for **CDA Alarm** → **Download**
 4. Restart Home Assistant
 5. **Settings → Devices & services → Add integration → CDA Alarm**
-6. Open the config entry **Configure** to set sensors, delays, codes, and
-   optional Frient binding
+6. Open the **CDA Alarm** sidebar panel to set sensors, delays, codes, keypads,
+   and response actions
 
 The HACS repository is synced from this monorepo (`packages/cda-alarm/`). See
 [packages/cda-alarm/HACS_SETUP.md](../packages/cda-alarm/HACS_SETUP.md).
@@ -46,38 +46,59 @@ Package overview: [packages/cda-alarm/README.md](../packages/cda-alarm/README.md
 
 ## Configuration
 
-All settings after the initial name are edited under **Configure** on the CDA
-Alarm config entry.
+After adding the integration, open the **CDA Alarm** item in the Home Assistant
+sidebar (admin only). The options flow under **Configure** only points you to
+that panel.
 
-| Option | Description | Default |
+### Sidebar tabs
+
+| Tab | Contents |
+| --- | --- |
+| **Sensors** | Multi-select entities (any domain) and Away / Home / Night per entity |
+| **General** | Entry/exit delays, block-arm-if-open, codes JSON, keypad list with default |
+| **Response** | Sirens, noise media players, TTS (owned by the integration) |
+| **Linked** | Automations that reference the panel or known CDA blueprints |
+
+| Setting | Description | Default |
 | --- | --- | --- |
 | Sensors | Entities monitored by the alarm (any domain) | `[]` |
-| Sensor modes | On the next options screen: Away / Home / Night per sensor | all modes |
+| Sensor modes | Away / Home / Night checkboxes per sensor | all modes |
 | Entry delay | Seconds before a tripped sensor triggers the alarm | `30` |
 | Exit delay | Seconds after arm before sensors are active | `60` |
 | Block arm if open | Refuse arm when a monitored sensor is open | `true` |
-| Frient device | ZHA device for KEPZB-110 keypad (optional) | none |
-| Enable keypad feedback | Best-effort LED/buzzer sync via ZHA (experimental) | `false` |
-| Keypad IAS ACE endpoint | Endpoint for IAS ACE feedback (44 on KEPZB-110) | `44` |
+| Keypads | List of ZHA devices; mark one as **default** | discovered KEPZB-110 if empty |
+| Keypad feedback | Best-effort LED/buzzer sync via ZHA (per keypad) | `false` |
+| Keypad endpoint | IAS ACE endpoint (44 on KEPZB-110) | `44` |
 | Codes (JSON) | PIN, RFID, and NFC tag entries (see below) | `[]` |
-
-Pick sensors once in **Configure**, then assign modes on the following screen so
-the same door or motion entity is not selected three times.
+| Response | Sirens, media noise, optional TTS when `triggered` | empty |
 
 The panel entity id is derived from the panel name (e.g. `cda_alarm`).
 
 ### Frient keypad binding
 
 1. Pair the KEPZB-110 with **ZHA**.
-2. In CDA Alarm **Configure**, select the keypad under **Frient device**.
-3. Add matching PIN and RFID values in **Codes (JSON)**.
-4. Do **not** arm/disarm the Frient ZHA `alarm_control_panel` entity, and do
+2. In the sidebar **General** tab, add the keypad and mark it as **default**.
+3. If no keypad is selected, the integration uses the first discovered Frient
+   KEPZB-110 (or similar) on ZHA.
+4. Add matching PIN and RFID values in **Codes (JSON)**.
+5. Do **not** arm/disarm the Frient ZHA `alarm_control_panel` entity, and do
    **not** run the Frient mirror blueprint while this binding is active.
 
 Prefer this native binding over
 **[CDA] Frient Keypad Fallback** (`docs/frient-keypad-with-alarmo.md`).
 
 Keypad arm modes map to CDA services: disarm, arm home, arm night, arm away.
+
+### Alarm response (integration)
+
+When the panel enters `triggered`, CDA Alarm runs **Response** actions in order:
+sirens → media noise → optional TTS. Actions stop when the panel leaves
+`triggered` (including disarm).
+
+Phone and Telegram notifications stay on **[CDA] Alarm Response** for now (see
+the **Linked** tab). After upgrading to **0.3.0**, clear sirens / noise inputs
+on that blueprint if you configure the sidebar **Response** tab, to avoid
+double sound.
 
 ### Codes JSON format
 
@@ -158,21 +179,23 @@ a door opened while Home Assistant was down still starts the entry delay.
 
 | Blueprint | Role |
 | --- | --- |
-| [Alarm Response](alarm-response.md) | Sirens, phone, Telegram, optional speaker/TTS on trigger |
+| [Alarm Response](alarm-response.md) | Phone / Telegram (and legacy sirens if Response tab unused) |
 | [NFC Tag → Disarm](nfc-disarm.md) | Disarm on authorized NFC scan |
 | [Frient Keypad Fallback](frient-keypad-with-alarmo.md) | Optional if native Frient binding is not used |
 
 ## Migration from Alarmo
 
 1. Install/load **CDA Alarm**, create the panel, and copy sensors, delays, and
-   codes from Alarmo into the config entry **Configure** options.
-2. Point the Frient keypad at CDA (integration **Frient device** or the fallback
+   codes into the **CDA Alarm** sidebar panel.
+2. Point the Frient keypad at CDA (sidebar **General** keypads or the fallback
    blueprint) and **remove** any Alarmo ↔ Frient ZHA panel mirror automation.
 3. Point **[CDA] Alarm Response** and **[CDA] NFC Tag → Disarm** at the CDA panel
    entity (defaults already use `alarm_control_panel.cda_alarm`).
-4. Run a full cycle: arm → trip a sensor → verify response (siren / notify) →
+4. Configure sirens/media in the sidebar **Response** tab (or leave them on
+   Alarm Response — not both).
+5. Run a full cycle: arm → trip a sensor → verify response (siren / notify) →
    disarm.
-5. Disable or remove Alarmo when satisfied.
+6. Disable or remove Alarmo when satisfied.
 
 A parallel run during cutover is fine; avoid two panels both driving sirens or
 the same keypad.
@@ -183,13 +206,28 @@ the same keypad.
 | --- | --- |
 | Cannot arm | **Block arm if open** and open monitored sensors; review logs |
 | Arm silently failed | Listen to `cda_alarm_arm_failed` or read the `arm_failure` attribute |
-| Keypad does nothing | Correct ZHA device, endpoint `44`, codes JSON matches PIN/RFID |
+| Keypad does nothing | Correct ZHA device, endpoint `44`, codes JSON matches PIN/RFID; default keypad |
 | Double arm/disarm | Disable fallback blueprint when native Frient binding is set |
 | Invalid codes JSON | Only `name`, `pin`, `rfid`, `nfc_tag_id`; must be a JSON array |
-| Alarm Response silent | Panel entity in blueprint; panel reaches `triggered`; sirens configured |
-| No `open_sensors` on trigger | Sensors assigned to the active mode; entities are `binary_sensor` |
+| Double sirens / noise | Clear blueprint sirens if Response tab is configured |
+| Alarm Response silent | Panel entity in blueprint; panel reaches `triggered`; notify targets set |
+| No sidebar panel | Restart after install; admin user; custom panel registered |
+| No `open_sensors` on trigger | Sensors assigned to the active mode; entities report open/`on` |
 
 ## Changelog
+
+### 0.3.0
+
+- Dedicated **CDA Alarm** sidebar panel (Sensors, General, Response, Linked).
+- Websocket API for get/update config and listing linked automations.
+- Multi-keypad list with **default** resolution (falls back to discovered KEPZB).
+- Integration-owned response runner (sirens, media noise, TTS) on `triggered`.
+- Options flow reduced to a redirect toward the sidebar panel.
+
+### 0.2.0
+
+- Per-entity Away / Home / Night sensor assignments in options.
+- Improved Frient keypad options and feedback.
 
 ### 0.1.0
 

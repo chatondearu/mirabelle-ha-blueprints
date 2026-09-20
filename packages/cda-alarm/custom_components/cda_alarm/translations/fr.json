@@ -11,35 +11,10 @@
     }
   },
   "options": {
-    "error": {
-      "invalid_codes": "Les codes doivent être un tableau JSON d'objets contenant uniquement les champs texte name, pin, rfid et nfc_tag_id."
-    },
     "step": {
       "init": {
-        "title": "Options CDA Alarm",
-        "description": "Sélectionnez tous les capteurs une fois, puis les délais et codes. À l'écran suivant, choisissez Away / Home / Night pour chaque capteur. Exemple JSON : [{\"name\":\"Alice\",\"pin\":\"1234\",\"rfid\":\"tag-id\",\"nfc_tag_id\":\"home-assistant-tag-id\"}].",
-        "data": {
-          "sensors": "Capteurs",
-          "entry_delay": "Délai d'entrée",
-          "exit_delay": "Délai de sortie",
-          "block_arm_if_open": "Bloquer l'armement si un capteur est ouvert",
-          "frient_device_id": "Clavier Frient",
-          "enable_keypad_feedback": "Activer le retour clavier",
-          "keypad_endpoint": "Endpoint clavier",
-          "codes_json": "Codes (JSON)"
-        },
-        "data_description": {
-          "sensors": "Toutes les entités à surveiller (portes, fenêtres, mouvement, etc.). Les modes se choisissent à l'étape suivante.",
-          "entry_delay": "Secondes avant le déclenchement.",
-          "exit_delay": "Secondes pour quitter après l'armement.",
-          "frient_device_id": "Clavier Frient ZHA optionnel.",
-          "keypad_endpoint": "Endpoint Zigbee pour le retour clavier.",
-          "codes_json": "Tableau JSON d'objets. Champs texte : name, pin, rfid, nfc_tag_id."
-        }
-      },
-      "assign_modes": {
-        "title": "Modes des capteurs",
-        "description": "Pour chaque capteur, cochez les modes qui le surveillent. Laissez vide pour l'ignorer."
+        "title": "Utiliser le panneau latéral CDA Alarm",
+        "description": "Configurez capteurs, claviers, délais, codes et réponse d'alarme dans le panneau latéral **{panel_name}** (`{panel_path}`). Validez pour conserver les options actuelles."
       }
     }
   }

@@ -2,8 +2,9 @@
 
 Home Assistant custom integration: a single `alarm_control_panel` source of
 truth with unified PIN / RFID / NFC codes, per-mode sensors, entry/exit delays,
-Frient KEPZB-110 (ZHA) keypad binding (input-only), and an `open_sensors`
-attribute for Mirabelle **[CDA] Alarm Response** blueprints.
+Frient KEPZB-110 (ZHA) keypad binding (input-only), integration-owned siren /
+media / TTS response, and an `open_sensors` attribute for Mirabelle
+**[CDA] Alarm Response** notifications.
 
 ## HACS installation
 
@@ -23,8 +24,8 @@ monorepo and is **synced** to a dedicated repository for HACS.
 3. Search for **CDA Alarm** → **Download**
 4. Restart Home Assistant
 5. **Settings → Devices & services → Add integration → CDA Alarm**
-6. Open the config entry **Configure** for sensors, delays, codes, and optional
-   Frient binding
+6. Open the **CDA Alarm** sidebar panel to configure sensors, keypads, delays,
+   codes, and response
 
 ## Manual install
 
@@ -39,12 +40,14 @@ Copy `custom_components/cda_alarm` into your HA
 
 ## Features
 
+- Sidebar panel (Sensors / General / Response / Linked)
 - Standard `alarm_control_panel` services (`arm_home` / `away` / `night`, disarm)
-- Unified codes (PIN, RFID, NFC) in options
+- Unified codes (PIN, RFID, NFC)
 - Hard-block arm when sensors are open (configurable)
 - Entry / exit delays with `cda_alarm_arm_failed` event on failed arm
+- Multi-keypad list with default discovery fallback
 - Frient keypad as **input only** (no ZHA panel mirror)
-- Optional best-effort keypad LED feedback via IAS ACE
+- Sirens / media noise / TTS when the panel is `triggered`
 - State restore across reload / restart
 - English and French UI strings
 

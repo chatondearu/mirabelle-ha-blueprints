@@ -20,6 +20,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_call_later, async_track_state_change_event
 from homeassistant.helpers.restore_state import RestoreEntity
 
+from . import get_response_runner
 from .codes import match_code
 from .const import (
     ATTR_ARM_FAILURE,
@@ -81,6 +82,7 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity, RestoreEntity):
 
     def __init__(self, entry: ConfigEntry, config: dict[str, Any]) -> None:
         """Initialize the panel."""
+        self._entry = entry
         self._config = config
         self._attr_name = config.get(CONF_NAME, entry.title)
         self._attr_unique_id = entry.entry_id
@@ -103,6 +105,7 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity, RestoreEntity):
         self._arm_failure: dict[str, Any] | None = None
         self._cancel_exit_delay: Callable[[], None] | None = None
         self._cancel_entry_delay: Callable[[], None] | None = None
+        self._response_active = False
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -161,6 +164,9 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity, RestoreEntity):
         if restored is AlarmControlPanelState.ARMING and arm_mode is not None:
             self._schedule_exit_delay(arm_mode)
             return
+        if restored is AlarmControlPanelState.TRIGGERED:
+            self.hass.async_create_task(self._async_start_response())
+            return
         self._async_reevaluate_sensors()
 
     @callback
@@ -196,14 +202,12 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity, RestoreEntity):
         self._open_sensors = {}
         self._arm_mode = None
         self._arm_failure = None
-        self._attr_alarm_state = AlarmControlPanelState.DISARMED
-        self.async_write_ha_state()
+        await self._async_set_alarm_state(AlarmControlPanelState.DISARMED)
 
     async def async_alarm_trigger(self, code: str | None = None) -> None:
         """Trigger the alarm."""
         self._cancel_delays()
-        self._attr_alarm_state = AlarmControlPanelState.TRIGGERED
-        self.async_write_ha_state()
+        await self._async_set_alarm_state(AlarmControlPanelState.TRIGGERED)
 
     @callback
     def _async_arm(
@@ -238,8 +242,9 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity, RestoreEntity):
             return
 
         self._arm_mode = target_state
-        self._attr_alarm_state = AlarmControlPanelState.ARMING
-        self.async_write_ha_state()
+        self.hass.async_create_task(
+            self._async_set_alarm_state(AlarmControlPanelState.ARMING)
+        )
         self._schedule_exit_delay(target_state)
 
     @callback
@@ -262,7 +267,9 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity, RestoreEntity):
             self._active_sensors = []
             self._open_sensors = {}
             self._arm_mode = None
-            self._attr_alarm_state = AlarmControlPanelState.DISARMED
+            self.hass.async_create_task(
+                self._async_set_alarm_state(AlarmControlPanelState.DISARMED)
+            )
             self._async_report_arm_failure(
                 REASON_OPEN_SENSORS,
                 target_state,
@@ -272,8 +279,7 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity, RestoreEntity):
 
         self._arm_failure = None
         self._arm_mode = target_state
-        self._attr_alarm_state = target_state
-        self.async_write_ha_state()
+        self.hass.async_create_task(self._async_set_alarm_state(target_state))
 
     @property
     def _block_arm_if_open(self) -> bool:
@@ -346,8 +352,41 @@ class CdaAlarmControlPanel(AlarmControlPanelEntity, RestoreEntity):
         """Trigger the alarm after the entry delay."""
         self._cancel_entry_delay = None
         self._open_sensors = self._get_open_sensors(self._active_sensors)
-        self._attr_alarm_state = AlarmControlPanelState.TRIGGERED
+        self.hass.async_create_task(
+            self._async_set_alarm_state(AlarmControlPanelState.TRIGGERED)
+        )
+
+    async def _async_set_alarm_state(
+        self, new_state: AlarmControlPanelState
+    ) -> None:
+        """Update panel state and start/stop the response runner."""
+        previous = self._attr_alarm_state
+        self._attr_alarm_state = new_state
         self.async_write_ha_state()
+        if new_state is AlarmControlPanelState.TRIGGERED:
+            await self._async_start_response()
+        elif previous is AlarmControlPanelState.TRIGGERED:
+            await self._async_stop_response()
+
+    async def _async_start_response(self) -> None:
+        """Start sirens / media when entering triggered."""
+        if self._response_active:
+            return
+        runner = get_response_runner(self.hass, self._entry.entry_id)
+        if runner is None:
+            return
+        self._response_active = True
+        await runner.async_start()
+
+    async def _async_stop_response(self) -> None:
+        """Stop sirens / media when leaving triggered."""
+        if not self._response_active:
+            # Still attempt stop so a restored triggered state is silenced.
+            pass
+        runner = get_response_runner(self.hass, self._entry.entry_id)
+        self._response_active = False
+        if runner is not None:
+            await runner.async_stop()
 
     def _get_open_sensors(self, sensors: list[str]) -> dict[str, str]:
         """Return currently open sensors and their states."""
