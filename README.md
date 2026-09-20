@@ -109,6 +109,20 @@ See [Cover Manager Installation Guide](packages/cover-manager/INSTALLATION.md) f
 
 See [Imeon Energy API Installation Guide](packages/imeon_energy_api/INSTALLATION.md) for detailed instructions.
 
+### CDA Alarm
+
+[CDA Alarm](packages/cda-alarm/README.md) — Custom `alarm_control_panel` integration
+(replaces Alarmo): unified PIN/RFID/NFC codes, Frient keypad input binding, and
+`open_sensors` for **[CDA] Alarm Response**.
+
+**Installation (manual, v1):** copy
+`packages/cda-alarm/custom_components/cda_alarm` to
+`config/custom_components/cda_alarm`, restart Home Assistant, then add the
+integration under **Settings → Devices & services**. HACS sync is planned.
+
+See [CDA Alarm documentation](docs/cda-alarm.md) for configuration, Frient
+binding, codes JSON, and migration from Alarmo.
+
 ## Available Blueprints
 
 ### Alarm Response

@@ -1,7 +1,7 @@
 # Design: CDA Alarm (Alarmo replacement, Frient-native)
 
 **Date:** 2026-09-20  
-**Status:** Approved for planning  
+**Status:** Implemented for v1  
 **Scope:** New HACS-style package `packages/cda-alarm/`, Frient keypad binding, blueprint retargeting (`alarm-response`, `nfc-disarm`, Frient keypad), phased presence / house-settling / profile orchestration  
 **Related:** `docs/frient-keypad-with-alarmo.md`, `docs/alarm-response.md`, `docs/nfc-disarm.md`
 
