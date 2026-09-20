@@ -253,6 +253,8 @@ variables:
   tts_media_players: !input tts_media_players
   available_tts_media_players: >-
     {{ tts_media_players | reject('is_state', 'unavailable') | reject('is_state', 'unknown') | list }}
+  media_players_to_stop: >-
+    {{ (noise_media_players + tts_media_players) | unique | list }}
   mobile_notify_service: !input mobile_notify_service
   # Support one or several comma-separated notify services.
   mobile_services: >-
@@ -466,7 +468,7 @@ action:
                   target:
                     entity_id: "{{ repeat.item }}"
           - repeat:
-              for_each: "{{ noise_media_players }}"
+              for_each: "{{ media_players_to_stop }}"
               sequence:
                 - service: media_player.media_stop
                   continue_on_error: true
@@ -515,7 +517,7 @@ action:
                           target:
                             entity_id: "{{ repeat.item }}"
                   - repeat:
-                      for_each: "{{ noise_media_players }}"
+                      for_each: "{{ media_players_to_stop }}"
                       sequence:
                         - service: media_player.media_stop
                           continue_on_error: true

@@ -63,12 +63,15 @@ async def test_alarm_trigger_uses_only_available_noise_players(
 
 
 @pytest.mark.behavior
-async def test_alarm_clear_and_silence_stop_noise_players(
+async def test_alarm_clear_and_silence_stop_noise_and_tts_players(
     hass_with_entities: HomeAssistant,
 ) -> None:
-    """Leaving triggered state or choosing Silence should stop available media."""
+    """Leaving triggered or choosing Silence should stop noise and TTS media."""
     hass = hass_with_entities
-    hass.states.async_set("media_player.available", "idle")
+    noise_player = "media_player.noise"
+    tts_player = "media_player.tts"
+    hass.states.async_set(noise_player, "idle")
+    hass.states.async_set(tts_player, "idle")
     media_stop_calls = async_mock_service(hass, "media_player", "media_stop")
     async_mock_service(hass, "siren", "turn_on")
     async_mock_service(hass, "siren", "turn_off")
@@ -77,7 +80,8 @@ async def test_alarm_clear_and_silence_stop_noise_players(
         **AUTOMATION_INPUTS["alarm-response.yaml"],
         "mobile_notify_service": "",
         "telegram_chat_id": "",
-        "noise_media_players": ["media_player.available"],
+        "noise_media_players": [noise_player],
+        "tts_media_players": [tts_player],
     }
     await async_load_automation_blueprint(hass, "alarm-response.yaml", inputs)
 
@@ -85,11 +89,19 @@ async def test_alarm_clear_and_silence_stop_noise_players(
     await hass.async_block_till_done()
     hass.states.async_set("alarm_control_panel.test", "armed_away")
     await hass.async_block_till_done()
-    assert len(media_stop_calls) == 1
+    assert [call.data["entity_id"] for call in media_stop_calls] == [
+        [noise_player],
+        [tts_player],
+    ]
 
     hass.bus.async_fire(
         "mobile_app_notification_action",
         {"action": "CDA_ALARM_SILENCE"},
     )
     await hass.async_block_till_done()
-    assert len(media_stop_calls) == 2
+    assert [call.data["entity_id"] for call in media_stop_calls] == [
+        [noise_player],
+        [tts_player],
+        [noise_player],
+        [tts_player],
+    ]
