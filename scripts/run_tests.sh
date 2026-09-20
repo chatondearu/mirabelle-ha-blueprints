@@ -44,4 +44,7 @@ PYTHONPATH="$ROOT/packages/cover-manager" "$PYTHON" -m pytest packages/cover-man
 echo "==> pytest (imeon_energy_api)"
 PYTHONPATH="$ROOT/packages/imeon_energy_api" "$PYTHON" -m pytest packages/imeon_energy_api/tests -q --tb=short
 
+echo "==> pytest (cda-alarm)"
+PYTHONPATH="$ROOT/packages/cda-alarm" "$PYTHON" -m pytest packages/cda-alarm/tests -q --tb=short
+
 echo "All tests passed."
