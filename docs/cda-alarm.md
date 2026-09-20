@@ -93,6 +93,9 @@ Configuration tabs and configuration updates always remain administrator-only.
 Authorized non-administrators do not receive alarm codes or other
 administrator-only configuration through the panel API.
 
+Enable **State notifications** (default on) to send Companion notifications to
+phones owned by dashboard-authorized users on arm / disarm / triggered.
+
 | Setting | Description | Default |
 | --- | --- | --- |
 | Sensors | Entities monitored by the alarm (any domain) | `[]` |
@@ -102,6 +105,8 @@ administrator-only configuration through the panel API.
 | Block arm if open | Refuse arm when a monitored sensor is open | `true` |
 | Keypads | List of ZHA devices; mark one as **default** | discovered KEPZB-110 if empty |
 | Keypad feedback | Best-effort LED/buzzer sync via ZHA (per keypad) | `false` |
+| Sync ZHA panel | One-way mirror of CDA state onto the keypad ZHA alarm entity | `false` |
+| State notifications | Companion notify for ACL users on arm/disarm/triggered | `true` |
 | Keypad endpoint | IAS ACE endpoint (44 on KEPZB-110) | `44` |
 | Codes (JSON) | PIN, RFID, and NFC tag entries (see below) | `[]` |
 | Response | Sirens, media noise, optional TTS when `triggered` | empty |

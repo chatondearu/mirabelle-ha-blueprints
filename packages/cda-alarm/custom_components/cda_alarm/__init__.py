@@ -12,6 +12,7 @@ from homeassistant.helpers import entity_registry as er
 
 from .const import DATA_RESPONSE_RUNNER, DATA_WS_REGISTERED, DOMAIN
 from .keypad import async_setup_keypad_listener
+from .notifications import async_setup_state_notifier
 from .panel import async_setup_panel
 from .response import CdaAlarmResponseRunner
 from .sensors import merge_runtime_config
@@ -63,6 +64,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if panel_entity_id is not None:
         entry.async_on_unload(
             async_setup_keypad_listener(hass, entry, panel_entity_id)
+        )
+        entry.async_on_unload(
+            async_setup_state_notifier(hass, entry, panel_entity_id)
         )
     return True
 

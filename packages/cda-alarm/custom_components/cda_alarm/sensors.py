@@ -16,6 +16,7 @@ from .const import (
     CONF_KEYPAD_ENDPOINT_KEY,
     CONF_KEYPAD_FEEDBACK,
     CONF_KEYPAD_IS_DEFAULT,
+    CONF_KEYPAD_SYNC_ZHA_PANEL,
     CONF_KEYPADS,
     CONF_RESPONSE,
     CONF_SENSOR_ASSIGNMENTS,
@@ -101,6 +102,7 @@ def keypads_from_legacy(config: dict[str, Any]) -> list[dict[str, Any]]:
             CONF_KEYPAD_FEEDBACK: bool(
                 config.get(CONF_ENABLE_KEYPAD_FEEDBACK, False)
             ),
+            CONF_KEYPAD_SYNC_ZHA_PANEL: False,
             CONF_KEYPAD_ENDPOINT_KEY: int(
                 config.get(CONF_KEYPAD_ENDPOINT, DEFAULT_KEYPAD_ENDPOINT)
                 or DEFAULT_KEYPAD_ENDPOINT
@@ -132,6 +134,9 @@ def normalize_keypads(raw: Any) -> list[dict[str, Any]]:
                 CONF_KEYPAD_DEVICE_ID: device_id,
                 CONF_KEYPAD_IS_DEFAULT: bool(item.get(CONF_KEYPAD_IS_DEFAULT, False)),
                 CONF_KEYPAD_FEEDBACK: bool(item.get(CONF_KEYPAD_FEEDBACK, False)),
+                CONF_KEYPAD_SYNC_ZHA_PANEL: bool(
+                    item.get(CONF_KEYPAD_SYNC_ZHA_PANEL, False)
+                ),
                 CONF_KEYPAD_ENDPOINT_KEY: endpoint,
             }
         )
@@ -154,6 +159,7 @@ def resolve_active_keypads(
                 CONF_KEYPAD_DEVICE_ID: discovered_default,
                 CONF_KEYPAD_IS_DEFAULT: True,
                 CONF_KEYPAD_FEEDBACK: False,
+                CONF_KEYPAD_SYNC_ZHA_PANEL: False,
                 CONF_KEYPAD_ENDPOINT_KEY: DEFAULT_KEYPAD_ENDPOINT,
             }
         ]

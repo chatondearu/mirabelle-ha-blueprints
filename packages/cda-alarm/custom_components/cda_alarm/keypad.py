@@ -12,18 +12,21 @@ from homeassistant.components.alarm_control_panel import (
     SERVICE_ALARM_ARM_HOME,
     SERVICE_ALARM_ARM_NIGHT,
     SERVICE_ALARM_DISARM,
+    SERVICE_ALARM_TRIGGER,
     AlarmControlPanelState,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import ATTR_CODE, ATTR_ENTITY_ID
 from homeassistant.core import Event, EventStateChangedData, HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_state_change_event
 
 from .const import (
     CONF_KEYPAD_DEVICE_ID,
     CONF_KEYPAD_ENDPOINT_KEY,
     CONF_KEYPAD_FEEDBACK,
+    CONF_KEYPAD_SYNC_ZHA_PANEL,
     CONF_KEYPADS,
     DEFAULT_KEYPAD_ENDPOINT,
     DOMAIN,
@@ -55,6 +58,14 @@ _PANEL_STATUS_BY_STATE = {
 }
 _PANEL_STATUS_NOT_READY = 6
 
+_ZHA_MIRROR_SERVICES = {
+    AlarmControlPanelState.DISARMED: SERVICE_ALARM_DISARM,
+    AlarmControlPanelState.ARMED_HOME: SERVICE_ALARM_ARM_HOME,
+    AlarmControlPanelState.ARMED_NIGHT: SERVICE_ALARM_ARM_NIGHT,
+    AlarmControlPanelState.ARMED_AWAY: SERVICE_ALARM_ARM_AWAY,
+    AlarmControlPanelState.TRIGGERED: SERVICE_ALARM_TRIGGER,
+}
+
 
 def _panel_status(state: str | None) -> int:
     """Map a panel state string to its IAS ACE panel status."""
@@ -78,22 +89,12 @@ def discover_default_keypad_device_id(hass: HomeAssistant) -> str | None:
     """Return the first ZHA device that looks like a Frient KEPZB keypad."""
     registry = dr.async_get(hass)
     for device in registry.devices.values():
-        if device.via_device_id is None and not any(
-            domain == _ZHA_DOMAIN for domain, _ in device.identifiers
-        ):
-            # Still allow via_device_id devices; check identifiers below.
-            pass
         if not any(domain == _ZHA_DOMAIN for domain, _ in device.identifiers):
             continue
         haystack = " ".join(
             filter(
                 None,
-                [
-                    device.model,
-                    device.name,
-                    device.name_by_user,
-                    device.manufacturer,
-                ],
+                [device.model, device.name, device.name_by_user, device.manufacturer],
             )
         ).lower()
         if any(marker in haystack for marker in _FRIENT_MODEL_MARKERS):
@@ -122,7 +123,6 @@ async def _async_push_keypad_feedback(
         )
         if ieee is None:
             return
-
         await hass.services.async_call(
             _ZHA_DOMAIN,
             _ZHA_FEEDBACK_SERVICE,
@@ -141,6 +141,55 @@ async def _async_push_keypad_feedback(
         _LOGGER.debug("Unable to push status feedback to Frient keypad", exc_info=True)
 
 
+def find_zha_alarm_entity_id(hass: HomeAssistant, device_id: str) -> str | None:
+    """Return the ZHA alarm_control_panel entity for a keypad device."""
+    registry = er.async_get(hass)
+    candidates: list[str] = []
+    for entity in er.async_entries_for_device(registry, device_id):
+        if entity.domain != ALARM_DOMAIN:
+            continue
+        if entity.platform == DOMAIN:
+            continue
+        if entity.platform == _ZHA_DOMAIN:
+            return entity.entity_id
+        candidates.append(entity.entity_id)
+    return candidates[0] if candidates else None
+
+
+async def _async_mirror_zha_panel(
+    hass: HomeAssistant,
+    device_id: str,
+    state: str,
+) -> None:
+    """Best-effort one-way sync of CDA state onto the Frient ZHA panel."""
+    try:
+        panel_state = AlarmControlPanelState(state)
+    except ValueError:
+        return
+    service = _ZHA_MIRROR_SERVICES.get(panel_state)
+    if service is None:
+        return
+    entity_id = find_zha_alarm_entity_id(hass, device_id)
+    if entity_id is None:
+        return
+    current = hass.states.get(entity_id)
+    if current is not None and current.state == state:
+        return
+    try:
+        await hass.services.async_call(
+            ALARM_DOMAIN,
+            service,
+            {ATTR_ENTITY_ID: entity_id},
+            blocking=True,
+        )
+    except Exception:
+        _LOGGER.debug(
+            "Unable to mirror CDA Alarm state to Frient ZHA panel %s",
+            entity_id,
+            exc_info=True,
+        )
+
+
 def async_setup_keypad_listener(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -148,22 +197,28 @@ def async_setup_keypad_listener(
 ) -> Callable[[], None]:
     """Listen for arm commands from configured (or default) Frient keypads."""
     stored = hass.data.get(DOMAIN, {}).get(entry.entry_id)
-    config = stored if isinstance(stored, dict) else merge_runtime_config(
-        {**entry.data, **entry.options}
+    config = (
+        stored
+        if isinstance(stored, dict)
+        else merge_runtime_config({**entry.data, **entry.options})
     )
     keypads = resolve_active_keypads(
         config.get(CONF_KEYPADS) or [],
         discovered_default=discover_default_keypad_device_id(hass),
     )
     keypad_by_id = {
-        item[CONF_KEYPAD_DEVICE_ID]: item for item in keypads if item.get(CONF_KEYPAD_DEVICE_ID)
+        item[CONF_KEYPAD_DEVICE_ID]: item
+        for item in keypads
+        if item.get(CONF_KEYPAD_DEVICE_ID)
     }
     last_status: dict[str, int | None] = {
         device_id: None for device_id in keypad_by_id
     }
+    last_mirrored_state: dict[str, str | None] = {
+        device_id: None for device_id in keypad_by_id
+    }
 
     async def _async_push_status(device_id: str, panel_status: int) -> None:
-        """Push a panel status to one keypad when feedback is enabled."""
         item = keypad_by_id.get(device_id)
         if item is None or not item.get(CONF_KEYPAD_FEEDBACK):
             return
@@ -177,16 +232,27 @@ def async_setup_keypad_listener(
             panel_status,
         )
 
-    async def _async_push_all(panel_status: int) -> None:
+    async def _async_mirror_device(device_id: str, state: str) -> None:
+        item = keypad_by_id.get(device_id)
+        if item is None or not item.get(CONF_KEYPAD_SYNC_ZHA_PANEL):
+            return
+        if last_mirrored_state.get(device_id) == state:
+            return
+        last_mirrored_state[device_id] = state
+        await _async_mirror_zha_panel(hass, device_id, state)
+
+    async def _async_push_all(state: str) -> None:
+        panel_status = _panel_status(state)
         for device_id in keypad_by_id:
             await _async_push_status(device_id, panel_status)
+            await _async_mirror_device(device_id, state)
 
     @callback
     def _async_panel_state_changed(event: Event[EventStateChangedData]) -> None:
         new_state = event.data["new_state"]
         if new_state is None:
             return
-        hass.async_create_task(_async_push_all(_panel_status(new_state.state)))
+        hass.async_create_task(_async_push_all(new_state.state))
 
     @callback
     def _async_handle_zha_event(event: Event[dict[str, Any]]) -> None:
@@ -197,14 +263,12 @@ def async_setup_keypad_listener(
             or event.data.get("command") != "arm"
         ):
             return
-
         params = event.data.get("params")
         if not isinstance(params, Mapping):
             params = {}
         args = event.data.get("args")
         if not isinstance(args, Mapping):
             args = {}
-
         try:
             arm_mode = int(params.get("arm_mode", args.get("arm_mode", -1)))
         except (TypeError, ValueError):
@@ -212,29 +276,29 @@ def async_setup_keypad_listener(
         service = _ARM_MODE_SERVICES.get(arm_mode)
         if service is None:
             return
-
         code = _extract_code(params, args)
 
         async def _push_for_device(status: int) -> None:
             await _async_push_status(device_id, status)
 
-        hass.async_create_task(
-            _async_execute_keypad_action(
-                hass,
-                service,
-                panel_entity_id,
-                code,
-                _push_for_device,
-            ),
-        )
+        async def _after_action() -> None:
+            await _async_execute_keypad_action(
+                hass, service, panel_entity_id, code, _push_for_device
+            )
+            panel_state = hass.states.get(panel_entity_id)
+            if panel_state is not None:
+                await _async_mirror_device(device_id, panel_state.state)
+
+        hass.async_create_task(_after_action())
 
     unsubscribes = [hass.bus.async_listen("zha_event", _async_handle_zha_event)]
-    if any(item.get(CONF_KEYPAD_FEEDBACK) for item in keypad_by_id.values()):
+    if any(
+        item.get(CONF_KEYPAD_FEEDBACK) or item.get(CONF_KEYPAD_SYNC_ZHA_PANEL)
+        for item in keypad_by_id.values()
+    ):
         unsubscribes.append(
             async_track_state_change_event(
-                hass,
-                [panel_entity_id],
-                _async_panel_state_changed,
+                hass, [panel_entity_id], _async_panel_state_changed
             )
         )
 
