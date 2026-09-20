@@ -57,7 +57,7 @@ Dashboard when allowed by the configured access policy. The options flow under
 | --- | --- |
 | **Dashboard** | Live alarm state and controls, sensors grouped by area, and configured cameras |
 | **Sensors** | Multi-select entities (any domain) and Away / Home / Night per entity |
-| **General** | Entry/exit delays, block-arm-if-open, codes JSON, keypad list with default |
+| **General** | Entry/exit delays, block-arm-if-open, structured codes editor, keypad list with default |
 | **Response** | Sirens, noise media players, TTS (owned by the integration) |
 | **Cameras** | Camera entities and optional sensor-to-camera mappings |
 | **Access** | Dashboard access policy for administrators, everyone, or selected users |
@@ -66,8 +66,8 @@ Dashboard when allowed by the configured access policy. The options flow under
 The **Dashboard** is the default tab. It shows arm/disarm controls, the current
 alarm state, and monitored sensors grouped by their Home Assistant area.
 Entities without an area appear under **Unassigned**. States update live while
-the panel is open. If codes are configured, enter a valid PIN before using an
-arm or disarm control.
+the panel is open. If codes are configured, arm and disarm open a **PIN dialog**;
+enter a valid PIN (or matching RFID / NFC value) to continue.
 
 ### Cameras
 
@@ -108,7 +108,7 @@ phones owned by dashboard-authorized users on arm / disarm / triggered.
 | Sync ZHA panel | One-way mirror of CDA state onto the keypad ZHA alarm entity | `false` |
 | State notifications | Companion notify for ACL users on arm/disarm/triggered | `true` |
 | Keypad endpoint | IAS ACE endpoint (44 on KEPZB-110) | `44` |
-| Codes (JSON) | PIN, RFID, and NFC tag entries (see below) | `[]` |
+| Codes | PIN, RFID, and NFC tag entries via the General editor | `[]` |
 | Response | Sirens, media noise, optional TTS when `triggered` | empty |
 
 The panel entity id is derived from the panel name (e.g. `cda_alarm`).
@@ -119,7 +119,7 @@ The panel entity id is derived from the panel name (e.g. `cda_alarm`).
 2. In the sidebar **General** tab, add the keypad and mark it as **default**.
 3. If no keypad is selected, the integration uses the first discovered Frient
    KEPZB-110 (or similar) on ZHA.
-4. Add matching PIN and RFID values in **Codes (JSON)**.
+4. Add matching PIN and RFID values in the **Codes** editor.
 5. Do **not** arm/disarm the Frient ZHA `alarm_control_panel` entity, and do
    **not** run the Frient mirror blueprint while this binding is active.
 
@@ -139,20 +139,21 @@ the **Linked** tab). After upgrading to **0.3.0**, clear sirens / noise inputs
 on that blueprint if you configure the sidebar **Response** tab, to avoid
 double sound.
 
-### Codes JSON format
+### Codes
 
-Enter a JSON **array** of objects. Each object may include:
+In the **General** tab, use **Add code** to create rows with optional fields:
 
-| Key | Description |
-| --- | --- |
-| `name` | Optional label for your reference |
-| `pin` | Numeric PIN string for keypad or UI disarm |
-| `rfid` | RFID badge id from ZHA events |
-| `nfc_tag_id` | NFC tag id (Companion / automations) |
+| Field | Key | Description |
+| --- | --- | --- |
+| Name | `name` | Optional label for your reference |
+| PIN | `pin` | Numeric PIN for keypad or UI arm/disarm |
+| RFID | `rfid` | RFID badge id from ZHA events |
+| NFC tag id | `nfc_tag_id` | NFC tag id (Companion / automations) |
 
-Only these keys are allowed. Values must be strings (or omitted).
+Empty rows are ignored on save. Only these keys are stored. Values must be
+strings (or omitted).
 
-Example:
+Example of the stored options shape:
 
 ```json
 [
@@ -175,7 +176,7 @@ reports in its code field therefore works without a PIN entry.
 
 If no entry defines a `pin`, an `rfid`, or an `nfc_tag_id`, the panel does not
 require a code for disarm/arm via services (keypad still sends codes when
-configured).
+configured). Invalid or missing codes raise a service error (`Invalid code`).
 
 Store real codes only in Home Assistant (config entry options), never in git.
 
@@ -252,9 +253,10 @@ administrators only until changed in the new **Access** tab.
 | --- | --- |
 | Cannot arm | **Block arm if open** and open monitored sensors; review logs |
 | Arm silently failed | Listen to `cda_alarm_arm_failed` or read the `arm_failure` attribute |
-| Keypad does nothing | Correct ZHA device, endpoint `44`, codes JSON matches PIN/RFID; default keypad |
+| Keypad does nothing | Correct ZHA device, endpoint `44`, codes match PIN/RFID; default keypad |
 | Double arm/disarm | Disable fallback blueprint when native Frient binding is set |
-| Invalid codes JSON | Only `name`, `pin`, `rfid`, `nfc_tag_id`; must be a JSON array |
+| Invalid code on arm/disarm | Add a PIN/RFID/NFC row in General and use that value in the PIN dialog |
+| Empty codes list | Arm/disarm without a PIN is allowed until at least one credential is saved |
 | Double sirens / noise | Clear blueprint sirens if Response tab is configured |
 | Alarm Response silent | Panel entity in blueprint; panel reaches `triggered`; notify targets set |
 | No sidebar panel | Restart after install; refresh the browser; verify the CDA Alarm integration is loaded and the custom panel is registered |
@@ -262,10 +264,23 @@ administrators only until changed in the new **Access** tab.
 
 ## Changelog
 
+### 0.5.1
+
+- Structured codes editor in General (PIN / RFID / NFC rows) replaces the JSON
+  textarea.
+- Dashboard arm/disarm opens a PIN dialog when credentials are configured.
+- Invalid or missing codes raise a visible service error (`Invalid code`).
+
+### 0.5.0
+
+- Companion state notifications for dashboard-authorized users on arm, disarm,
+  and triggered.
+- Optional one-way Sync ZHA panel mirror for Frient keypads.
+
 ### 0.4.1
 
 - Fix config form text and number fields: use native inputs so delays, tone,
-  volume, TTS message, and codes JSON update reliably (ha-textfield binding
+  volume, TTS message, and code fields update reliably (ha-textfield binding
   conflicted with Lit re-renders).
 
 ### 0.4.0

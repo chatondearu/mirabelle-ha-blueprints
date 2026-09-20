@@ -35,7 +35,6 @@ class CdaAlarmPanel extends LitElement {
     _dashboard: { state: true },
     _isAdmin: { state: true },
     _denied: { state: true },
-    _pin: { state: true },
     _arming: { state: true },
     _config: { state: true },
     _linked: { state: true },
@@ -48,7 +47,10 @@ class CdaAlarmPanel extends LitElement {
     _newMapCamera: { state: true },
     _newUserId: { state: true },
     _users: { state: true },
-    _codesJson: { state: true },
+    _codes: { state: true },
+    _pinDialogOpen: { state: true },
+    _pendingService: { state: true },
+    _dialogPin: { state: true },
   };
 
   static styles = css`
@@ -286,6 +288,33 @@ class CdaAlarmPanel extends LitElement {
     cda-alarm-panel .camera-caption {
       padding: 12px;
     }
+    cda-alarm-panel .code-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 8px;
+      align-items: end;
+      margin-bottom: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--divider-color);
+    }
+    cda-alarm-panel .pin-dialog-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 16px;
+    }
+    cda-alarm-panel .pin-dialog {
+      width: min(360px, 100%);
+      margin: 0;
+    }
+    cda-alarm-panel .pin-dialog input {
+      width: 100%;
+      margin: 12px 0;
+    }
   `;
 
   constructor() {
@@ -294,7 +323,6 @@ class CdaAlarmPanel extends LitElement {
     this._dashboard = null;
     this._isAdmin = false;
     this._denied = false;
-    this._pin = "";
     this._arming = false;
     this._config = null;
     this._linked = null;
@@ -307,7 +335,10 @@ class CdaAlarmPanel extends LitElement {
     this._newMapCamera = "";
     this._newUserId = "";
     this._users = [];
-    this._codesJson = "[]";
+    this._codes = [];
+    this._pinDialogOpen = false;
+    this._pendingService = null;
+    this._dialogPin = "";
     this._dashboardReloadTimer = null;
     this._dashboardLoadPromise = null;
     this._dashboardReloadPending = false;
@@ -431,8 +462,47 @@ class CdaAlarmPanel extends LitElement {
         entry_id: dashboard.entry_id,
       });
       this._config = this._normalizeConfig(config);
-      this._codesJson = JSON.stringify(this._config.codes || [], null, 2);
+      this._codes = this._normalizeCodes(this._config.codes);
     }
+  }
+
+  _normalizeCodes(codes) {
+    return (Array.isArray(codes) ? codes : []).map((entry) => ({
+      name: entry?.name || "",
+      pin: entry?.pin || "",
+      rfid: entry?.rfid || "",
+      nfc_tag_id: entry?.nfc_tag_id || "",
+    }));
+  }
+
+  _addCodeRow() {
+    this._codes = [
+      ...this._codes,
+      { name: "", pin: "", rfid: "", nfc_tag_id: "" },
+    ];
+  }
+
+  _updateCodeRow(index, patch) {
+    this._codes = this._codes.map((row, i) =>
+      i === index ? { ...row, ...patch } : row
+    );
+  }
+
+  _removeCodeRow(index) {
+    this._codes = this._codes.filter((_, i) => i !== index);
+  }
+
+  _codesForSave() {
+    return this._codes
+      .map((row) => {
+        const out = {};
+        if (row.name) out.name = String(row.name);
+        if (row.pin) out.pin = String(row.pin);
+        if (row.rfid) out.rfid = String(row.rfid);
+        if (row.nfc_tag_id) out.nfc_tag_id = String(row.nfc_tag_id);
+        return out;
+      })
+      .filter((row) => row.pin || row.rfid || row.nfc_tag_id);
   }
 
   async _reloadDashboard({ loadConfig = false } = {}) {
@@ -539,15 +609,46 @@ class CdaAlarmPanel extends LitElement {
     );
   }
 
-  async _controlAlarm(service) {
+  async _requestAlarm(service) {
+    if (!this.hass || !this._dashboard?.panel_entity_id) return;
+    if (this._dashboard?.code_required) {
+      this._pendingService = service;
+      this._dialogPin = "";
+      this._pinDialogOpen = true;
+      this._error = "";
+      return;
+    }
+    await this._controlAlarm(service);
+  }
+
+  async _confirmPinDialog() {
+    const service = this._pendingService;
+    const pin = this._dialogPin;
+    this._pinDialogOpen = false;
+    this._pendingService = null;
+    this._dialogPin = "";
+    if (!service) return;
+    await this._controlAlarm(service, pin);
+  }
+
+  _cancelPinDialog() {
+    this._pinDialogOpen = false;
+    this._pendingService = null;
+    this._dialogPin = "";
+  }
+
+  async _controlAlarm(service, pin) {
     if (!this.hass || !this._dashboard?.panel_entity_id) return;
     this._arming = true;
     this._error = "";
     try {
-      await this.hass.callService("alarm_control_panel", service, {
+      const data = {
         entity_id: this._dashboard.panel_entity_id,
-        code: this._pin || undefined,
-      });
+      };
+      if (pin) {
+        data.code = pin;
+      }
+      await this.hass.callService("alarm_control_panel", service, data);
       await this._reloadDashboard();
     } catch (err) {
       this._error = err?.message || String(err);
@@ -767,15 +868,7 @@ class CdaAlarmPanel extends LitElement {
     this._error = "";
     this._message = "";
     try {
-      let codes;
-      try {
-        codes = JSON.parse(this._codesJson || "[]");
-      } catch {
-        throw new Error("Codes JSON is invalid.");
-      }
-      if (!Array.isArray(codes)) {
-        throw new Error("Codes must be a JSON array.");
-      }
+      const codes = this._codesForSave();
       const payload = {
         sensor_assignments: this._config.sensor_assignments.filter(
           (item) => (item.modes || []).length
@@ -796,7 +889,7 @@ class CdaAlarmPanel extends LitElement {
         config: payload,
       });
       this._config = this._normalizeConfig(updated);
-      this._codesJson = JSON.stringify(this._config.codes || [], null, 2);
+      this._codes = this._normalizeCodes(this._config.codes);
       this._message = "Saved.";
     } catch (err) {
       this._error = err?.message || String(err);
@@ -896,6 +989,36 @@ class CdaAlarmPanel extends LitElement {
             </div>
           `
         : nothing}
+      ${this._pinDialogOpen ? this._renderPinDialog() : nothing}
+    `;
+  }
+
+  _renderPinDialog() {
+    return html`
+      <div class="pin-dialog-backdrop" @click=${this._cancelPinDialog}>
+        <div class="pin-dialog card" @click=${(e) => e.stopPropagation()}>
+          <h3>Enter PIN</h3>
+          <input
+            type="password"
+            inputmode="numeric"
+            autocomplete="off"
+            aria-label="PIN"
+            .value=${this._dialogPin}
+            @input=${(e) => {
+              this._dialogPin = this._eventValue(e);
+            }}
+            @keydown=${(e) => {
+              if (e.key === "Enter") this._confirmPinDialog();
+            }}
+          />
+          <div class="actions">
+            <button class="primary" @click=${this._confirmPinDialog}>OK</button>
+            <button class="secondary" @click=${this._cancelPinDialog}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
     `;
   }
 
@@ -912,47 +1035,33 @@ class CdaAlarmPanel extends LitElement {
             <h2>Alarm</h2>
             <span class="state-badge">${stateLabel}</span>
           </div>
-          <div>
-            <label>
-              PIN
-              <input
-                type="text"
-                inputmode="numeric"
-                autocomplete="off"
-                .value=${this._pin}
-                @input=${(event) => {
-                  this._pin = this._eventValue(event);
-                }}
-              />
-            </label>
-          </div>
         </div>
         <div class="actions">
           <button
             class="primary"
             ?disabled=${this._arming}
-            @click=${() => this._controlAlarm("alarm_arm_away")}
+            @click=${() => this._requestAlarm("alarm_arm_away")}
           >
             Arm away
           </button>
           <button
             class="secondary"
             ?disabled=${this._arming}
-            @click=${() => this._controlAlarm("alarm_arm_home")}
+            @click=${() => this._requestAlarm("alarm_arm_home")}
           >
             Arm home
           </button>
           <button
             class="secondary"
             ?disabled=${this._arming}
-            @click=${() => this._controlAlarm("alarm_arm_night")}
+            @click=${() => this._requestAlarm("alarm_arm_night")}
           >
             Arm night
           </button>
           <button
             class="danger"
             ?disabled=${this._arming}
-            @click=${() => this._controlAlarm("alarm_disarm")}
+            @click=${() => this._requestAlarm("alarm_disarm")}
           >
             Disarm
           </button>
@@ -1222,20 +1331,70 @@ class CdaAlarmPanel extends LitElement {
       </div>
 
       <div class="card">
-        <h3>Codes (JSON)</h3>
+        <h3>Codes</h3>
         <p class="muted">
-          Array of objects with optional string fields:
-          <code>name</code>, <code>pin</code>, <code>rfid</code>,
+          Add PIN, RFID, and NFC tag credentials. Empty rows are ignored on save.
+          Optional fields: <code>name</code>, <code>pin</code>, <code>rfid</code>,
           <code>nfc_tag_id</code>.
         </p>
-        <textarea
-          rows="8"
-          aria-label="Codes JSON"
-          .value=${this._codesJson}
-          @input=${(e) => {
-            this._codesJson = this._eventValue(e);
-          }}
-        ></textarea>
+        ${this._codes.map(
+          (row, index) => html`
+            <div class="code-row">
+              <label
+                >Name
+                <input
+                  type="text"
+                  aria-label="Code name"
+                  .value=${row.name}
+                  @input=${(e) =>
+                    this._updateCodeRow(index, {
+                      name: this._eventValue(e),
+                    })}
+                />
+              </label>
+              <label
+                >PIN
+                <input
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="off"
+                  aria-label="PIN"
+                  .value=${row.pin}
+                  @input=${(e) =>
+                    this._updateCodeRow(index, { pin: this._eventValue(e) })}
+                />
+              </label>
+              <label
+                >RFID
+                <input
+                  type="text"
+                  aria-label="RFID"
+                  .value=${row.rfid}
+                  @input=${(e) =>
+                    this._updateCodeRow(index, { rfid: this._eventValue(e) })}
+                />
+              </label>
+              <label
+                >NFC tag id
+                <input
+                  type="text"
+                  aria-label="NFC tag id"
+                  .value=${row.nfc_tag_id}
+                  @input=${(e) =>
+                    this._updateCodeRow(index, {
+                      nfc_tag_id: this._eventValue(e),
+                    })}
+                />
+              </label>
+              <button class="danger" @click=${() => this._removeCodeRow(index)}>
+                Remove
+              </button>
+            </div>
+          `
+        )}
+        <div class="actions">
+          <button class="secondary" @click=${this._addCodeRow}>Add code</button>
+        </div>
       </div>
     `;
   }

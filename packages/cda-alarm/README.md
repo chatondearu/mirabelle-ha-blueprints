@@ -44,7 +44,8 @@ Copy `custom_components/cda_alarm` into your HA
 - Sensors grouped by Home Assistant area, with an **Unassigned** fallback
 - Sidebar configuration (Sensors / General / Response / Cameras / Access / Linked)
 - Standard `alarm_control_panel` services (`arm_home` / `away` / `night`, disarm)
-- Unified codes (PIN, RFID, NFC)
+- Unified codes (PIN, RFID, NFC) via a structured General-tab editor
+- PIN dialog on Dashboard arm/disarm when credentials are configured
 - Hard-block arm when sensors are open (configurable)
 - Entry / exit delays with `cda_alarm_arm_failed` event on failed arm
 - Multi-keypad list with default discovery fallback
@@ -70,6 +71,12 @@ updates remain restricted to administrators, and non-administrators never
 receive alarm codes through the panel API. **State notifications** (default on)
 send Companion alerts to phones of authorized users on arm, disarm, and triggered.
 
+## Upgrade to 0.5.1
+
+Restart Home Assistant and hard-refresh the browser. Open **General → Codes**,
+add at least one PIN (or RFID / NFC), then **Save**. Arm and disarm then prompt
+for a PIN when credentials exist.
+
 ## Upgrade to 0.5.0
 
 Restart Home Assistant and refresh the browser. Enable **Sync ZHA panel** on
@@ -83,7 +90,7 @@ Dashboard access defaults to administrators only.
 
 ## Documentation
 
-Full guide (migration from Alarmo, troubleshooting, codes JSON):
+Full guide (migration from Alarmo, troubleshooting, codes editor):
 
 - In the monorepo: [`docs/cda-alarm.md`](https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/docs/cda-alarm.md)
 - HACS sync notes: [HACS_SETUP.md](./HACS_SETUP.md)
