@@ -48,7 +48,7 @@ Copy `custom_components/cda_alarm` into your HA
 - Hard-block arm when sensors are open (configurable)
 - Entry / exit delays with `cda_alarm_arm_failed` event on failed arm
 - Multi-keypad list with default discovery fallback
-- Frient keypad as **input only** (no ZHA panel mirror)
+- Optional one-way sync of CDA state onto the Frient ZHA alarm panel
 - Sirens / media noise / TTS when the panel is `triggered`
 - Dashboard cameras with optional sensor-to-camera mapping and trigger highlighting
 - Dashboard access for administrators, everyone, or selected users
@@ -67,7 +67,13 @@ The administrator-only **Access** tab controls who can view and operate the
 Dashboard: administrators only (default), every authenticated user, or selected
 Home Assistant users. Administrators are always allowed. Configuration tabs and
 updates remain restricted to administrators, and non-administrators never
-receive alarm codes through the panel API.
+receive alarm codes through the panel API. **State notifications** (default on)
+send Companion alerts to phones of authorized users on arm, disarm, and triggered.
+
+## Upgrade to 0.5.0
+
+Restart Home Assistant and refresh the browser. Enable **Sync ZHA panel** on
+Frient keypads if disarm outside the keypad should clear the ZHA entity.
 
 ## Upgrade to 0.4.0
 

@@ -326,6 +326,7 @@ async def test_websocket_get_and_update_config(hass: HomeAssistant) -> None:
     assert refreshed.options[CONF_ACCESS] == {
         "mode": "users",
         "user_ids": ["user-1"],
+        "state_notifications": True,
     }
 
     connection.reset_mock()
@@ -351,6 +352,7 @@ def test_keypads_migrate_from_legacy_frient_device() -> None:
             "device_id": "device-abc",
             "is_default": True,
             "feedback": True,
+            "sync_zha_panel": False,
             "endpoint": 44,
         }
     ]

@@ -330,3 +330,82 @@ async def test_frient_feedback_reports_rejected_arm_as_disarmed(
     assert hass.states.get(entity_id).state == STATE_ALARM_DISARMED
     assert len(calls) == 1
     assert calls[0].data["args"] == [0, 0, 0, 0]
+
+
+@pytest.mark.asyncio
+async def test_sync_zha_panel_mirrors_disarm(hass: HomeAssistant) -> None:
+    from unittest.mock import AsyncMock, patch
+    from homeassistant.components.alarm_control_panel import SERVICE_ALARM_DISARM
+    from custom_components.cda_alarm.const import CONF_KEYPADS
+
+    zha_entry = MockConfigEntry(domain=ZHA_DOMAIN)
+    zha_entry.add_to_hass(hass)
+    keypad_device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=zha_entry.entry_id,
+        identifiers={(ZHA_DOMAIN, KEYPAD_IEEE)},
+        manufacturer="frient A/S",
+        model="KEPZB-110",
+    )
+    entity_id = await _setup_panel(
+        hass,
+        **{
+            CONF_FRIENT_DEVICE_ID: keypad_device.id,
+            CONF_KEYPADS: [{
+                "device_id": keypad_device.id,
+                "is_default": True,
+                "feedback": False,
+                "sync_zha_panel": True,
+                "endpoint": 44,
+            }],
+        },
+    )
+    await hass.services.async_call(
+        ALARM_DOMAIN, "alarm_arm_away", {ATTR_ENTITY_ID: entity_id, "code": "1234"}, blocking=True
+    )
+    await hass.async_block_till_done()
+    with patch(
+        "custom_components.cda_alarm.keypad._async_mirror_zha_panel",
+        new_callable=AsyncMock,
+    ) as mirror:
+        await hass.services.async_call(
+            ALARM_DOMAIN, SERVICE_ALARM_DISARM, {ATTR_ENTITY_ID: entity_id, "code": "1234"}, blocking=True
+        )
+        await hass.async_block_till_done()
+        mirror.assert_awaited()
+        assert any(
+            call.args[1] == keypad_device.id and call.args[2] == STATE_ALARM_DISARMED
+            for call in mirror.await_args_list
+        )
+    assert hass.states.get(entity_id).state == STATE_ALARM_DISARMED
+
+
+@pytest.mark.asyncio
+async def test_sync_zha_panel_disabled_skips_mirror(hass: HomeAssistant) -> None:
+    from unittest.mock import AsyncMock, patch
+    from homeassistant.components.alarm_control_panel import SERVICE_ALARM_DISARM
+    from custom_components.cda_alarm.const import CONF_KEYPADS
+
+    zha_entry = MockConfigEntry(domain=ZHA_DOMAIN)
+    zha_entry.add_to_hass(hass)
+    keypad_device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=zha_entry.entry_id,
+        identifiers={(ZHA_DOMAIN, KEYPAD_IEEE)},
+    )
+    entity_id = await _setup_panel(
+        hass,
+        **{
+            CONF_KEYPADS: [{
+                "device_id": keypad_device.id,
+                "is_default": True,
+                "feedback": False,
+                "sync_zha_panel": False,
+                "endpoint": 44,
+            }],
+        },
+    )
+    with patch("custom_components.cda_alarm.keypad._async_mirror_zha_panel", new_callable=AsyncMock) as mirror:
+        await hass.services.async_call(
+            ALARM_DOMAIN, SERVICE_ALARM_DISARM, {ATTR_ENTITY_ID: entity_id, "code": "1234"}, blocking=True
+        )
+        await hass.async_block_till_done()
+        mirror.assert_not_called()
