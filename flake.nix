@@ -1,5 +1,7 @@
 {
   description = "Mirabelle HA Blueprints — reproducible dev shell (Node, pnpm, Python, yamllint)";
+  # Daily Node/pnpm: prefer Mise (mise.toml). This flake remains the hermetic
+  # fallback and still provides Python (+ Node/pnpm for parity).
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
