@@ -77,7 +77,7 @@ Use appropriate `selector` types: `entity`, `text`, `number`, `boolean`, `select
 
 ## Node / pnpm workspace
 
-- **Dev environment:** optional **Nix flake** + **direnv** ([`flake.nix`](../flake.nix), [`.envrc`](../.envrc), [docs/dev-environment.md](dev-environment.md)) — Node 22, pnpm 10.24, Python 3.12, yamllint; `.venv` created via `shellHook` for `requirements-test.txt`.
+- **Dev environment:** prefer host **Mise** for Node/pnpm ([`mise.toml`](../mise.toml): `mise install`, then `mise exec -- …`). Fallback: **Nix flake** + **direnv** ([`flake.nix`](../flake.nix), [`.envrc`](../.envrc), [docs/dev-environment.md](dev-environment.md)) — Node 22, pnpm 10.24, Python 3.12, yamllint; `.venv` created via `shellHook` for `requirements-test.txt`. Python stays on Nix (`nix develop` / direnv); Mise is optional for Node/pnpm only.
 - **Package manager:** `pnpm` (see `packageManager` in root `package.json`).
 - **Workspaces:** `packages/`* (`@mirabelle/cover-manager`, `@mirabelle/imeon-energy-api`, etc.).
 - **Root scripts (examples):**

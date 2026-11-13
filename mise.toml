@@ -1,0 +1,13 @@
+# Optional language pins (ADR-013). Prefer `mise activate` or one outer
+# `mise run` / `mise exec` — not shim-primary PATH for agents.
+# Versions match flake.nix / package.json (nodejs_22 → 22.x / pnpm 10.24.0).
+# Python stays on the Nix flake; Mise here is Node/pnpm only.
+
+[tools]
+node = "22"
+pnpm = "10.24.0"
+
+[settings]
+# Prefer prebuilt Node binaries. On NixOS enable nix-ld (or fall back to
+# `nix develop`); do not rely on Mise compiling Node from source.
+all_compile = false
