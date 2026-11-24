@@ -27,6 +27,12 @@ def common_entities() -> dict[str, tuple[str, dict[str, Any] | None]]:
         "media_player.test": ("idle", {"volume_level": 0.5, "supported_features": 0}),
         "light.test": ("off", {}),
         "binary_sensor.test_motion": ("off", {}),
+        "binary_sensor.test_occupancy": ("on", {}),
+        "input_boolean.test_occupancy_gate": ("on", {}),
+        "input_datetime.test_pac_last_change": (
+            "2020-01-01 00:00:00",
+            {"has_date": True, "has_time": True, "timestamp": 0},
+        ),
         "switch.test_cover": ("off", {}),
         "input_text.test_cover_position": ("50", {}),
         "input_text.test_cover_direction": ("idle", {}),

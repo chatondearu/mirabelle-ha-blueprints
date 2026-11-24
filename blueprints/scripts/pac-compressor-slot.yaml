@@ -1,0 +1,198 @@
+blueprint:
+  homeassistant:
+    min_version: 2025.5.3
+  name: "[CDA] 🧊 PAC Compressor Slot"
+  description: >
+    Serialized grant for indoor splits that share one outdoor heat pump (PAC).
+    Queued so overlapping start/stop requests cannot all see a free compressor.
+    Caps concurrent heat/cool units, staggers new starts, and enforces a global
+    interval between compressor changes. Create one script instance per outdoor
+    unit and call it from each Reversible Split Thermostat (leave the thermostat
+    input empty on single-split installs).
+
+    Requires a shared input_datetime last-change helper. When that helper is
+    unset, compressor rules are skipped and the request is granted. Frost starts
+    bypass the concurrent cap. Window-open and global off should turn_off in the
+    thermostat, not through this script, so they skip the interval.
+  domain: script
+  source_url: https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/pac-compressor-slot.yaml
+  input:
+    sibling_climates:
+      name: Indoor splits on this PAC
+      description: >
+        All climate entities that share the outdoor compressor. Include every
+        split that will call this script.
+      selector:
+        entity:
+          domain: climate
+          multiple: true
+    last_change_helper:
+      name: Last compressor change
+      description: >
+        Shared input_datetime (date and time) stamped on each granted start or
+        stop. Required for the cap, stagger, and interval. Leave empty to skip
+        compressor rules and always grant.
+      default: ""
+      selector:
+        entity:
+          domain: input_datetime
+    max_concurrent:
+      name: Max concurrent indoor units
+      description: Indoor splits in heat or cool that may run at once.
+      default: 2
+      selector:
+        number:
+          min: 1
+          max: 8
+          mode: box
+    start_stagger_seconds:
+      name: Start stagger
+      description: Minimum seconds between granted starts on this PAC.
+      default: 45
+      selector:
+        number:
+          min: 0
+          max: 90
+          unit_of_measurement: seconds
+    global_change_interval:
+      name: Global change interval
+      description: >
+        Minimum seconds between any granted compressor change (start or stop).
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 600
+          unit_of_measurement: seconds
+
+fields:
+  climate_id:
+    name: Split (climate)
+    description: Indoor unit requesting a start or stop.
+    required: true
+    selector:
+      entity:
+        domain: climate
+  request:
+    name: Request
+    description: start applies mode and temperature; stop turns the split off.
+    required: true
+    selector:
+      select:
+        options:
+          - start
+          - stop
+  hvac_mode:
+    name: HVAC mode
+    description: heat or cool. Used only for start.
+    required: false
+    selector:
+      select:
+        options:
+          - heat
+          - cool
+  temperature:
+    name: Temperature
+    description: Setpoint sent on start.
+    required: false
+    selector:
+      number:
+        min: 5
+        max: 35
+        step: 0.5
+        unit_of_measurement: "°C"
+  frost:
+    name: Frost start
+    description: When true, a start is granted even if the concurrent cap is full.
+    required: false
+    default: false
+    selector:
+      boolean: {}
+
+variables:
+  sibling_climates: !input sibling_climates
+  last_change_helper: !input last_change_helper
+  max_concurrent: !input max_concurrent
+  start_stagger_seconds: !input start_stagger_seconds
+  global_change_interval: !input global_change_interval
+
+sequence:
+  - variables:
+      helper_set: "{{ last_change_helper | length > 0 }}"
+      already_on: "{{ states(climate_id) in ['heat', 'cool'] }}"
+      running: >
+        {% set ns = namespace(n=0) %}
+        {% for c in sibling_climates %}
+          {% if states(c) in ['heat', 'cool'] %}
+            {% set ns.n = ns.n + 1 %}
+          {% endif %}
+        {% endfor %}
+        {{ ns.n }}
+      is_frost: "{{ frost | default(false) in [true, 'True', True, 'true'] }}"
+  # Cap: deny a new start when the PAC is full (frost and already-running keep a slot).
+  - if:
+      - condition: template
+        value_template: >
+          {{ helper_set in [true, 'True', True]
+             and request == 'start'
+             and already_on not in [true, 'True', True]
+             and is_frost not in [true, 'True', True]
+             and (running | int(0)) >= (max_concurrent | int(2)) }}
+    then:
+      - stop: "Compressor cap reached; start denied"
+  - variables:
+      wait_seconds: >
+        {% if last_change_helper | length == 0 %}
+          0
+        {% else %}
+          {% set last_ts = state_attr(last_change_helper, 'timestamp') | float(0) %}
+          {% set elapsed = as_timestamp(now()) - last_ts %}
+          {% set interval = global_change_interval | int(0) %}
+          {% set stagger = start_stagger_seconds | int(0) if request == 'start' else 0 %}
+          {% set need = [interval, stagger] | max %}
+          {{ [need - elapsed, 0] | max | int }}
+        {% endif %}
+  - delay:
+      seconds: "{{ wait_seconds | int(0) }}"
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ request == 'start' }}"
+        sequence:
+          - service: climate.set_temperature
+            target:
+              entity_id: "{{ climate_id }}"
+            data:
+              hvac_mode: "{{ hvac_mode }}"
+              temperature: "{{ temperature }}"
+          - if:
+              - condition: template
+                value_template: "{{ last_change_helper | length > 0 }}"
+            then:
+              - service: input_datetime.set_datetime
+                target:
+                  entity_id: "{{ last_change_helper }}"
+                data:
+                  timestamp: "{{ now().timestamp() }}"
+    default:
+      - if:
+          - condition: template
+            value_template: "{{ states(climate_id) in ['off', 'unknown', 'unavailable'] }}"
+        then:
+          - stop: "Split already off"
+      - service: climate.turn_off
+        target:
+          entity_id: "{{ climate_id }}"
+      - if:
+          - condition: template
+            value_template: "{{ last_change_helper | length > 0 }}"
+        then:
+          - service: input_datetime.set_datetime
+            target:
+              entity_id: "{{ last_change_helper }}"
+            data:
+              timestamp: "{{ now().timestamp() }}"
+
+mode: queued
+max: 10
+icon: mdi:heat-pump

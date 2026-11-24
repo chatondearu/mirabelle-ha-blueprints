@@ -203,7 +203,7 @@ blueprint:
             Deadband around the target to avoid rapid on/off (protects the PAC).
             With Room Sensor Control on, the split restarts only after the room
             drops this far below target (heat) or rises this far above (cool).
-          default: 0.3
+          default: 0.5
           selector:
             number:
               min: 0
@@ -265,7 +265,7 @@ blueprint:
             turned off because the target is reached (anti short-cycle, protects
             the compressor). 0 disables. An open window or a global Off still stop
             it immediately.
-          default: 0
+          default: 600
           selector:
             number:
               min: 0
@@ -319,6 +319,43 @@ blueprint:
           default: true
           selector:
             boolean: {}
+    compressor_section:
+      name: PAC Compressor Slot
+      icon: mdi:heat-pump
+      description: >
+        Optional. Point every split on the same outdoor PAC at one
+        [CDA] 🧊 PAC Compressor Slot script to serialize starts. Leave the
+        script empty on a single-split install. Occupancy idles empty rooms
+        off (not eco) when the gate helper is on.
+      input:
+        compressor_slot_script:
+          name: Compressor Slot Script
+          description: >
+            Shared script instance for this PAC. Empty = call climate services
+            directly (unchanged single-split behavior).
+          default: ""
+          selector:
+            entity:
+              domain: script
+        occupancy_entity:
+          name: Room Occupancy
+          description: >
+            Optional occupancy/activity binary sensor. Used only when Honor
+            Occupancy is on. Unoccupied (off) idles the split fully off and
+            does not request a compressor slot. Frost still applies.
+          default: ""
+          selector:
+            entity:
+              domain: binary_sensor
+        occupancy_gate_helper:
+          name: Honor Occupancy Helper
+          description: >
+            Optional input_boolean. When on, honor Room Occupancy. When off or
+            empty, occupancy is ignored.
+          default: ""
+          selector:
+            entity:
+              domain: input_boolean
 
 mode: restart
 
@@ -330,6 +367,8 @@ trigger_variables:
   vacation_boolean_input: !input vacation_boolean
   night_schedule_input: !input night_schedule
   night_setpoint_helper_input: !input night_setpoint_helper
+  occupancy_entity_input: !input occupancy_entity
+  occupancy_gate_helper_input: !input occupancy_gate_helper
 
 trigger:
   - platform: state
@@ -394,6 +433,20 @@ trigger:
       {% else %}
         none
       {% endif %}
+  - platform: template
+    value_template: >
+      {% if occupancy_entity_input | length > 0 %}
+        {{ states(occupancy_entity_input) }}
+      {% else %}
+        none
+      {% endif %}
+  - platform: template
+    value_template: >
+      {% if occupancy_gate_helper_input | length > 0 %}
+        {{ states(occupancy_gate_helper_input) }}
+      {% else %}
+        none
+      {% endif %}
   - platform: homeassistant
     event: start
 
@@ -423,6 +476,9 @@ variables:
   adaptive_boost_span: !input adaptive_boost_span
   approach_max_delta: !input approach_max_delta
   sync_zigbee_occupied_setpoints: !input sync_zigbee_occupied_setpoints
+  compressor_slot_script: !input compressor_slot_script
+  occupancy_entity: !input occupancy_entity
+  occupancy_gate_helper: !input occupancy_gate_helper
   # Keep mode as the only cross-variable flag. Do NOT store is_heat/is_cool as
   # separate rendered variables: HA stringifies them to "True"/"False", and the
   # non-empty string "False" is truthy in Jinja `{% if is_cool %}` tests.
@@ -579,9 +635,18 @@ variables:
        and (min_run_time | int(0)) > 0
        and ((as_timestamp(now()) - as_timestamp(states[climate_entity].last_changed)) | int(0))
           < (min_run_time | int(0)) }}
+  occupancy_idle: >
+    {{ occupancy_gate_helper | length > 0
+       and is_state(occupancy_gate_helper, 'on')
+       and occupancy_entity | length > 0
+       and is_state(occupancy_entity, 'off') }}
   should_idle: >
     {% set win_open = windows | count > 0
        and (expand(windows) | selectattr('state', 'eq', 'on') | list | count > 0) %}
+    {% set occ_idle = occupancy_gate_helper | length > 0
+       and is_state(occupancy_gate_helper, 'on')
+       and occupancy_entity | length > 0
+       and is_state(occupancy_entity, 'off') %}
     {% set has_out = outdoor_temperature | length > 0 and has_value(outdoor_temperature) %}
     {% set out_t = states(outdoor_temperature) | float(0) if has_out else 0 %}
     {% set out_block = (mode == 'heat' and has_out and out_t >= (heat_outdoor_threshold | float(20)))
@@ -603,7 +668,7 @@ variables:
        and (min_run_time | int(0)) > 0
        and ((as_timestamp(now()) - as_timestamp(states[climate_entity].last_changed)) | int(0))
           < (min_run_time | int(0)) %}
-    {{ win_open or out_block or (room_sensor_control and not ns.needs and not min_block) }}
+    {{ win_open or occ_idle or out_block or (room_sensor_control and not ns.needs and not min_block) }}
   frost_active: >
     {% set win_open = windows | count > 0
        and (expand(windows) | selectattr('state', 'eq', 'on') | list | count > 0) %}
@@ -647,15 +712,31 @@ action:
               - condition: template
                 value_template: "{{ frost_active in [true, 'True', True] }}"
             then:
-              - service: climate.set_temperature
-                target:
-                  entity_id: !input climate_entity
-                data:
-                  hvac_mode: heat
-                  temperature: !input frost_protection_temp
+              - choose:
+                  - conditions:
+                      - condition: template
+                        value_template: "{{ compressor_slot_script | length > 0 }}"
+                    sequence:
+                      - service: "{{ compressor_slot_script }}"
+                        data:
+                          climate_id: "{{ climate_entity }}"
+                          request: start
+                          hvac_mode: heat
+                          temperature: !input frost_protection_temp
+                          frost: true
+                default:
+                  - service: climate.set_temperature
+                    target:
+                      entity_id: !input climate_entity
+                    data:
+                      hvac_mode: heat
+                      temperature: !input frost_protection_temp
               - if:
                   - condition: template
-                    value_template: "{{ zigbee_sync_enabled in [true, 'True', True] }}"
+                    value_template: >
+                      {{ zigbee_sync_enabled in [true, 'True', True]
+                         and (compressor_slot_script | length == 0
+                              or states(climate_entity) in ['heat', 'cool']) }}
                 then:
                   # Keep both occupied setpoints aligned; Atlantic/Fujitsu units
                   # may re-report the stale opposite-mode value after ~30s.
@@ -678,21 +759,52 @@ action:
                       attribute: 17
                       value: "{{ (frost_protection_temp | float(0) * 100) | int }}"
             else:
-              - service: climate.turn_off
-                target:
-                  entity_id: !input climate_entity
+              # Window / occupancy idle skip the slot so they cannot hold a slot
+              # behind the global interval. Target-reached stop goes through it.
+              - choose:
+                  - conditions:
+                      - condition: template
+                        value_template: >
+                          {{ compressor_slot_script | length > 0
+                             and window_open not in [true, 'True', True]
+                             and occupancy_idle not in [true, 'True', True] }}
+                    sequence:
+                      - service: "{{ compressor_slot_script }}"
+                        data:
+                          climate_id: "{{ climate_entity }}"
+                          request: stop
+                default:
+                  - service: climate.turn_off
+                    target:
+                      entity_id: !input climate_entity
     # Conditioning needed: apply the global mode with the room target (boosted
     # beyond the target when room sensor control is enabled).
     default:
-      - service: climate.set_temperature
-        target:
-          entity_id: !input climate_entity
-        data:
-          hvac_mode: "{{ mode }}"
-          temperature: "{{ drive_target }}"
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ compressor_slot_script | length > 0 }}"
+            sequence:
+              - service: "{{ compressor_slot_script }}"
+                data:
+                  climate_id: "{{ climate_entity }}"
+                  request: start
+                  hvac_mode: "{{ mode }}"
+                  temperature: "{{ drive_target }}"
+                  frost: false
+        default:
+          - service: climate.set_temperature
+            target:
+              entity_id: !input climate_entity
+            data:
+              hvac_mode: "{{ mode }}"
+              temperature: "{{ drive_target }}"
       - if:
           - condition: template
-            value_template: "{{ zigbee_sync_enabled in [true, 'True', True] }}"
+            value_template: >
+              {{ zigbee_sync_enabled in [true, 'True', True]
+                 and (compressor_slot_script | length == 0
+                      or states(climate_entity) in ['heat', 'cool']) }}
         then:
           # Write BOTH occupied setpoints. These adapters keep a leftover heating
           # setpoint (often 20°C) that otherwise overwrites cooling ~30s later.

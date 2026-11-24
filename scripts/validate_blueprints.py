@@ -31,6 +31,7 @@ EXPECTED_BLUEPRINTS = [
     "automations/presence_based_lighting.yaml",
     "automations/reversible-split-thermostat.yaml",
     "automations/scheduled_bell_sound.yaml",
+    "scripts/pac-compressor-slot.yaml",
     "scripts/create-lal-hub-helpers.yaml",
     "scripts/create-lal-profile-presets.yaml",
     "scripts/create-living-area-lighting-helpers.yaml",

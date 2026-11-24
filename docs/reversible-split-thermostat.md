@@ -17,6 +17,7 @@ To guarantee this, the heat/cool/off decision is centralized:
 | --- | --- | --- |
 | **[CDA] 🔁 HVAC Season Manager** | 1 | Owns the single global mode. Resolves `off / heat / cool / auto` into one shared "resolved mode" helper. |
 | **[CDA] 🌡️ Reversible Split Thermostat** | 1 per split | Applies the resolved mode to its split and computes the room target. Never decides heat vs cool. |
+| **[CDA] 🧊 PAC Compressor Slot** | 1 per outdoor PAC | Queued grant: concurrent cap, start stagger, global on/off interval. Optional; leave empty on a single-split install. |
 
 Because every split reads the **same** resolved-mode helper, they always run the
 same mode. No split can ever be in `heat` while another is in `cool`.
@@ -33,6 +34,9 @@ same mode. No split can ever be in `heat` while another is in `cool`.
    ▼             ▼             ▼             ▼             ▼
  split A       split B       split C       split D       split E
  (one [CDA] Reversible Split Thermostat automation each)
+                 │
+                 └── optional: all call one [CDA] 🧊 PAC Compressor Slot
+                     (shared input_datetime last compressor change)
 ```
 
 ## Prerequisites
@@ -54,6 +58,8 @@ package below into `configuration.yaml` (or a package file) and restart.
 | `input_number.climate_comfort_thermostat` | Number | min 5, max 32, step 0.5 | Comfort setpoint (shared). |
 | `input_number.climate_eco_thermostat` | Number | min 5, max 32, step 0.5 | Eco setpoint (shared). |
 | `input_number.climate_night_thermostat` | Number | min 5, max 32, step 0.5 | Optional night setpoint for bedrooms (shared). |
+| `input_datetime.climate_pac_last_change` | Date and time | date + time | Optional. Required for [PAC Compressor Slot](pac-compressor-slot.md) cap / stagger / interval. |
+| `input_boolean.climate_honor_occupancy` | Toggle | on / off | Optional. When on, each thermostat honors its room occupancy sensor (empty rooms idle **off**, not eco). |
 
 ```yaml
 # Example package: config/packages/cda_climate_helpers.yaml
@@ -96,6 +102,18 @@ input_number:
     step: 0.5
     unit_of_measurement: "°C"
     icon: mdi:bed
+
+input_datetime:
+  climate_pac_last_change:
+    name: PAC Last Compressor Change
+    has_date: true
+    has_time: true
+    icon: mdi:heat-pump
+
+input_boolean:
+  climate_honor_occupancy:
+    name: Honor Room Occupancy
+    icon: mdi:motion-sensor
 ```
 
 > The comfort and eco helpers are shared between seasons. Their meaning follows
@@ -105,15 +123,22 @@ input_number:
 
 ## Installation
 
-Import both blueprints:
+Import the blueprints:
 
 - [[CDA] 🔁 HVAC Season Manager](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Fhvac-season-manager.yaml)
 - [[CDA] 🌡️ Reversible Split Thermostat](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fautomations%2Freversible-split-thermostat.yaml)
+- [[CDA] 🧊 PAC Compressor Slot](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fpac-compressor-slot.yaml) (optional, multi-split PAC)
 
 Then:
 
 1. Create **one** automation from the HVAC Season Manager.
 2. Create **one automation per split** from the Reversible Split Thermostat.
+3. For several indoor units on one outdoor PAC: create **one** PAC Compressor
+   Slot script, then set that script on every thermostat instance.
+
+> **GO live:** this repository change ships the blueprints only. Do **not**
+> re-enable live thermostat automations from this PR, and do **not** run
+> `update-automations` until an explicit human GO live.
 
 ## HVAC Season Manager parameters
 
@@ -155,16 +180,19 @@ cool around a single threshold. Keep a wide gap between the two values.
 | Window / Door Sensors | [] | While any is open, the split is turned off. |
 | Room Sensor Control (bang-bang) | true | Trust the room sensor: drive the split beyond the target to heat/cool hard, then fully stop it once the room reaches the target. Off = the split self-regulates at the plain target. |
 | Boost Offset | 2 °C | Degrees added (heat) / subtracted (cool) to the split target while conditioning, to overcome an inaccurate internal sensor. 0 = drive at target. |
-| Cut Hysteresis | 0.3 °C | Deadband to avoid rapid on/off (protects the PAC). Restart only after dropping this far below target (heat) or rising above (cool). |
+| Cut Hysteresis | 0.5 °C | Deadband to avoid rapid on/off (protects the PAC). Restart only after dropping this far below target (heat) or rising above (cool). |
 | Frost Protection (heat) | 7 °C | In heat, keep this minimum instead of full off when idle. 0 disables. |
 | Outdoor Temperature Sensor | — | Optional, for the seasonal idle thresholds below. |
 | Heat — Outdoor Above Idle | 20 °C | In heat, do not heat at/above this outdoor temperature. |
 | Cool — Outdoor Below Idle | 18 °C | In cool, do not cool at/below this outdoor temperature. |
-| Minimum Run Time | 0 s | Keep the split on at least this long after starting before stopping it on target reached (anti short-cycle). 0 disables. Window open / global Off still stop it immediately. |
+| Minimum Run Time | 600 s | Keep the split on at least this long after starting before stopping it on target reached (anti short-cycle). 0 disables. Window open / global Off still stop it immediately. Existing automations keep their stored value until re-imported. |
+| Sync Zigbee Occupied Setpoints | true | For ZHA splits (Atlantic / Fujitsu), also writes the device `occupied_*` Zigbee setpoint to match the command sent to the split. Prevents internal drift after IR remote use. Auto-skipped for non-ZHA climates. |
+| Compressor Slot Script | — | Optional. Shared `[CDA] 🧊 PAC Compressor Slot` instance. Empty = direct climate services (single-split). |
+| Room Occupancy | — | Optional occupancy/activity `binary_sensor`. Used only when Honor Occupancy is on. |
+| Honor Occupancy Helper | — | Optional `input_boolean`. When on, an unoccupied room idles **off** (not eco) and does not request a compressor slot. Frost still applies. |
 | Adaptive Boost | true | Reduce the boost as the room approaches the target (soft landing, less overshoot). |
 | Adaptive Boost Span | 2 °C | Distance from target over which the boost ramps from full to zero. |
 | Max Approach Delta | 2 °C | Limits how far the split setpoint may be from the current room temperature when conditioning (below the room in cool, above in heat). Never overshoots the logical target. Applied after boost. 0 disables. |
-| Sync Zigbee Occupied Setpoints | true | For ZHA splits (Atlantic / Fujitsu), also writes the device `occupied_*` Zigbee setpoint to match the command sent to the split. Prevents internal drift after IR remote use. Auto-skipped for non-ZHA climates. |
 
 ## How the target is computed
 
@@ -174,10 +202,11 @@ cool around a single threshold. Keep a wide gap between the two values.
    (or always if no schedule), otherwise eco.
 2. **Away offset**: when nobody is home (or vacation is on), the target is
    lowered in heat and raised in cool by the away offset.
-3. **Idle (off)**: if a window is open, or the outdoor temperature makes
-   conditioning useless, or (with Room Sensor Control on) the room reached the
-   target, the split is turned off — with heat frost protection kept if
-   configured.
+3. **Idle (off)**: if a window is open, or occupancy is off while the honor-occupancy
+   helper is on, or the outdoor temperature makes conditioning useless, or (with
+   Room Sensor Control on) the room reached the target, the split is turned off —
+   with heat frost protection kept if configured. Unoccupied rooms stay **off**,
+   not eco (eco below room temperature would still start heat).
 4. Otherwise the split is set to the global mode. With **Room Sensor Control**
    on, the setpoint is pushed beyond the target by the **Boost Offset** to force
    full-power operation (the room sensor, not the split internal sensor, decides
@@ -256,6 +285,18 @@ script only for a manual full-house resync.
   happens on sensor/helper changes, so the actual stop occurs at the first update
   after the minimum run time has elapsed.
 
+### PAC compressor slot (multi-split)
+
+When several indoor units share one outdoor PAC, set **Compressor Slot Script**
+on every thermostat to the same [[CDA] 🧊 PAC Compressor Slot](pac-compressor-slot.md)
+instance. Conditioning starts and target-reached stops go through the queued
+grant (cap, stagger, global interval). Open window and global season `off` still
+`turn_off` immediately. Leave the input empty on a single-split install.
+
+Occupancy-off rooms must not hold compressor slots: they idle off without
+requesting a start. Occupied rooms still obey the cap (already-running units
+keep their slot; extras wait).
+
 ### Bedroom recipe (night setpoint)
 
 To get "eco during the day, a dedicated night temperature in the evening/night"
@@ -295,8 +336,9 @@ One Season Manager plus five thermostat automations, all sharing
   Above*.
 - **My comfort/eco values reset on their own**: that is the seasonal reset on a
   heat ↔ cool transition. Disable *Apply Seasonal Defaults* to keep manual values.
-- **A split never turns on**: it may be idling because the target is reached or
-  the outdoor threshold blocks it; verify the room sensor and thresholds.
+- **A split never turns on**: it may be idling because the target is reached,
+  occupancy is off, the outdoor threshold blocks it, or the PAC compressor cap
+  is full; verify the room sensor, occupancy gate, and slot script traces.
 - **Split ignores automation after using the IR remote**: the device may still
   use an old internal `occupied_*` Zigbee setpoint. Re-import the thermostat
   blueprint ( **Sync Zigbee Occupied Setpoints** is on by default ) or run the
