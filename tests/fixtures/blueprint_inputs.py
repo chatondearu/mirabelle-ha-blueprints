@@ -21,6 +21,9 @@ INPUT_NUMBER_COMFORT = "input_number.test_comfort"
 INPUT_NUMBER_ECO = "input_number.test_eco"
 INPUT_SELECT_SEASON = "input_select.test_season_mode"
 INPUT_SELECT_HVAC = "input_select.test_hvac_active"
+INPUT_DATETIME_PAC_LAST_CHANGE = "input_datetime.test_pac_last_change"
+OCCUPANCY = "binary_sensor.test_occupancy"
+OCCUPANCY_GATE = "input_boolean.test_occupancy_gate"
 
 AUTOMATION_INPUTS: dict[str, dict[str, Any]] = {
     "alarm-response.yaml": {
@@ -103,6 +106,7 @@ AUTOMATION_INPUTS: dict[str, dict[str, Any]] = {
         "persons": [],
         "windows": [],
         "presence_delay": 0,
+        "min_run_time": 0,
     },
 }
 
@@ -194,6 +198,13 @@ SCRIPT_INPUTS: dict[str, dict[str, Any]] = {
     },
     "create-lal-hub-helpers.yaml": {
         "package_filename": "cda_lal_hub_helpers.yaml",
+    },
+    "pac-compressor-slot.yaml": {
+        "sibling_climates": [CLIMATE],
+        "last_change_helper": INPUT_DATETIME_PAC_LAST_CHANGE,
+        "max_concurrent": 2,
+        "start_stagger_seconds": 0,
+        "global_change_interval": 0,
     },
     "sync-zigbee-split-setpoints.yaml": {
         "climate_entities": [CLIMATE],

@@ -32,6 +32,7 @@ A collection of custom blueprints for Home Assistant.
 
 #### Scripts
 
+- [[CDA] 🧊 PAC Compressor Slot](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fpac-compressor-slot.yaml)
 - [[CDA] 🔊 Play Sound with Volume Control](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fplay_sound_with_volume_control.yaml)
 - [[CDA] 📅 Create Schedule](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fcreate_schedule.yaml)
 - [[CDA] 🪟 Set Cover Position](https://my.home-assistant.io/redirect/blueprint_import/?blueprint_url=https%3A%2F%2Fgithub.com%2Fchatondearu%2Fmirabelle-ha-blueprints%2Fblob%2Fmain%2Fblueprints%2Fscripts%2Fset_cover_position.yaml)
@@ -69,6 +70,7 @@ https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/auto
 #### Scripts
 
 ```
+https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/pac-compressor-slot.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/play_sound_with_volume_control.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/create_schedule.yaml
 https://github.com/chatondearu/mirabelle-ha-blueprints/blob/main/blueprints/scripts/set_cover_position.yaml
@@ -226,6 +228,13 @@ Per-room thermostat for a reversible split on a shared PAC. Applies the global m
 
 [View Documentation](docs/reversible-split-thermostat.md)
 
+### PAC Compressor Slot
+
+[CDA] 🧊 PAC Compressor Slot
+Queued grant for indoor splits on one outdoor PAC: concurrent cap (default 2), start stagger, and a global on/off interval. Wire it from each Reversible Split Thermostat; leave empty on a single-split install. Product ship only — live HA import / re-enable is a later GO live.
+
+[View Documentation](docs/pac-compressor-slot.md)
+
 ### Garden Irrigation
 
 [CDA] 🌿 Garden Irrigation Orchestrator + [CDA] 💧 Garden Zone Irrigation  
@@ -280,6 +289,7 @@ mirabelle-ha-blueprints/
 │   │   ├── nfc-disarm.yaml
 │   │   └── frient_keypad_with_alarmo.yaml
 │   └── scripts/
+│       ├── pac-compressor-slot.yaml
 │       ├── play_sound_with_volume_control.yaml
 │       ├── create_schedule.yaml
 │       ├── set_cover_position.yaml
@@ -292,6 +302,7 @@ mirabelle-ha-blueprints/
 │   ├── living-area-adaptive-lighting.md
 │   ├── cover_solar_thermal_optimization.md
 │   ├── reversible-split-thermostat.md
+│   ├── pac-compressor-slot.md
 │   ├── garden-irrigation.md
 │   ├── blind_states.md
 │   └── cover_generator.md
