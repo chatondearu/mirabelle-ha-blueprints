@@ -204,6 +204,43 @@ async def test_stop_waits_global_change_interval(
 
 
 @pytest.mark.behavior
+async def test_already_on_setpoint_refresh_does_not_count_as_start(
+    hass_with_entities: HomeAssistant,
+) -> None:
+    """Start A, reset helper, start A again (already_on): B must not wait on that refresh."""
+    hass = hass_with_entities
+    _seed_slots(hass)
+    set_calls, _, dt_calls = register_hvac_io(hass)
+    await _load_slot(hass, start_stagger_seconds=5, global_change_interval=5, max_concurrent=2)
+
+    await _request(hass, SLOT_CLIMATES[0])
+    assert len(set_calls) == 1
+    assert len(dt_calls) == 1
+    assert hass.states.get(SLOT_CLIMATES[0]).state == "heat"
+
+    hass.states.async_set(
+        INPUT_DATETIME_PAC_LAST_CHANGE,
+        "2020-01-01 00:00:00",
+        {"has_date": True, "has_time": True, "timestamp": 0},
+    )
+    dt_before = len(dt_calls)
+
+    refresh = asyncio.create_task(_request(hass, SLOT_CLIMATES[0]))
+    await hass.async_block_till_done()
+    await asyncio.wait_for(refresh, timeout=5)
+
+    assert len(set_calls) == 2, "already_on start still applies the setpoint"
+    assert len(dt_calls) == dt_before, "already_on start must not stamp last_change"
+
+    second = asyncio.create_task(_request(hass, SLOT_CLIMATES[1]))
+    await hass.async_block_till_done()
+    await asyncio.wait_for(second, timeout=5)
+
+    assert len(set_calls) == 3
+    assert _eid(set_calls[2]) == SLOT_CLIMATES[1]
+
+
+@pytest.mark.behavior
 async def test_frost_start_granted_at_cap(
     hass_with_entities: HomeAssistant,
 ) -> None:

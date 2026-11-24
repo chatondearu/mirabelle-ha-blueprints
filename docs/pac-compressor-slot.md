@@ -27,7 +27,7 @@ paste into a package file and restart.
 
 | Helper | Type | Purpose |
 | --- | --- | --- |
-| `input_datetime.climate_pac_last_change` | Date and time | Stamped on every granted start or stop. Required for the cap, start stagger, and global interval. |
+| `input_datetime.climate_pac_last_change` | Date and time | Stamped on each granted start or stop, except an already-running setpoint refresh. Required for the cap, start stagger, and global interval. |
 
 ```yaml
 # Example package: config/packages/cda_pac_compressor_helpers.yaml
@@ -82,6 +82,9 @@ Reversible Split Thermostat on that PAC at this script.
   must not hold slots (the thermostat idles them off without requesting a slot).
 - **Stagger:** a granted start waits until `start_stagger_seconds` have elapsed
   since the last granted change.
+- **Already running:** a start on a split already in `heat` or `cool` still
+  applies the setpoint, but skips stagger, interval, and the last-change stamp
+  so bang-bang retriggers are not counted as a new compressor start.
 - **Interval:** start and stop both wait on `global_change_interval`, except when
   the thermostat bypasses this script (open window or global season `off`).
 - **Frost:** may start even at cap (safety).
